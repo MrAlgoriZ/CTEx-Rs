@@ -1,6 +1,8 @@
 [package]
 name = "CTEx-Rs"
 version = "0.1.0"
-edition = "2025"
+edition = "2024"
 
 [dependencies]
+binance = { git = "https://github.com/ccxt/binance-rs.git" }
+chrono = "0.4"
