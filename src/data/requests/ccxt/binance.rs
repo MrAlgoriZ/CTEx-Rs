@@ -1,6 +1,8 @@
 use binance::api::*;
 use binance::market::*;
 
+use crate::data::data_interfaces::*;
+
 pub struct BinanceClient {
     market: Market,
 }
@@ -12,10 +14,10 @@ impl BinanceClient {
         }
     }
 
-    pub fn fetch_ohlcv(&self, token: &str, timeframe: &str, limit: u16) -> Vec<Vec<f64>> {
+    pub fn fetch_ohlcv(&self, token: &str, timeframe: &str, limit: u16) -> Vec<ICandle> {
         // -> limit, limit-1, limit-2, ..., 1
         // -> [[open, high, low, close, volume], [open, high, low, close, volume], ...]
-        let mut ohlcv: Vec<Vec<f64>> = Vec::new();
+        let mut ohlcv_list: Vec<ICandle> = Vec::new();
 
         match self.market.get_klines(token, timeframe, limit, None, None) {
             Ok(klines) => match klines {
@@ -27,13 +29,13 @@ impl BinanceClient {
                         let close: f64 = kline.close.parse().unwrap();
                         let volume: f64 = kline.volume.parse().unwrap();
 
-                        ohlcv.push(vec![open, high, low, close, volume]);
+                        ohlcv_list.push(ICandle::new(open, high, low, close, volume));
                     }
                 }
             },
             Err(e) => println!("Error: {}", e),
         }
-        ohlcv
+        ohlcv_list
     }
 
     pub fn fetch_average_price(&self, token: &str) -> f64 {
@@ -47,24 +49,24 @@ impl BinanceClient {
         }
     }
 
-    pub fn fetch_ticker(&self, token: &str) -> [f64; 2] {
+    pub fn fetch_ticker(&self, token: &str) -> ITicker {
         // -> [bid_price, ask_price]
         match self.market.get_book_ticker(token) {
-            Ok(answer) => [answer.bid_price, answer.ask_price],
+            Ok(answer) => ITicker::new(answer.bid_price, answer.ask_price),
             Err(e) => {
                 println!("Error: {:?}", e);
-                [0.0, 0.0]
+                ITicker::new(0.0, 0.0)
             }
         }
     }
 
-    pub fn fetch_day_price(&self, token: &str) -> [f64; 3] {
+    pub fn fetch_day_price(&self, token: &str) -> IDayPrice {
         // -> [open_price, high_price, low_price]
         match self.market.get_24h_price_stats(token) {
-            Ok(answer) => [answer.open_price, answer.high_price, answer.low_price],
+            Ok(answer) => IDayPrice::new(answer.open_price, answer.high_price, answer.low_price),
             Err(e) => {
-                println!("Error: {:?}", e);
-                [0.0, 0.0, 0.0]
+                println!("Error: {}", e);
+                IDayPrice::new(0.0, 0.0, 0.0)
             }
         }
     }

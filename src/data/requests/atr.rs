@@ -1,15 +1,16 @@
 use super::ccxt::binance::BinanceClient;
+use crate::data::data_interfaces::*;
 use std::collections::HashMap;
 
 pub fn get_volatility(client: &BinanceClient, token: &str) -> f64 {
-    let candles: Vec<Vec<f64>> = client.fetch_ohlcv(token, "1d", 10);
+    let candles: Vec<ICandle> = client.fetch_ohlcv(token, "1d", 10);
 
     let mut volatilities = vec![];
 
     for candle in candles {
-        let high = candle[1];
-        let low = candle[2];
-        let open = candle[0];
+        let high = candle.high;
+        let low = candle.low;
+        let open = candle.open;
         let volatility = (high - low) / open;
         volatilities.push(volatility);
     }
@@ -20,19 +21,19 @@ pub fn get_volatility(client: &BinanceClient, token: &str) -> f64 {
     avg
 }
 
-fn calculate_atr(ohlcv: &Vec<Vec<f64>>, period: usize) -> Vec<Option<f64>> {
+fn calculate_atr(ohlcv: &Vec<ICandle>, period: usize) -> Vec<Option<f64>> {
     let mut true_ranges: Vec<f64> = Vec::with_capacity(ohlcv.len());
     let mut atr_values: Vec<Option<f64>> = Vec::with_capacity(ohlcv.len());
 
     for i in 0..ohlcv.len() {
-        let high = ohlcv[i][1];
-        let low = ohlcv[i][2];
-        let close = ohlcv[i][3];
+        let high = ohlcv[i].high;
+        let low = ohlcv[i].low;
+        let close = ohlcv[i].close;
 
         let tr = if i == 0 {
             high - low
         } else {
-            let prev_close = ohlcv[i - 1][3];
+            let prev_close = ohlcv[i - 1].close;
             let tr1 = high - low;
             let tr2 = (high - prev_close).abs();
             let tr3 = (low - prev_close).abs();
