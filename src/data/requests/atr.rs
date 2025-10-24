@@ -11,7 +11,7 @@ pub async fn get_volatility(client: &BinanceClient, token: &str) -> f64 {
         }
     };
 
-    let mut volatilities = vec![];
+    let mut volatilities = Vec::new();
 
     for candle in candles {
         let high = candle.high;
