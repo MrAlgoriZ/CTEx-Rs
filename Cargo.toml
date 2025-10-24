@@ -6,3 +6,5 @@ edition = "2024"
 [dependencies]
 binance = { git = "https://github.com/ccxt/binance-rs.git" }
 chrono = "0.4"
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls"] }
+tokio = { version = "1", features = ["full"] }

@@ -2,8 +2,14 @@ use super::ccxt::binance::BinanceClient;
 use crate::data::data_interfaces::*;
 use std::collections::HashMap;
 
-pub fn get_volatility(client: &BinanceClient, token: &str) -> f64 {
-    let candles: Vec<ICandle> = client.fetch_ohlcv(token, "1d", 10);
+pub async fn get_volatility(client: &BinanceClient, token: &str) -> f64 {
+    let candles = match client.fetch_ohlcv(token, "1d", 10).await {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error fetching candles: {}", e);
+            return 0.0;
+        }
+    };
 
     let mut volatilities = vec![];
 
@@ -21,7 +27,7 @@ pub fn get_volatility(client: &BinanceClient, token: &str) -> f64 {
     avg
 }
 
-fn calculate_atr(ohlcv: &Vec<ICandle>, period: usize) -> Vec<Option<f64>> {
+fn calculate_atr(ohlcv: &[ICandle], period: usize) -> Vec<Option<f64>> {
     let mut true_ranges: Vec<f64> = Vec::with_capacity(ohlcv.len());
     let mut atr_values: Vec<Option<f64>> = Vec::with_capacity(ohlcv.len());
 
@@ -55,38 +61,44 @@ fn calculate_atr(ohlcv: &Vec<ICandle>, period: usize) -> Vec<Option<f64>> {
     atr_values
 }
 
-fn get_atr(client: &BinanceClient, symbol: &str) -> HashMap<String, Vec<Option<f64>>> {
+pub async fn get_atr(client: &BinanceClient, symbol: &str) -> HashMap<String, Vec<Option<f64>>> {
     let period = 14;
     let limit = 24;
 
-    let mut results: HashMap<String, Vec<Option<f64>>> = HashMap::new();
-
+    let mut results = HashMap::new();
     let timeframes = vec!["15m", "30m", "1h", "1d"];
 
     for tf in timeframes {
-        let mut ohlcv = client.fetch_ohlcv(symbol, tf, limit);
+        let mut ohlcv = match client.fetch_ohlcv(symbol, tf, limit).await {
+            Ok(data) => data,
+            Err(e) => {
+                eprintln!("Error fetching ohlcv for {}: {}", tf, e);
+                Vec::new()
+            }
+        };
 
         if !ohlcv.is_empty() {
-            ohlcv.pop();
+            ohlcv.pop(); // убираем последнюю незакрытую свечу
         }
 
         let atr = calculate_atr(&ohlcv, period);
-
         results.insert(tf.to_string(), atr);
     }
 
     results
 }
 
-pub fn get_all_atr(client: &BinanceClient, symbol: &str) -> Vec<f64> {
-    let atr_results = get_atr(client, symbol);
-    let atr_results = atr_results.values().flat_map(|values| {
-        let slice = if values.len() > 10 {
-            &values[values.len() - 10..]
-        } else {
-            &values[..]
-        };
-        slice.iter().filter_map(|&v| v)
-    });
-    atr_results.collect()
+pub async fn get_all_atr(client: &BinanceClient, symbol: &str) -> Vec<f64> {
+    let atr_results = get_atr(client, symbol).await;
+    atr_results
+        .values()
+        .flat_map(|values| {
+            let slice = if values.len() > 10 {
+                &values[values.len() - 10..]
+            } else {
+                &values[..]
+            };
+            slice.iter().filter_map(|&v| v)
+        })
+        .collect()
 }
