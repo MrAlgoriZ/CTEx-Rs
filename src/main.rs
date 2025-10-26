@@ -6,7 +6,7 @@ use engine::utils::processor::process_ohlcv;
 #[tokio::main]
 async fn main() {
     let client = BinanceClient::new().await;
-    let symbol = "BTCUSDT";
+    let symbol = "DOGEUSDT";
     let ohlcv: Vec<data::data_interfaces::ICandle> = client.fetch_ohlcv(symbol, "1m", 2).await;
     println!("Ohlcv: {:?}", ohlcv);
     let static_ohlcv: Vec<data::data_interfaces::ICandle> = process_ohlcv(&ohlcv).await;

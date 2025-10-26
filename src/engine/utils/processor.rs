@@ -27,17 +27,30 @@ fn unflatten_ohlcv(values: &[f64]) -> Vec<ICandle> {
         .collect()
 }
 
-pub fn dynamic_percent(values: &[f64], x: f64, skip_fifth: bool) -> Vec<f64> {
-    if values.is_empty() {
-        return Vec::new();
+pub struct DynamicPercent {
+    pub values: Vec<f64>,
+    base: f64,
+    x: f64,
+}
+
+impl DynamicPercent {
+    pub fn new(values: Vec<f64>, x: f64) -> Self {
+        let base = values[0];
+
+        DynamicPercent { values, base, x }
     }
 
-    let base = values[0];
-    values
-        .iter()
-        .enumerate()
-        .map(|(i, &v)| if skip_fifth && (i + 1) % 5 == 0 { v } else { x * (v / base) })
-        .collect()
+    pub fn all_values(&self, skip_fifth: bool) -> Vec<f64> {
+        self.values
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| if skip_fifth && (i + 1) % 5 == 0 { v } else { self.x * (v / self.base) })
+            .collect()
+    }
+
+    pub fn one_value(&self, value: f64) -> f64 {
+        self.x * (value / self.base)
+    }
 }
 
 pub async fn process_ohlcv(ohlcv: &[ICandle]) -> Vec<ICandle> {
@@ -45,7 +58,9 @@ pub async fn process_ohlcv(ohlcv: &[ICandle]) -> Vec<ICandle> {
 
     task::spawn_blocking(move || {
         let flat: Vec<f64> = flatten_ohlcv(&ohlcv_f64(&ohlcv_vec));
-        let normalized: Vec<f64> = dynamic_percent(&flat, 100.0, true);
+        let normalized: Vec<f64> = DynamicPercent
+                                   ::new(flat, 100.0)
+                                   .all_values(true);
         unflatten_ohlcv(&normalized)
     })
     .await
