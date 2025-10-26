@@ -13,7 +13,6 @@ pub struct BinanceClient {
 impl BinanceClient {
     pub async fn new() -> Self {
         let market = tokio::task::spawn_blocking(|| {
-            // создаём Market в блокирующем контексте
             Binance::new(None, None)
         })
         .await
@@ -24,23 +23,33 @@ impl BinanceClient {
         }
     }
 
-    async fn run_blocking<F, T>(&self, f: F) -> Result<T, String>
+    async fn run_blocking<F, T>(&self, f: F, default: T) -> T
     where
         F: FnOnce(&Market) -> Result<T, String> + Send + 'static,
         T: Send + 'static,
     {
         let market = Arc::clone(&self.market);
         let handle = task::spawn_blocking(move || f(&market));
-        handle.await.map_err(|e| format!("JoinError: {}", e))?
-    }
 
+        match handle.await {
+            Ok(Ok(result)) => result,
+            Ok(Err(e)) => {
+                eprintln!("BinanceClient error: {}", e);
+                default
+            }
+            Err(join_err) => {
+                eprintln!("JoinError: {}", join_err);
+                default
+            }
+        }
+    }
 
     pub async fn fetch_ohlcv(
         &self,
         token: &str,
         timeframe: &str,
         limit: u16,
-    ) -> Result<Vec<ICandle>, String> {
+    ) -> Vec<ICandle> {
         let token = token.to_string();
         let timeframe = timeframe.to_string();
 
@@ -50,11 +59,11 @@ impl BinanceClient {
             match market.get_klines(&token, &timeframe, limit, None, None) {
                 Ok(binance::model::KlineSummaries::AllKlineSummaries(klines)) => {
                     for kline in klines {
-                        let open: f64 = kline.open.parse().unwrap_or(1.0);
-                        let high: f64 = kline.high.parse().unwrap_or(1.0);
-                        let low: f64 = kline.low.parse().unwrap_or(1.0);
-                        let close: f64 = kline.close.parse().unwrap_or(1.0);
-                        let volume: f64 = kline.volume.parse().unwrap_or(1.0);
+                        let open: f64 = kline.open.parse().unwrap_or(0.0);
+                        let high: f64 = kline.high.parse().unwrap_or(0.0);
+                        let low: f64 = kline.low.parse().unwrap_or(0.0);
+                        let close: f64 = kline.close.parse().unwrap_or(0.0);
+                        let volume: f64 = kline.volume.parse().unwrap_or(0.0);
 
                         ohlcv_list.push(ICandle::new(open, high, low, close, volume));
                     }
@@ -62,10 +71,10 @@ impl BinanceClient {
                 }
                 Err(e) => Err(format!("Binance error: {:?}", e)),
             }
-        }).await;
+        }, Vec::new()).await;
     }
 
-    pub async fn fetch_average_price(&self, token: &str) -> Result<f64, String> {
+    pub async fn fetch_average_price(&self, token: &str) -> f64 {
         let token = token.to_string();
 
         return self.run_blocking(move |market| {
@@ -73,10 +82,10 @@ impl BinanceClient {
                 Ok(answer) => Ok(answer.price),
                 Err(e) => Err(format!("Error: {:?}", e)),
             }
-        }).await;
+        }, 0.0).await;
     }
 
-    pub async fn fetch_ticker(&self, token: &str) -> Result<ITicker, String> {
+    pub async fn fetch_ticker(&self, token: &str) -> ITicker {
         let token = token.to_string();
 
         return self.run_blocking(move |market| {
@@ -88,11 +97,11 @@ impl BinanceClient {
                 }
                 Err(e) => Err(format!("Error: {:?}", e)),
             }
-        }).await;
+        }, ITicker::new(0.0, 0.0)).await;
     }
 
 
-    pub async fn fetch_day_price(&self, token: &str) -> Result<IDayPrice, String> {
+    pub async fn fetch_day_price(&self, token: &str) -> IDayPrice {
         let token = token.to_string();
 
         return self.run_blocking(move |market| {
@@ -105,6 +114,6 @@ impl BinanceClient {
                 }
                 Err(e) => Err(format!("Error: {:?}", e)),
             }
-        }).await;
+        }, IDayPrice::new(0.0, 0.0, 0.0)).await;
     }
 }

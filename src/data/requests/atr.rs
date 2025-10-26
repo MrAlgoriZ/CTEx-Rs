@@ -3,14 +3,7 @@ use crate::data::data_interfaces::*;
 use std::collections::HashMap;
 
 pub async fn get_volatility(client: &BinanceClient, token: &str) -> f64 {
-    let candles = match client.fetch_ohlcv(token, "1d", 10).await {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!("Error fetching candles: {}", e);
-            return 0.0;
-        }
-    };
-
+    let candles = client.fetch_ohlcv(token, "1d", 10).await;
     let mut volatilities = Vec::new();
 
     for candle in candles {
@@ -69,13 +62,7 @@ pub async fn get_atr(client: &BinanceClient, symbol: &str) -> HashMap<String, Ve
     let timeframes = vec!["15m", "30m", "1h", "1d"];
 
     for tf in timeframes {
-        let mut ohlcv = match client.fetch_ohlcv(symbol, tf, limit).await {
-            Ok(data) => data,
-            Err(e) => {
-                eprintln!("Error fetching ohlcv for {}: {}", tf, e);
-                Vec::new()
-            }
-        };
+        let mut ohlcv = client.fetch_ohlcv(symbol, tf, limit).await;
 
         if !ohlcv.is_empty() {
             ohlcv.pop(); // убираем последнюю незакрытую свечу
