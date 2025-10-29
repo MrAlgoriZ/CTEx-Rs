@@ -1,6 +1,6 @@
+use crate::data::data_interfaces::ITime;
 use chrono::{Duration, Local, Timelike};
 use std::f64::consts::PI;
-use crate::data::data_interfaces::ITime;
 
 pub struct TimeRequest {
     pub now_hour: f64,

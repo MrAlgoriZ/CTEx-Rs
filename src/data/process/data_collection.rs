@@ -1,5 +1,6 @@
 use crate::data::data_interfaces::*;
 use crate::data::process::features::*;
+use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::time_req::TimeRequest;
 use crate::engine::utils::processor::*;
@@ -36,7 +37,7 @@ impl AddFeatures {
     }
 
     pub fn apply_features(&self) -> Vec<f64> {
-        let mut features: Vec<f64> = Vec::with_capacity(73);
+        let mut features: Vec<f64> = Vec::new();
 
         let mid: f64 = mid_price(self.ticker.ask, self.ticker.bid);
 
@@ -64,6 +65,7 @@ impl AddFeatures {
                     candle.close,
                 ));
             }
+            features.push(get_volatility(&ohlcv));
         }
 
         features
@@ -80,7 +82,7 @@ pub struct CollectedData {
     pub ticker: ITicker,
     pub day_price: IDayPrice,
     pub mean_price: f64,
-    pub features: [f64; 73],
+    pub features: [f64; 76],
 }
 
 impl CollectedData {

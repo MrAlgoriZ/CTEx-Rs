@@ -17,7 +17,10 @@ fn ohlcv_f64(ohlcv: &[ICandle]) -> Vec<[f64; 5]> {
 }
 
 fn flatten_ohlcv(values: &Vec<[f64; 5]>) -> Vec<f64> {
-    values.iter().flat_map(|arr: &[f64; 5]| arr.iter().copied()).collect()
+    values
+        .iter()
+        .flat_map(|arr: &[f64; 5]| arr.iter().copied())
+        .collect()
 }
 
 fn unflatten_ohlcv(values: &[f64]) -> Vec<ICandle> {
@@ -47,7 +50,13 @@ impl DynamicPercent {
         values
             .iter()
             .enumerate()
-            .map(|(i, &v)| if skip_fifth && (i + 1) % 5 == 0 { v } else { self.x * (v / self.base) })
+            .map(|(i, &v)| {
+                if skip_fifth && (i + 1) % 5 == 0 {
+                    v
+                } else {
+                    self.x * (v / self.base)
+                }
+            })
             .collect()
     }
 
@@ -61,9 +70,7 @@ pub async fn process_ohlcv(ohlcv: &[ICandle]) -> Vec<ICandle> {
 
     task::spawn_blocking(move || {
         let flat: Vec<f64> = flatten_ohlcv(&ohlcv_f64(&ohlcv_vec));
-        let normalized: Vec<f64> = DynamicPercent
-                                   ::new(flat.clone(), 100.0)
-                                   .all_values(flat, true);
+        let normalized: Vec<f64> = DynamicPercent::new(flat.clone(), 100.0).all_values(flat, true);
         unflatten_ohlcv(&normalized)
     })
     .await
@@ -78,8 +85,8 @@ pub fn process_ticker(ticker: &ITicker) -> ITicker {
 pub fn process_day_price(day_price: &IDayPrice, base: f64) -> IDayPrice {
     let day_percent = DynamicPercent::with_base(base, 100.0);
     IDayPrice::new(
-            day_percent.one_value(day_price.open), 
-            day_percent.one_value(day_price.high), 
-             day_percent.one_value(day_price.low)
-         )
+        day_percent.one_value(day_price.open),
+        day_percent.one_value(day_price.high),
+        day_percent.one_value(day_price.low),
+    )
 }

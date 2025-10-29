@@ -30,6 +30,6 @@ pub fn body(open: f64, close: f64) -> f64 {
 
 pub fn body_strength(open: f64, high: f64, low: f64, close: f64) -> f64 {
     let body: f64 = body(open, close);
-    let range: f64 = high - low; 
+    let range: f64 = high - low;
     return body.signum() * (body.abs() / (range + EPSILON));
 }
