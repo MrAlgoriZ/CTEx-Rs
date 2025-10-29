@@ -1,5 +1,6 @@
 use chrono::{Duration, Local, Timelike};
 use std::f64::consts::PI;
+use crate::data::data_interfaces::ITime;
 
 pub struct TimeRequest {
     pub now_hour: f64,
@@ -7,7 +8,7 @@ pub struct TimeRequest {
 }
 
 impl TimeRequest {
-    pub async fn new() -> Self {
+    pub fn new() -> Self {
         let now = Local::now();
         Self {
             now_hour: now.hour() as f64,
@@ -15,19 +16,19 @@ impl TimeRequest {
         }
     }
 
-    pub async fn get_time(&self) -> [f64; 4] {
+    pub fn get_time(&self) -> ITime {
         let hour_angle: f64 = 2.0 * PI * (self.now_hour / 24.0);
         let minute_angle: f64 = 2.0 * PI * (self.now_minute / 60.0);
 
-        [
+        ITime::new(
             hour_angle.sin(),
             hour_angle.cos(),
             minute_angle.sin(),
             minute_angle.cos(),
-        ]
+        )
     }
 
-    pub async fn get_shifted_time(&self, minutes_back: i64) -> [f64; 4] {
+    pub fn get_shifted_time(&self, minutes_back: i64) -> ITime {
         let shifted = Local::now() - Duration::minutes(minutes_back);
         let hours = shifted.hour() as f64;
         let minutes = shifted.minute() as f64;
@@ -35,11 +36,11 @@ impl TimeRequest {
         let hour_angle = 2.0 * PI * (hours / 24.0);
         let minute_angle = 2.0 * PI * (minutes / 60.0);
 
-        [
+        ITime::new(
             hour_angle.sin(),
             hour_angle.cos(),
             minute_angle.sin(),
             minute_angle.cos(),
-        ]
+        )
     }
 }

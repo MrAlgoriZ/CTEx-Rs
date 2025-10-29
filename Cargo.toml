@@ -8,4 +8,4 @@ binance = { git = "https://github.com/ccxt/binance-rs.git" }
 chrono = "0.4"
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls"] }
 tokio = { version = "1", features = ["full"] }
-pyo3 = { version = "*", features = ["auto-initialize"]}
+# pyo3 = { version = "*", features = ["auto-initialize"]}

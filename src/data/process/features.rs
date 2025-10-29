@@ -1,8 +1,8 @@
-const epsilon: f64 = 1e-8;
+const EPSILON: f64 = 1e-8;
 
-pub fn close_return(close: f64, close_prev: f64) -> f64 {
-    (close - close_prev) / close_prev
-}
+// pub fn close_return(close: f64, close_prev: f64) -> f64 {
+//     (close - close_prev) / close_prev
+// }
 
 pub fn spread_rel(ask: f64, bid: f64, mid: f64) -> f64 {
     ask - bid / mid
@@ -31,5 +31,5 @@ pub fn body(open: f64, close: f64) -> f64 {
 pub fn body_strength(open: f64, high: f64, low: f64, close: f64) -> f64 {
     let body: f64 = body(open, close);
     let range: f64 = high - low; 
-    return body.signum() * (body.abs() / (range + epsilon));
+    return body.signum() * (body.abs() / (range + EPSILON));
 }

@@ -1,22 +1,13 @@
-// mod data;
-// use data::requests::ccxt::binance::BinanceClient;
-// mod engine;
-// use engine::utils::processor::process_ohlcv;
+mod data;
+mod engine;
+use data::process::data_collection::{collect_all, flat_all};
 
-// #[tokio::main]
-// async fn main() {
-//     let client = BinanceClient::new().await;
-//     let symbol = "DOGEUSDT";
-//     let ohlcv: Vec<data::data_interfaces::ICandle> = client.fetch_ohlcv(symbol, "1m", 2).await;
-//     println!("Ohlcv: {:?}", ohlcv);
-//     let static_ohlcv: Vec<data::data_interfaces::ICandle> = process_ohlcv(&ohlcv).await;
-//     println!("Static ohlcv: {:?}", static_ohlcv);
-// }
+#[tokio::main]
+async fn main() {
+    let token: &str = "BTCUSDT";
+    let values = flat_all(collect_all(token).await);
 
-mod models;
-use models::model::mt_main;
-
-fn main() {
-    let result = mt_main();
-    println!("{:?}", result);
+    println!("{}", values.token);
+    println!("{:?}", values.features);
+    println!("{}", values.features.len());
 }

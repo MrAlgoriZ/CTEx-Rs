@@ -1,4 +1,4 @@
-use crate::data::data_interfaces::ICandle;
+use crate::data::data_interfaces::{ICandle, IDayPrice, ITicker};
 use tokio::task;
 
 fn ohlcv_f64(ohlcv: &[ICandle]) -> Vec<[f64; 5]> {
@@ -28,7 +28,6 @@ fn unflatten_ohlcv(values: &[f64]) -> Vec<ICandle> {
 }
 
 pub struct DynamicPercent {
-    pub values: Vec<f64>,
     base: f64,
     x: f64,
 }
@@ -37,11 +36,15 @@ impl DynamicPercent {
     pub fn new(values: Vec<f64>, x: f64) -> Self {
         let base = values[0];
 
-        DynamicPercent { values, base, x }
+        DynamicPercent { base, x }
     }
 
-    pub fn all_values(&self, skip_fifth: bool) -> Vec<f64> {
-        self.values
+    pub fn with_base(base: f64, x: f64) -> Self {
+        DynamicPercent { base, x }
+    }
+
+    pub fn all_values(&self, values: Vec<f64>, skip_fifth: bool) -> Vec<f64> {
+        values
             .iter()
             .enumerate()
             .map(|(i, &v)| if skip_fifth && (i + 1) % 5 == 0 { v } else { self.x * (v / self.base) })
@@ -59,10 +62,24 @@ pub async fn process_ohlcv(ohlcv: &[ICandle]) -> Vec<ICandle> {
     task::spawn_blocking(move || {
         let flat: Vec<f64> = flatten_ohlcv(&ohlcv_f64(&ohlcv_vec));
         let normalized: Vec<f64> = DynamicPercent
-                                   ::new(flat, 100.0)
-                                   .all_values(true);
+                                   ::new(flat.clone(), 100.0)
+                                   .all_values(flat, true);
         unflatten_ohlcv(&normalized)
     })
     .await
     .expect("blocking task panicked")
+}
+
+pub fn process_ticker(ticker: &ITicker) -> ITicker {
+    let ticker_percent: DynamicPercent = DynamicPercent::with_base(ticker.ask, 100.0);
+    ITicker::new(ticker_percent.one_value(ticker.bid), 100.0)
+}
+
+pub fn process_day_price(day_price: &IDayPrice, base: f64) -> IDayPrice {
+    let day_percent = DynamicPercent::with_base(base, 100.0);
+    IDayPrice::new(
+            day_percent.one_value(day_price.open), 
+            day_percent.one_value(day_price.high), 
+             day_percent.one_value(day_price.low)
+         )
 }

@@ -33,13 +33,35 @@ impl ITicker {
 
 #[derive(Debug, Clone)]
 pub struct IDayPrice {
-    open: f64,
-    high: f64,
-    low: f64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
 }
 
 impl IDayPrice {
     pub fn new(open: f64, high: f64, low: f64) -> Self {
         IDayPrice { open, high, low }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ITime {
+    pub hour_sin: f64,
+    pub hour_cos: f64,
+    pub min_sin: f64,
+    pub min_cos: f64,
+}
+
+impl ITime {
+    pub fn new(
+        hour_sin: f64, hour_cos: f64,
+        min_sin: f64, min_cos: f64,
+    ) -> Self {
+        ITime { 
+            hour_sin, 
+            hour_cos, 
+            min_sin, 
+            min_cos
+        }
     }
 }
