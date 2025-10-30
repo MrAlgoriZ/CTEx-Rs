@@ -12,9 +12,9 @@ use crate::engine::utils::processor::*;
 */
 
 pub struct AddFeatures {
-    ohlcv: [ICandle; 11],
-    ohlcv1h: [ICandle; 11],
-    ohlcv1d: [ICandle; 11],
+    ohlcv: [ICandle; 10],
+    ohlcv1h: [ICandle; 10],
+    ohlcv1d: [ICandle; 10],
     ticker: ITicker,
     day_price: IDayPrice,
 }
@@ -22,10 +22,10 @@ pub struct AddFeatures {
 impl AddFeatures {
     pub fn new(
         ticker: ITicker,
-        ohlcv: [ICandle; 11],
+        ohlcv: [ICandle; 10],
         day_price: IDayPrice,
-        ohlcv1h: [ICandle; 11],
-        ohlcv1d: [ICandle; 11],
+        ohlcv1h: [ICandle; 10],
+        ohlcv1d: [ICandle; 10],
     ) -> Self {
         AddFeatures {
             ohlcv,
@@ -53,7 +53,7 @@ impl AddFeatures {
             self.day_price.low,
         ));
 
-        let ohlcv_var_list: [[ICandle; 11]; 3] = [self.ohlcv, self.ohlcv1h, self.ohlcv1d];
+        let ohlcv_var_list: [[ICandle; 10]; 3] = [self.ohlcv, self.ohlcv1h, self.ohlcv1d];
 
         for ohlcv in ohlcv_var_list {
             for candle in ohlcv.iter() {
@@ -76,13 +76,13 @@ impl AddFeatures {
 pub struct CollectedData {
     pub token: String,
     pub time: ITime,
-    pub ohlcv: [ICandle; 11],
-    pub ohlcv1h: [ICandle; 11],
-    pub ohlcv1d: [ICandle; 11],
+    pub ohlcv: [ICandle; 10],
+    pub ohlcv1h: [ICandle; 10],
+    pub ohlcv1d: [ICandle; 10],
     pub ticker: ITicker,
     pub day_price: IDayPrice,
     pub mean_price: f64,
-    pub features: [f64; 76],
+    pub features: [f64; 70],
 }
 
 impl CollectedData {
@@ -95,16 +95,20 @@ impl CollectedData {
         day_price: IDayPrice,
         mean_price: f64,
     ) -> Self {
+        let ohlcv10 = ohlcv[..10].try_into().unwrap();
+        let ohlcv1h10 = ohlcv1h[..10].try_into().unwrap();
+        let ohlcv1d10 = ohlcv1d[..10].try_into().unwrap();
+
         CollectedData {
             token: token.to_string(),
             time: TimeRequest::new().get_time(),
-            ohlcv,
-            ohlcv1h,
-            ohlcv1d,
+            ohlcv: ohlcv10,
+            ohlcv1h: ohlcv1h10,
+            ohlcv1d: ohlcv1d10,
             ticker: ticker.clone(),
             day_price: day_price.clone(),
             mean_price,
-            features: AddFeatures::new(ticker, ohlcv, day_price, ohlcv1h, ohlcv1d)
+            features: AddFeatures::new(ticker, ohlcv10, day_price, ohlcv1h10, ohlcv1d10)
                 .apply_features()
                 .try_into()
                 .unwrap(),
@@ -199,12 +203,6 @@ pub async fn collect_all(token: &str) -> CollectedData {
         process_value.mean_price().await,
     )
     .await
-}
-
-#[derive(Debug)]
-pub struct FlattenedData {
-    pub token: String,
-    pub features: Vec<f64>,
 }
 
 pub fn flat_all(collected_data: CollectedData) -> FlattenedData {

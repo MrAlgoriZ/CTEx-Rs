@@ -53,15 +53,18 @@ pub struct ITime {
 }
 
 impl ITime {
-    pub fn new(
-        hour_sin: f64, hour_cos: f64,
-        min_sin: f64, min_cos: f64,
-    ) -> Self {
-        ITime { 
-            hour_sin, 
-            hour_cos, 
-            min_sin, 
-            min_cos
+    pub fn new(hour_sin: f64, hour_cos: f64, min_sin: f64, min_cos: f64) -> Self {
+        ITime {
+            hour_sin,
+            hour_cos,
+            min_sin,
+            min_cos,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct FlattenedData {
+    pub token: String,
+    pub features: Vec<f64>,
 }

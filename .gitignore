@@ -1,6 +1,7 @@
 /target
 
 .venv/
+.env
 env/
 venv/
 

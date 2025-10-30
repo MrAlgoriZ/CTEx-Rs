@@ -1,4 +1,4 @@
-use crate::engine::utils::config_types::Config;
+use crate::engine::utils::config::config_types::Config;
 use std::fs::File;
 use std::io::BufReader;
 

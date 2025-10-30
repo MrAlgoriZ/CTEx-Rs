@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "binance",
  "chrono",
+ "dotenvy",
  "serde",
  "serde_yaml",
  "sqlx",
@@ -1645,7 +1646,6 @@ dependencies = [
  "indexmap",
  "log",
  "memchr",
- "native-tls",
  "once_cell",
  "percent-encoding",
  "serde",
