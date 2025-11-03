@@ -5,11 +5,11 @@ use data::requests::database::db_req::*;
 use engine::utils::config::load_env::load_env;
 use sqlx::PgPool;
 use tokio;
+mod models;
 
 #[tokio::main]
 async fn main() {
-    let env: [String; 2] = load_env().try_into().unwrap();
-    println!("{:?}", env);
+    let env = load_env();
     let db = PgPool::connect(&env[0]).await.unwrap();
 
     let token = "ETHUSDT";

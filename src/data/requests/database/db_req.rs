@@ -1,4 +1,4 @@
-use crate::data::{data_interfaces::FlattenedData, process::features};
+use crate::data::data_interfaces::FlattenedData;
 use sqlx::{Error, PgPool, Row, query};
 
 pub async fn insert_candle(pool: &PgPool, token: &str, values: Vec<f64>) -> Result<(), Error> {

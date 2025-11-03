@@ -5,6 +5,10 @@ use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::time_req::TimeRequest;
 use crate::engine::utils::processor::*;
 
+const OHLCV_LEN: usize = 10;
+const OHLCV_FETCH_LEN: usize = 11;
+const FEATURES_LEN: usize = 70;
+
 /*
    Symbol, sin & cos of time, ohclv, bid, ask, day_ohl, mean_price,
    spread_rel, ohlcv_1h, ohlcv_1d, mid_price, pressure_side,
@@ -12,9 +16,9 @@ use crate::engine::utils::processor::*;
 */
 
 pub struct AddFeatures {
-    ohlcv: [ICandle; 10],
-    ohlcv1h: [ICandle; 10],
-    ohlcv1d: [ICandle; 10],
+    ohlcv: [ICandle; OHLCV_LEN],
+    ohlcv1h: [ICandle; OHLCV_LEN],
+    ohlcv1d: [ICandle; OHLCV_LEN],
     ticker: ITicker,
     day_price: IDayPrice,
 }
@@ -22,10 +26,10 @@ pub struct AddFeatures {
 impl AddFeatures {
     pub fn new(
         ticker: ITicker,
-        ohlcv: [ICandle; 10],
+        ohlcv: [ICandle; OHLCV_LEN],
         day_price: IDayPrice,
-        ohlcv1h: [ICandle; 10],
-        ohlcv1d: [ICandle; 10],
+        ohlcv1h: [ICandle; OHLCV_LEN],
+        ohlcv1d: [ICandle; OHLCV_LEN],
     ) -> Self {
         AddFeatures {
             ohlcv,
@@ -53,7 +57,7 @@ impl AddFeatures {
             self.day_price.low,
         ));
 
-        let ohlcv_var_list: [[ICandle; 10]; 3] = [self.ohlcv, self.ohlcv1h, self.ohlcv1d];
+        let ohlcv_var_list: [[ICandle; OHLCV_LEN]; 3] = [self.ohlcv, self.ohlcv1h, self.ohlcv1d];
 
         for ohlcv in ohlcv_var_list {
             for candle in ohlcv.iter() {
@@ -76,28 +80,28 @@ impl AddFeatures {
 pub struct CollectedData {
     pub token: String,
     pub time: ITime,
-    pub ohlcv: [ICandle; 10],
-    pub ohlcv1h: [ICandle; 10],
-    pub ohlcv1d: [ICandle; 10],
+    pub ohlcv: [ICandle; OHLCV_LEN],
+    pub ohlcv1h: [ICandle; OHLCV_LEN],
+    pub ohlcv1d: [ICandle; OHLCV_LEN],
     pub ticker: ITicker,
     pub day_price: IDayPrice,
     pub mean_price: f64,
-    pub features: [f64; 70],
+    pub features: [f64; FEATURES_LEN],
 }
 
 impl CollectedData {
     pub async fn new(
         token: &str,
-        ohlcv: [ICandle; 11],
-        ohlcv1h: [ICandle; 11],
-        ohlcv1d: [ICandle; 11],
+        ohlcv: [ICandle; OHLCV_FETCH_LEN],
+        ohlcv1h: [ICandle; OHLCV_FETCH_LEN],
+        ohlcv1d: [ICandle; OHLCV_FETCH_LEN],
         ticker: ITicker,
         day_price: IDayPrice,
         mean_price: f64,
     ) -> Self {
-        let ohlcv10 = ohlcv[..10].try_into().unwrap();
-        let ohlcv1h10 = ohlcv1h[..10].try_into().unwrap();
-        let ohlcv1d10 = ohlcv1d[..10].try_into().unwrap();
+        let ohlcv10 = ohlcv[..OHLCV_LEN].try_into().unwrap();
+        let ohlcv1h10 = ohlcv1h[..OHLCV_LEN].try_into().unwrap();
+        let ohlcv1d10 = ohlcv1d[..OHLCV_LEN].try_into().unwrap();
 
         CollectedData {
             token: token.to_string(),
@@ -117,9 +121,9 @@ impl CollectedData {
 }
 
 struct ProcessAll {
-    ohlcv: [ICandle; 11],
-    ohlcv1h: [ICandle; 11],
-    ohlcv1d: [ICandle; 11],
+    ohlcv: [ICandle; OHLCV_FETCH_LEN],
+    ohlcv1h: [ICandle; OHLCV_FETCH_LEN],
+    ohlcv1d: [ICandle; OHLCV_FETCH_LEN],
     ticker: ITicker,
     day_price: IDayPrice,
     mean_price: f64,
@@ -127,9 +131,9 @@ struct ProcessAll {
 
 impl ProcessAll {
     pub fn new(
-        ohlcv: [ICandle; 11],
-        ohlcv1h: [ICandle; 11],
-        ohlcv1d: [ICandle; 11],
+        ohlcv: [ICandle; OHLCV_FETCH_LEN],
+        ohlcv1h: [ICandle; OHLCV_FETCH_LEN],
+        ohlcv1d: [ICandle; OHLCV_FETCH_LEN],
         ticker: ITicker,
         day_price: IDayPrice,
         mean_price: f64,
@@ -144,15 +148,15 @@ impl ProcessAll {
         }
     }
 
-    pub async fn ohlcv(&self) -> [ICandle; 11] {
+    pub async fn ohlcv(&self) -> [ICandle; OHLCV_FETCH_LEN] {
         process_ohlcv(&self.ohlcv).await.try_into().unwrap()
     }
 
-    pub async fn ohlcv1h(&self) -> [ICandle; 11] {
+    pub async fn ohlcv1h(&self) -> [ICandle; OHLCV_FETCH_LEN] {
         process_ohlcv(&self.ohlcv1h).await.try_into().unwrap()
     }
 
-    pub async fn ohlcv1d(&self) -> [ICandle; 11] {
+    pub async fn ohlcv1d(&self) -> [ICandle; OHLCV_FETCH_LEN] {
         process_ohlcv(&self.ohlcv1d).await.try_into().unwrap()
     }
 
@@ -173,17 +177,17 @@ impl ProcessAll {
 pub async fn collect_all(token: &str) -> CollectedData {
     let client = BinanceClient::new().await;
     let ohlcv = client
-        .fetch_ohlcv(token, "15m", 11)
+        .fetch_ohlcv(token, "15m", OHLCV_FETCH_LEN)
         .await
         .try_into()
         .unwrap();
     let ohlcv1h = client
-        .fetch_ohlcv(token, "1h", 11)
+        .fetch_ohlcv(token, "1h", OHLCV_FETCH_LEN)
         .await
         .try_into()
         .unwrap();
     let ohlcv1d = client
-        .fetch_ohlcv(token, "1d", 11)
+        .fetch_ohlcv(token, "1d", OHLCV_FETCH_LEN)
         .await
         .try_into()
         .unwrap();

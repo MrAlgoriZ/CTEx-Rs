@@ -42,7 +42,7 @@ impl BinanceClient {
         }
     }
 
-    pub async fn fetch_ohlcv(&self, token: &str, timeframe: &str, limit: u16) -> Vec<ICandle> {
+    pub async fn fetch_ohlcv(&self, token: &str, timeframe: &str, limit: usize) -> Vec<ICandle> {
         let token = token.to_string();
         let timeframe = timeframe.to_string();
 
@@ -51,7 +51,7 @@ impl BinanceClient {
                 move |market| {
                     let mut ohlcv_list: Vec<ICandle> = Vec::new();
 
-                    match market.get_klines(&token, &timeframe, limit, None, None) {
+                    match market.get_klines(&token, &timeframe, limit as u16, None, None) {
                         Ok(binance::model::KlineSummaries::AllKlineSummaries(klines)) => {
                             for kline in klines {
                                 let open: f64 = kline.open.parse().unwrap_or(0.0);
