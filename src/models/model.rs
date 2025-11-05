@@ -58,7 +58,7 @@ impl RFInterface {
         }
     }
 
-    pub async fn load_data(
+    pub fn load_data(
         &mut self,
         data: Vec<FlattenedData>,
     ) -> Result<(DenseMatrix<f64>, Vec<f64>, Vec<f64>)> {
@@ -252,12 +252,7 @@ impl RFInterface {
         Ok(accuracy)
     }
 
-    pub fn predict(
-        &self,
-        x: Vec<f64>,
-        token_name: Option<&str>,
-        tf: Option<Vec<f64>>,
-    ) -> Result<f64> {
+    pub fn predict(&self, x: Vec<f64>, token_name: Option<&str>) -> Result<f64> {
         let token_cols = self
             .token_columns
             .as_ref()
@@ -266,9 +261,10 @@ impl RFInterface {
             .model_target
             .as_ref()
             .ok_or(anyhow!("Model not trained yet"))?;
+        let scaler = self.scaler.as_ref().ok_or(anyhow!("Scaler not fitted"))?;
 
-        let mut input: Vec<f64> =
-            Vec::with_capacity(token_cols.len() + x.len() + tf.as_ref().map_or(0, |t| t.len()));
+        let mut input: Vec<f64> = Vec::with_capacity(token_cols.len() + x.len());
+
         let mut token_vec = vec![0.0; token_cols.len()];
         if let Some(tn) = token_name {
             if let Some(idx) = token_cols
@@ -280,20 +276,17 @@ impl RFInterface {
         }
         input.extend(token_vec);
 
-        if let Some(t) = tf {
-            input.extend(t);
-        }
-
         input.extend(x);
 
         let input_mat = DenseMatrix::new(1, input.len(), input, false)?;
-        let proba = model.predict(&input_mat)?;
+        let scaled_input = scaler.transform(&input_mat)?;
 
+        let proba = model.predict(&scaled_input)?;
         Ok(proba[0])
     }
 
-    pub async fn train(&mut self, data: Vec<FlattenedData>) -> Result<()> {
-        let (x, y_target, y_significant) = self.load_data(data).await?;
+    pub fn train(&mut self, data: Vec<FlattenedData>) -> Result<()> {
+        let (x, y_target, y_significant) = self.load_data(data)?;
         let (x_train, x_val, y_train_target, y_val_target, y_train_significant, y_val_significant) =
             self.prepare_data(x, y_target, y_significant, 0.8)?;
         self.fit(

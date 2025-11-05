@@ -6,6 +6,8 @@ use binance::market::Market;
 
 use crate::data::data_interfaces::*;
 
+const MINIMAL_VALUE: f64 = 0.00000000000000001;
+
 pub struct BinanceClient {
     market: Arc<Market>,
 }
@@ -54,11 +56,11 @@ impl BinanceClient {
                     match market.get_klines(&token, &timeframe, limit as u16, None, None) {
                         Ok(binance::model::KlineSummaries::AllKlineSummaries(klines)) => {
                             for kline in klines {
-                                let open: f64 = kline.open.parse().unwrap_or(0.0);
-                                let high: f64 = kline.high.parse().unwrap_or(0.0);
-                                let low: f64 = kline.low.parse().unwrap_or(0.0);
-                                let close: f64 = kline.close.parse().unwrap_or(0.0);
-                                let volume: f64 = kline.volume.parse().unwrap_or(0.0);
+                                let open: f64 = kline.open.parse().unwrap_or(MINIMAL_VALUE);
+                                let high: f64 = kline.high.parse().unwrap_or(MINIMAL_VALUE);
+                                let low: f64 = kline.low.parse().unwrap_or(MINIMAL_VALUE);
+                                let close: f64 = kline.close.parse().unwrap_or(MINIMAL_VALUE);
+                                let volume: f64 = kline.volume.parse().unwrap_or(MINIMAL_VALUE);
 
                                 ohlcv_list.push(ICandle::new(open, high, low, close, volume));
                             }
@@ -81,7 +83,7 @@ impl BinanceClient {
                     Ok(answer) => Ok(answer.price),
                     Err(e) => Err(format!("Error: {:?}", e)),
                 },
-                0.0,
+                MINIMAL_VALUE,
             )
             .await;
     }
@@ -99,7 +101,7 @@ impl BinanceClient {
                     }
                     Err(e) => Err(format!("Error: {:?}", e)),
                 },
-                ITicker::new(0.0, 0.0),
+                ITicker::new(MINIMAL_VALUE, MINIMAL_VALUE),
             )
             .await;
     }
@@ -118,7 +120,7 @@ impl BinanceClient {
                     }
                     Err(e) => Err(format!("Error: {:?}", e)),
                 },
-                IDayPrice::new(0.0, 0.0, 0.0),
+                IDayPrice::new(MINIMAL_VALUE, MINIMAL_VALUE, MINIMAL_VALUE),
             )
             .await;
     }

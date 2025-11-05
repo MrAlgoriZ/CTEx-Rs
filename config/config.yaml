@@ -5,12 +5,7 @@ model:
   criterion: mean_absolute_error
 
 data:
-  type: Postgres
-  host: localhost
-  port: 5432
-  database: dataset
-  user: rs
-  password: 1111
+  success_threshold: 0.3
 
 token:
   - BTCUSDT

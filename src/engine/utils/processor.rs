@@ -65,16 +65,12 @@ impl DynamicPercent {
     }
 }
 
-pub async fn process_ohlcv(ohlcv: &[ICandle]) -> Vec<ICandle> {
+pub fn process_ohlcv(ohlcv: &[ICandle]) -> Vec<ICandle> {
     let ohlcv_vec: Vec<ICandle> = ohlcv.to_vec();
 
-    task::spawn_blocking(move || {
-        let flat: Vec<f64> = flatten_ohlcv(&ohlcv_f64(&ohlcv_vec));
-        let normalized: Vec<f64> = DynamicPercent::new(flat.clone(), 100.0).all_values(flat, true);
-        unflatten_ohlcv(&normalized)
-    })
-    .await
-    .expect("blocking task panicked")
+    let flat: Vec<f64> = flatten_ohlcv(&ohlcv_f64(&ohlcv_vec));
+    let normalized: Vec<f64> = DynamicPercent::new(flat.clone(), 100.0).all_values(flat, true);
+    unflatten_ohlcv(&normalized)
 }
 
 pub fn process_ticker(ticker: &ITicker) -> ITicker {

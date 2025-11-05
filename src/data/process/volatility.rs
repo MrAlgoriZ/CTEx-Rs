@@ -1,7 +1,7 @@
 use crate::data::data_interfaces::ICandle;
 
 pub fn get_volatility(candles: &[ICandle]) -> f64 {
-    let mut volatilities = Vec::new();
+    let mut volatilities = Vec::with_capacity(candles.len());
 
     for candle in candles.iter() {
         let high = candle.high;

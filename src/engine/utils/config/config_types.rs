@@ -18,11 +18,5 @@ pub struct ModelConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct DataConfig {
-    #[serde(rename = "type")]
-    pub data_type: String,
-    pub host: String,
-    pub port: u16,
-    pub database: String,
-    pub user: String,
-    pub password: String,
+    pub success_threshold: f64,
 }

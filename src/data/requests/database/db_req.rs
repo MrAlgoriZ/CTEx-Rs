@@ -53,7 +53,7 @@ pub async fn insert_candle(pool: &PgPool, token: &str, values: Vec<f64>) -> Resu
         body_1d, body_strength_1d, body_2d, body_strength_2d, body_3d, body_strength_3d,
         body_4d, body_strength_4d, body_5d, body_strength_5d, body_6d, body_strength_6d,
         body_7d, body_strength_7d, body_8d, body_strength_8d, body_9d, body_strength_9d,
-        body_10d, body_strength_10d, volatility_1d
+        body_10d, body_strength_10d, volatility_1d, target, is_significant
     ";
 
     let sql = format!(
@@ -87,10 +87,7 @@ pub async fn select_all_candles(pool: &PgPool) -> Result<Vec<FlattenedData>, Err
             values.push(value.unwrap_or(f64::NAN));
         }
 
-        result.push(FlattenedData {
-            token,
-            features: values,
-        });
+        result.push(FlattenedData::new(token, values, true));
     }
 
     Ok(result)

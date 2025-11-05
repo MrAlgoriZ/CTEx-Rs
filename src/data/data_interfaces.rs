@@ -67,4 +67,32 @@ impl ITime {
 pub struct FlattenedData {
     pub token: String,
     pub features: Vec<f64>,
+    with_target: bool,
+}
+
+impl FlattenedData {
+    pub fn new(token: String, features: Vec<f64>, with_target: bool) -> Self {
+        FlattenedData {
+            token,
+            features,
+            with_target,
+        }
+    }
+    pub fn is_there_a_target(&self) -> bool {
+        self.with_target
+    }
+}
+
+pub struct CandlesTarget {
+    pub close: f64,
+    pub day_price: IDayPrice,
+}
+
+impl CandlesTarget {
+    pub fn new(ohlcv: [ICandle; 2], day_price: IDayPrice) -> Self {
+        CandlesTarget {
+            close: ohlcv[0].close,
+            day_price,
+        }
+    }
 }

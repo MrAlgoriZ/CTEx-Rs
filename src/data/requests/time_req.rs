@@ -28,8 +28,8 @@ impl TimeRequest {
         )
     }
 
-    pub fn get_shifted_time(&self, minutes_back: i64) -> ITime {
-        let shifted = Local::now() - Duration::minutes(minutes_back);
+    pub fn get_shifted_time(&self, minutes_back: i16) -> ITime {
+        let shifted = Local::now() - Duration::minutes(minutes_back as i64);
         let hours = shifted.hour() as f64;
         let minutes = shifted.minute() as f64;
 

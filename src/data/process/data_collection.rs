@@ -76,7 +76,7 @@ impl AddFeatures {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CollectedData {
     pub token: String,
     pub time: ITime,
@@ -90,7 +90,7 @@ pub struct CollectedData {
 }
 
 impl CollectedData {
-    pub async fn new(
+    pub fn new(
         token: &str,
         ohlcv: [ICandle; OHLCV_FETCH_LEN],
         ohlcv1h: [ICandle; OHLCV_FETCH_LEN],
@@ -148,16 +148,16 @@ impl ProcessAll {
         }
     }
 
-    pub async fn ohlcv(&self) -> [ICandle; OHLCV_FETCH_LEN] {
-        process_ohlcv(&self.ohlcv).await.try_into().unwrap()
+    pub fn ohlcv(&self) -> [ICandle; OHLCV_FETCH_LEN] {
+        process_ohlcv(&self.ohlcv).try_into().unwrap()
     }
 
-    pub async fn ohlcv1h(&self) -> [ICandle; OHLCV_FETCH_LEN] {
-        process_ohlcv(&self.ohlcv1h).await.try_into().unwrap()
+    pub fn ohlcv1h(&self) -> [ICandle; OHLCV_FETCH_LEN] {
+        process_ohlcv(&self.ohlcv1h).try_into().unwrap()
     }
 
-    pub async fn ohlcv1d(&self) -> [ICandle; OHLCV_FETCH_LEN] {
-        process_ohlcv(&self.ohlcv1d).await.try_into().unwrap()
+    pub fn ohlcv1d(&self) -> [ICandle; OHLCV_FETCH_LEN] {
+        process_ohlcv(&self.ohlcv1d).try_into().unwrap()
     }
 
     pub async fn ticker(&self) -> ITicker {
@@ -199,17 +199,20 @@ pub async fn collect_all(token: &str) -> CollectedData {
 
     CollectedData::new(
         token,
-        process_value.ohlcv().await,
-        process_value.ohlcv1h().await,
-        process_value.ohlcv1d().await,
+        process_value.ohlcv(),
+        process_value.ohlcv1h(),
+        process_value.ohlcv1d(),
         process_value.ticker().await,
         process_value.day_price().await,
         process_value.mean_price().await,
     )
-    .await
 }
 
-pub fn flat_all(collected_data: CollectedData) -> FlattenedData {
+pub fn flat_all(
+    collected_data: CollectedData,
+    target: Option<f64>,
+    is_significant: Option<bool>,
+) -> FlattenedData {
     let mut features = Vec::new();
 
     features.push(collected_data.time.hour_sin);
@@ -250,8 +253,15 @@ pub fn flat_all(collected_data: CollectedData) -> FlattenedData {
 
     features.extend_from_slice(&collected_data.features);
 
-    FlattenedData {
-        token: collected_data.token.clone(),
-        features,
+    if target != None && is_significant != None {
+        features.push(target.unwrap());
+        features.push(if is_significant == Some(true) {
+            1.0
+        } else {
+            0.0
+        });
+        FlattenedData::new(collected_data.token.clone(), features, true)
+    } else {
+        FlattenedData::new(collected_data.token.clone(), features, false)
     }
 }
