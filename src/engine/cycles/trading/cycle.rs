@@ -1,7 +1,8 @@
 use chrono::{Local, Timelike};
 use sqlx::PgPool;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::time::sleep;
+use tokio::{task::spawn_blocking, time::sleep};
 
 use crate::data::data_interfaces::{CandlesTarget, FlattenedData, ICandle};
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
@@ -18,8 +19,6 @@ use crate::models::model::RFInterface;
 
 pub struct TradingCycle {
     pub symbol: String,
-    database: [String; 2],
-    target_indicate: Option<bool>,
     last_grouped_candles: Option<CollectedData>,
     last_candles_target: Option<CandlesTarget>,
     print_symbol: String,
@@ -31,12 +30,10 @@ pub struct TradingCycle {
 impl TradingCycle {
     pub async fn new(symbol: String) -> Self {
         TradingCycle {
-            symbol: symbol.clone(),
-            database: load_env(),
-            target_indicate: None,
+            print_symbol: format!("{}{}:", Fore::BLACK.as_str(), symbol),
+            symbol: symbol,
             last_grouped_candles: None,
             last_candles_target: None,
-            print_symbol: format!("{}{}:", Fore::BLACK.as_str(), symbol),
             client: BinanceClient::new().await,
             config: load_config("config/config.yaml"),
             pool: PgPool::connect(&load_env()[1])
@@ -50,13 +47,16 @@ impl TradingCycle {
         self.print_volatility_status(&candles1d_to_vol);
 
         let mut counters = Counters::new();
-        let mut model = RFInterface::new();
+        let model = Arc::new(Mutex::new(RFInterface::new()));
 
         let mut target_indicate: Option<bool> = None;
         let mut prediction: Option<f64> = None;
 
+        self.train_model(&self.pool, &model).await;
+
         loop {
             self.wait_for_next_interval().await;
+            self.reset_counters_if_needed(&mut counters);
             let candles = collect_all(&self.symbol).await;
             let candles_target: CandlesTarget = CandlesTarget::new(
                 self.client
@@ -85,14 +85,13 @@ impl TradingCycle {
                 self.update_counters(prediction.unwrap(), target.unwrap(), &mut counters)
                     .unwrap();
                 if !success {
+                    let last_grouped = self.last_grouped_candles.as_ref().unwrap().clone();
                     self.handle_mistake(
-                        flat_all(
-                            self.last_grouped_candles.as_ref().unwrap().clone(),
-                            target,
-                            is_significant,
-                        ),
+                        spawn_blocking(move || flat_all(last_grouped, target, is_significant))
+                            .await
+                            .unwrap(),
                         &mut counters,
-                        &mut model,
+                        &model,
                         &self.pool,
                     )
                     .await
@@ -100,10 +99,13 @@ impl TradingCycle {
                 }
             }
 
-            prediction = Some(
-                self.predict(flat_all(candles.clone(), None, None), &mut model)
-                    .unwrap(),
-            );
+            let candles_to_flattened = candles.clone();
+            let flattened_for_pred =
+                spawn_blocking(move || flat_all(candles_to_flattened, None, None))
+                    .await
+                    .unwrap();
+
+            prediction = Some(self.predict(flattened_for_pred, &model).await.unwrap());
 
             target_indicate = Some(true);
             self.log_prediction(prediction.unwrap());
@@ -138,14 +140,15 @@ impl TradingCycle {
     async fn wait_for_next_interval(&self) {
         let now = Local::now();
 
-        let current_seconds = (now.minute() as f64) * 60.0
-            + (now.second() as f64)
-            + (now.nanosecond() as f64 / 1_000_000_000.0);
+        let current_seconds = now.minute() as f64 * 60.0
+            + now.second() as f64
+            + now.nanosecond() as f64 / 1_000_000_000.0;
 
         let seconds_to_wait = (900.0 - (current_seconds % 900.0)) % 900.0;
 
         if seconds_to_wait > 0.0 {
-            sleep(Duration::from_secs_f64(seconds_to_wait)).await;
+            let duration = Duration::from_secs_f64(seconds_to_wait);
+            sleep(duration).await;
         }
 
         sleep(Duration::from_secs(2)).await;
@@ -157,15 +160,22 @@ impl TradingCycle {
         );
     }
 
-    fn predict(
+    async fn predict(
         &self,
         flattened_candles: FlattenedData,
-        model: &mut RFInterface,
+        model: &Arc<Mutex<RFInterface>>,
     ) -> Result<f64, String> {
         if !flattened_candles.is_there_a_target() {
-            Ok(model
-                .predict(flattened_candles.features, Some(&flattened_candles.token))
-                .unwrap_or(0.0))
+            let model_clone = model.clone();
+            let features = flattened_candles.features;
+            let token = flattened_candles.token;
+            let pred = spawn_blocking(move || {
+                let model_guard = model_clone.lock().unwrap();
+                model_guard.predict(features, Some(&token)).unwrap_or(0.0)
+            })
+            .await
+            .unwrap();
+            Ok(pred)
         } else {
             Err(String::from(
                 "FlattenedData to prediction should not have the target",
@@ -194,29 +204,34 @@ impl TradingCycle {
     }
 
     fn check_significant(&self, target: f64) -> bool {
-        ((target * 10.0).round() / 10.0) != 0.5
+        ((target * 10.0).round() / 10.0) != 0.0
     }
 
     async fn handle_mistake(
         &self,
         flattened_candles: FlattenedData,
         counters: &mut Counters,
-        model: &mut RFInterface,
+        model: &Arc<Mutex<RFInterface>>,
         pool: &PgPool,
     ) -> Result<(), ()> {
         let features_len = flattened_candles.features.len();
         if flattened_candles.is_there_a_target() {
             if self.check_significant(flattened_candles.features[(features_len - 1) - 2]) {
-                insert_candle(&self.pool, &self.symbol, flattened_candles.features.clone())
-                    .await
-                    .unwrap();
+                insert_candle(
+                    &self.pool,
+                    &self.symbol,
+                    &flattened_candles
+                        .features
+                        .try_into()
+                        .expect("flattened candles len parse failed"),
+                )
+                .await
+                .unwrap();
                 counters.total.saved += 1;
                 counters.get(&self.symbol).saved += 1;
                 let check = counters.total.common - counters.total.success;
                 if check != 0 && check % 10 == 0 {
-                    model
-                        .train(select_all_candles(pool).await.unwrap())
-                        .expect("The model faced a problem with learning");
+                    self.train_model(pool, model).await
                 }
                 Ok(())
             } else {
@@ -233,7 +248,7 @@ impl TradingCycle {
 
     fn log_prediction(&self, prediction: f64) {
         let str_prediction: String;
-        if prediction > 0.5 {
+        if prediction > 0.0 {
             str_prediction = format!(
                 "{}Цена пойдет вверх на {:.5}%",
                 Fore::GREEN.as_str(),
@@ -243,7 +258,7 @@ impl TradingCycle {
             str_prediction = format!(
                 "{}Цена пойдет вниз на {:.5}%",
                 Fore::RED.as_str(),
-                (1.0 - prediction) * 100.0
+                prediction.abs() * 100.0
             );
         }
         println!("{} {}", self.print_symbol, str_prediction);
@@ -264,5 +279,18 @@ impl TradingCycle {
                 global_acc
             );
         }
+    }
+
+    async fn train_model(&self, pool: &PgPool, model: &Arc<Mutex<RFInterface>>) {
+        let data = select_all_candles(pool).await.unwrap();
+        let model_clone = model.clone();
+        spawn_blocking(move || {
+            let mut model_guard = model_clone.lock().unwrap();
+            model_guard
+                .train(data)
+                .expect("The model faced a problem with learning");
+        })
+        .await
+        .unwrap();
     }
 }

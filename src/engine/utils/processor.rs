@@ -1,5 +1,4 @@
 use crate::data::data_interfaces::{ICandle, IDayPrice, ITicker};
-use tokio::task;
 
 fn ohlcv_f64(ohlcv: &[ICandle]) -> Vec<[f64; 5]> {
     let mut new_ohlcv: Vec<[f64; 5]> = Vec::with_capacity(ohlcv.len());

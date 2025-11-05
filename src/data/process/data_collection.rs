@@ -5,6 +5,8 @@ use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::time_req::TimeRequest;
 use crate::engine::utils::processor::*;
 
+use tokio::task::spawn_blocking;
+
 const OHLCV_LEN: usize = 10;
 const OHLCV_FETCH_LEN: usize = 11;
 const FEATURES_LEN: usize = 70;
@@ -195,7 +197,11 @@ pub async fn collect_all(token: &str) -> CollectedData {
     let day_price = client.fetch_day_price(token).await;
     let mean_price = client.fetch_average_price(token).await;
 
-    let process_value = ProcessAll::new(ohlcv, ohlcv1h, ohlcv1d, ticker, day_price, mean_price);
+    let process_value = spawn_blocking(move || {
+        ProcessAll::new(ohlcv, ohlcv1h, ohlcv1d, ticker, day_price, mean_price)
+    })
+    .await
+    .unwrap();
 
     CollectedData::new(
         token,

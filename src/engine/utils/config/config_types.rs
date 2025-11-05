@@ -9,8 +9,6 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct ModelConfig {
-    #[serde(rename = "type")]
-    pub model_type: String,
     pub n_estimators: usize,
     pub max_depth: usize,
     pub criterion: String,

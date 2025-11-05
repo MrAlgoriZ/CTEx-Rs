@@ -1,12 +1,12 @@
-use crate::data::data_interfaces::FlattenedData;
+use crate::{data::data_interfaces::FlattenedData, engine::utils::colors::Fore};
 use sqlx::{Error, PgPool, Row, query};
 
-pub async fn insert_candle(pool: &PgPool, token: &str, values: Vec<f64>) -> Result<(), Error> {
-    if values.len() != 230 {
+pub async fn insert_candle(pool: &PgPool, token: &str, values: &[f64; 232]) -> Result<(), Error> {
+    if values.len() != 232 {
         return Err(Error::RowNotFound);
     }
 
-    let placeholders: Vec<String> = (2..=231).map(|i| format!("${}", i)).collect();
+    let placeholders: Vec<String> = (2..=233).map(|i| format!("${}", i)).collect();
 
     let columns = "
         hour_sin, hour_cos, min_sin, min_cos,
@@ -63,14 +63,16 @@ pub async fn insert_candle(pool: &PgPool, token: &str, values: Vec<f64>) -> Resu
     );
 
     let mut q = query(&sql).bind(token);
-
     for v in values {
         q = q.bind(v);
     }
 
-    q.execute(pool).await?;
+    q.execute(pool).await.map_err(|e| {
+        eprintln!("{}Данные не загрузились в бд: {:?}", Fore::RED.as_str(), e);
+        e
+    })?;
 
-    return Ok(());
+    Ok(())
 }
 
 pub async fn select_all_candles(pool: &PgPool) -> Result<Vec<FlattenedData>, Error> {

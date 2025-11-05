@@ -1,10 +1,10 @@
 mod data;
 mod engine;
 mod models;
-use engine::cycles::trading::cycle::TradingCycle;
+use engine::cycles::loader::cycle::LoaderCycle;
 
 #[tokio::main]
 async fn main() {
-    let mut cycle = TradingCycle::new(String::from("BTCUSDT")).await;
+    let mut cycle = LoaderCycle::new(String::from("BTCUSDT")).await;
     cycle.run().await;
 }

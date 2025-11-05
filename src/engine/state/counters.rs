@@ -3,8 +3,6 @@ pub struct SymbolCounters {
     pub success: u16,
     pub common: u16,
     pub saved: u16,
-    pub significant_success: u16,
-    pub significant_common: u16,
 }
 
 impl SymbolCounters {
@@ -13,8 +11,6 @@ impl SymbolCounters {
             success: 0,
             common: 0,
             saved: 0,
-            significant_success: 0,
-            significant_common: 0,
         }
     }
 
@@ -22,8 +18,6 @@ impl SymbolCounters {
         self.success = 0;
         self.common = 0;
         self.saved = 0;
-        self.significant_success = 0;
-        self.significant_common = 0;
     }
 }
 
