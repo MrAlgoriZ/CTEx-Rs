@@ -82,7 +82,6 @@ impl TradingCycle {
 
                 self.update_counters(prediction.unwrap(), target.unwrap(), &mut counters)
                     .unwrap();
-                self.update_diff(&mut counters, diff);
                 if !success {
                     let last_grouped = self.last_grouped_candles.as_ref().unwrap().clone();
                     self.handle_mistake(
@@ -293,10 +292,5 @@ impl TradingCycle {
         })
         .await
         .unwrap();
-    }
-
-    fn update_diff(&self, counters: &mut Counters, diff: f64) {
-        counters.total.diff += diff;
-        counters.get(&self.symbol).diff += diff;
     }
 }
