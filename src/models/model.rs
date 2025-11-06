@@ -1,8 +1,4 @@
-use std::fs;
-
 use anyhow::{Result, anyhow};
-use flexi_logger::{FileSpec, Logger};
-use log::info;
 use smartcore::api::{Transformer, UnsupervisedEstimator};
 use smartcore::ensemble::random_forest_regressor::{
     RandomForestRegressor, RandomForestRegressorParameters,
@@ -31,18 +27,6 @@ pub struct RFInterface {
 
 impl RFInterface {
     pub fn new() -> Self {
-        fs::create_dir_all("logs").expect("Failed to create logs directory");
-
-        Logger::try_with_str("debug")
-            .unwrap()
-            .log_to_file(
-                FileSpec::default()
-                    .directory("logs")
-                    .basename("random_forest"),
-            )
-            .build()
-            .unwrap();
-
         Self {
             model_target: None,
             model_significant: None,
@@ -135,12 +119,6 @@ impl RFInterface {
 
         let x = DenseMatrix::new(n_samples, n_features, flat_x, false)?;
 
-        info!(
-            "Loaded {} samples with {} features from data",
-            n_samples,
-            x.shape().1
-        );
-
         Ok((x, y_target, y_significant))
     }
 
@@ -212,8 +190,6 @@ impl RFInterface {
             params,
         )?);
 
-        info!("Random Forest training finished");
-
         if let (Some(xv), Some(yvt), Some(yvs)) = (x_val, y_val_target, y_val_significant) {
             self.evaluate(xv, yvt, yvs, true)?;
         }
@@ -242,8 +218,6 @@ impl RFInterface {
         let y_int: Vec<i32> = y_val_target.iter().map(|&y| y.round() as i32).collect();
 
         let accuracy = accuracy(&y_int, &preds) * 100.0;
-
-        info!("Evaluation Accuracy: {:.2}%", accuracy);
 
         if print_results {
             println!("Точность {} составляет {:.3}%", self.name, accuracy);

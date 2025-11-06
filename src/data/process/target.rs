@@ -7,7 +7,7 @@ pub fn process_target(
     // target = (futurePrice - currentPrice) / (dayHigh - dayLow)
     let target =
         (candles2.close - candles1.close) / (candles2.day_price.high - candles2.day_price.low);
-    let is_significant = target >= 0.60 || target <= 0.40;
+    let is_significant = target >= 0.04 || target <= -0.04;
     (Some(target), Some(is_significant))
 }
 

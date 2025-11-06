@@ -6,7 +6,7 @@ use tokio::{task::spawn_blocking, time::sleep};
 
 use crate::data::data_interfaces::{CandlesTarget, FlattenedData, ICandle};
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
-use crate::data::process::target::process_target;
+use crate::data::process::target::{process_target, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::database::db_req::{insert_candle, select_all_candles};
@@ -30,29 +30,26 @@ pub struct TradingCycle {
 impl TradingCycle {
     pub async fn new(symbol: String) -> Self {
         TradingCycle {
-            print_symbol: format!("{}{}:", Fore::BLACK.as_str(), symbol),
+            print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol,
             last_grouped_candles: None,
             last_candles_target: None,
             client: BinanceClient::new().await,
             config: load_config("config/config.yaml"),
-            pool: PgPool::connect(&load_env()[1])
+            pool: PgPool::connect(&load_env()[0])
                 .await
                 .expect("Database connection failed"),
         }
     }
 
-    pub async fn run(&mut self) {
+    pub async fn run(&mut self, model: &Arc<Mutex<RFInterface>>) {
         let candles1d_to_vol: Vec<ICandle> = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
         self.print_volatility_status(&candles1d_to_vol);
 
         let mut counters = Counters::new();
-        let model = Arc::new(Mutex::new(RFInterface::new()));
 
         let mut target_indicate: Option<bool> = None;
         let mut prediction: Option<f64> = None;
-
-        self.train_model(&self.pool, &model).await;
 
         loop {
             self.wait_for_next_interval().await;
@@ -75,15 +72,17 @@ impl TradingCycle {
                 let success = diff < self.config.data.success_threshold;
 
                 println!(
-                    "{} {}Pred: {:.5} | Target: {:.5}",
+                    "{} {}Pred: {:.5} | Target: {:.5} | Diff {:.5}",
                     self.print_symbol,
                     Fore::WHITE.as_str(),
                     prediction.unwrap(),
-                    target.unwrap()
+                    target.unwrap(),
+                    diff
                 );
 
                 self.update_counters(prediction.unwrap(), target.unwrap(), &mut counters)
                     .unwrap();
+                self.update_diff(&mut counters, diff);
                 if !success {
                     let last_grouped = self.last_grouped_candles.as_ref().unwrap().clone();
                     self.handle_mistake(
@@ -91,7 +90,7 @@ impl TradingCycle {
                             .await
                             .unwrap(),
                         &mut counters,
-                        &model,
+                        model,
                         &self.pool,
                     )
                     .await
@@ -106,9 +105,10 @@ impl TradingCycle {
                     .unwrap();
 
             prediction = Some(self.predict(flattened_for_pred, &model).await.unwrap());
+            let restored_price = restore_price(&candles_target, prediction.unwrap());
 
             target_indicate = Some(true);
-            self.log_prediction(prediction.unwrap());
+            self.log_prediction(prediction.unwrap(), restored_price);
             self.last_grouped_candles = Some(candles);
             self.last_candles_target = Some(candles_target);
 
@@ -246,7 +246,7 @@ impl TradingCycle {
         }
     }
 
-    fn log_prediction(&self, prediction: f64) {
+    fn log_prediction(&self, prediction: f64, price: f64) {
         let str_prediction: String;
         if prediction > 0.0 {
             str_prediction = format!(
@@ -261,6 +261,7 @@ impl TradingCycle {
                 prediction.abs() * 100.0
             );
         }
+        println!("{} Предполагаемая цена: {:.2}", self.print_symbol, price);
         println!("{} {}", self.print_symbol, str_prediction);
     }
 
@@ -272,7 +273,7 @@ impl TradingCycle {
             let global_acc = (counters.total.success as f64 / counters.total.common as f64) * 100.0;
 
             println!(
-                "{} {}\nL ACC {:.2}%\nG ACC {:.2}%",
+                "{} {}L ACC {:.2}% | G ACC {:.2}%",
                 self.print_symbol,
                 Fore::WHITE.as_str(),
                 local_acc,
@@ -292,5 +293,10 @@ impl TradingCycle {
         })
         .await
         .unwrap();
+    }
+
+    fn update_diff(&self, counters: &mut Counters, diff: f64) {
+        counters.total.diff += diff;
+        counters.get(&self.symbol).diff += diff;
     }
 }

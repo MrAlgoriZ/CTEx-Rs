@@ -4,7 +4,7 @@ model:
   criterion: mean_absolute_error
 
 data:
-  success_threshold: 0.3
+  success_threshold: 0.04
 
 token:
   - BTCUSDT
@@ -13,10 +13,4 @@ token:
   - DOGEUSDT
   - ADAUSDT
   - XRPUSDT
-  - LTCUSDT
-  - DOTUSDT
   - SOLUSDT
-  - LINKUSDT
-  - MATICUSDT
-  - AVAXUSDT
-  - DOTUSDT

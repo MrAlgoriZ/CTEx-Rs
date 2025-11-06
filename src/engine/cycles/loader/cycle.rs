@@ -24,7 +24,7 @@ pub struct LoaderCycle {
 impl LoaderCycle {
     pub async fn new(symbol: String) -> Self {
         LoaderCycle {
-            print_symbol: format!("{}{}:", Fore::BLACK.as_str(), symbol),
+            print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol,
             last_grouped_candles: None,
             last_candles_target: None,
@@ -70,7 +70,6 @@ impl LoaderCycle {
                     spawn_blocking(move || flat_all(last_grouped, target, is_significant))
                         .await
                         .unwrap();
-                println!("{}", flatten.features.len());
                 insert_candle(
                     &self.pool,
                     &self.symbol,
