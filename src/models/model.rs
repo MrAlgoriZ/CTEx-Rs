@@ -3,13 +3,16 @@ use smartcore::api::{Transformer, UnsupervisedEstimator};
 use smartcore::ensemble::random_forest_regressor::{
     RandomForestRegressor, RandomForestRegressorParameters,
 };
-use smartcore::linalg::basic::arrays::Array;
+use sqlx::PgPool;
+use std::sync::{Arc, Mutex};
+
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::accuracy;
 use smartcore::model_selection::train_test_split;
 use smartcore::preprocessing::numerical::{StandardScaler, StandardScalerParameters};
 
 use crate::data::data_interfaces::FlattenedData;
+use crate::data::requests::database::db_req::select_all_candles;
 
 pub struct RFInterface {
     model_target: Option<RandomForestRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
@@ -273,4 +276,17 @@ impl RFInterface {
         )?;
         Ok(())
     }
+}
+
+pub async fn train_model(pool: &PgPool, model: &Arc<Mutex<RFInterface>>) {
+    let data = select_all_candles(pool).await.unwrap();
+    let model_clone = model.clone();
+    tokio::task::spawn_blocking(move || {
+        let mut model_guard = model_clone.lock().unwrap();
+        model_guard
+            .train(data)
+            .expect("The model faced a problem with learning");
+    })
+    .await
+    .unwrap();
 }

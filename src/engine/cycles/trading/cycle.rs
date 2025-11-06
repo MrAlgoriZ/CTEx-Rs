@@ -261,7 +261,7 @@ impl TradingCycle {
                 prediction.abs() * 100.0
             );
         }
-        println!("{} Предполагаемая цена: {:.2}", self.print_symbol, price);
+        println!("{} Предполагаемая цена: {:.7}", self.print_symbol, price);
         println!("{} {}", self.print_symbol, str_prediction);
     }
 
