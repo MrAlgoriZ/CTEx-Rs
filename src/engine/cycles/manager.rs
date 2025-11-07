@@ -7,7 +7,7 @@ use tokio::task::JoinHandle;
 use tokio::time::{Duration, sleep};
 
 use crate::engine::cycles::loader::cycle::LoaderCycle;
-use crate::engine::cycles::trading::cycle::TradingCycle;
+use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::load_env::load_env;
@@ -16,7 +16,17 @@ use crate::models::model::{RFInterface, train_model};
 #[derive(Clone, Copy)]
 pub enum CycleType {
     Loader,
-    Trading,
+    Training,
+}
+
+impl CycleType {
+    pub fn from_str(cycle_type: &str) -> Self {
+        match cycle_type {
+            "training" => CycleType::Training,
+            "loader" => CycleType::Loader,
+            _ => panic!("Cycle type must be 'trading' or 'loader'"),
+        }
+    }
 }
 
 pub struct CycleManager {
@@ -232,8 +242,8 @@ impl CycleManager {
                 sleep(Duration::from_secs(10)).await;
                 cycle.run().await;
             }
-            CycleType::Trading => {
-                let mut cycle = TradingCycle::new(symbol.to_string()).await;
+            CycleType::Training => {
+                let mut cycle = TrainingCycle::new(symbol.to_string()).await;
 
                 println!("Запуск TradingCycle для {}", symbol);
                 sleep(Duration::from_secs(10)).await;

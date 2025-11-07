@@ -10,12 +10,15 @@ use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::database::db_req::insert_candle;
 use crate::engine::utils::colors::Fore;
+use crate::engine::utils::config::config_types::Config;
+use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 
 pub struct LoaderCycle {
     pub symbol: String,
     last_grouped_candles: Option<CollectedData>,
     last_candles_target: Option<CandlesTarget>,
+    config: Config,
     print_symbol: String,
     client: BinanceClient,
     pool: PgPool,
@@ -28,6 +31,7 @@ impl LoaderCycle {
             symbol: symbol,
             last_grouped_candles: None,
             last_candles_target: None,
+            config: load_config("config/config.yaml"),
             client: BinanceClient::new().await,
             pool: PgPool::connect(&load_env()[0])
                 .await
@@ -36,9 +40,11 @@ impl LoaderCycle {
     }
 
     pub async fn run(&mut self) {
-        let candles1d_to_vol: Vec<ICandle> = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
-        self.print_volatility_status(&candles1d_to_vol);
-
+        if self.config.prints.volatility {
+            let candles1d_to_vol: Vec<ICandle> =
+                self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
+            self.print_volatility_status(&candles1d_to_vol);
+        }
         let mut target_indicate: Option<bool> = None;
 
         loop {
@@ -57,12 +63,16 @@ impl LoaderCycle {
                 let target =
                     process_target(self.last_candles_target.as_ref().unwrap(), &candles_target);
 
-                println!(
-                    "{} {}Target: {:.5}",
-                    self.print_symbol,
-                    Fore::WHITE.as_str(),
-                    target.unwrap(),
-                );
+                if self.config.prints.target {
+                    println!(
+                        "{}[{}] {} {}Target: {:.5}",
+                        Fore::WHITE.as_str(),
+                        Local::now().format("%H:%M:%S"),
+                        self.print_symbol,
+                        Fore::WHITE.as_str(),
+                        target.unwrap(),
+                    );
+                }
 
                 let last_grouped = self.last_grouped_candles.as_ref().unwrap().clone();
                 let flatten = spawn_blocking(move || flat_all(last_grouped, target))
@@ -90,7 +100,9 @@ impl LoaderCycle {
     fn print_volatility_status(&self, candles: &[ICandle]) {
         let volatility = get_volatility(candles);
         println!(
-            "{}Волатильность на токене {} составляет {:.5}",
+            "{}[{}] {}Волатильность на токене {} составляет {:.5}",
+            Fore::WHITE.as_str(),
+            Local::now().format("%H:%M:%S"),
             Fore::YELLOW.as_str(),
             self.symbol,
             volatility
@@ -113,10 +125,13 @@ impl LoaderCycle {
 
         sleep(Duration::from_secs(2)).await;
 
-        println!(
-            "{} Цикл запустился в {}",
-            self.print_symbol,
-            Local::now().format("%H:%M:%S")
-        );
+        if self.config.prints.cycle_start {
+            println!(
+                "{}[{}] {} Цикл запустился",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                self.print_symbol,
+            );
+        }
     }
 }

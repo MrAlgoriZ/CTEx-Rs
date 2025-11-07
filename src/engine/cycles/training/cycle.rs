@@ -17,7 +17,7 @@ use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::models::model::RFInterface;
 
-pub struct TradingCycle {
+pub struct TrainingCycle {
     pub symbol: String,
     last_grouped_candles: Option<CollectedData>,
     last_candles_target: Option<CandlesTarget>,
@@ -27,9 +27,9 @@ pub struct TradingCycle {
     pool: PgPool,
 }
 
-impl TradingCycle {
+impl TrainingCycle {
     pub async fn new(symbol: String) -> Self {
-        TradingCycle {
+        TrainingCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol,
             last_grouped_candles: None,
@@ -47,8 +47,11 @@ impl TradingCycle {
         model: &Arc<Mutex<RFInterface>>,
         counters: Arc<tokio_mutex<Counters>>,
     ) {
-        let candles1d_to_vol: Vec<ICandle> = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
-        self.print_volatility_status(&candles1d_to_vol);
+        if self.config.prints.volatility {
+            let candles1d_to_vol: Vec<ICandle> =
+                self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
+            self.print_volatility_status(&candles1d_to_vol);
+        }
 
         let mut target_indicate: Option<bool> = None;
         let mut prediction: Option<f64> = None;
@@ -75,15 +78,17 @@ impl TradingCycle {
                 let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
                 let success: bool = diff < self.config.data.success_threshold;
 
-                println!(
-                    "{}{} {}Pred: {:.5} | Target: {:.5} | Diff {:.5}",
-                    self.print_time(),
-                    self.print_symbol,
-                    Fore::WHITE.as_str(),
-                    prediction.unwrap(),
-                    target.unwrap(),
-                    diff
-                );
+                if self.config.prints.target {
+                    println!(
+                        "{}{} {}Pred: {:.5} | Target: {:.5} | Diff {:.5}",
+                        self.print_time(),
+                        self.print_symbol,
+                        Fore::WHITE.as_str(),
+                        prediction.unwrap(),
+                        target.unwrap(),
+                        diff
+                    );
+                }
 
                 self.update_counters(
                     prediction.unwrap(),
@@ -122,7 +127,9 @@ impl TradingCycle {
             self.last_grouped_candles = Some(candles);
             self.last_candles_target = Some(candles_target);
 
-            self.print_accuracy(counters_to_loop.clone()).await;
+            if self.config.prints.accuracy {
+                self.print_accuracy(counters_to_loop.clone()).await;
+            }
         }
     }
 
@@ -165,7 +172,9 @@ impl TradingCycle {
 
         sleep(Duration::from_secs(2)).await;
 
-        println!("{}{} Цикл запустился", self.print_time(), self.print_symbol);
+        if self.config.prints.cycle_start {
+            println!("{}{} Цикл запустился", self.print_time(), self.print_symbol);
+        }
     }
 
     async fn predict(
@@ -259,32 +268,38 @@ impl TradingCycle {
     }
 
     fn log_prediction(&self, prediction: f64, price: f64) {
-        let str_prediction: String;
-        if prediction > 0.0 {
-            str_prediction = format!(
-                "{}Цена пойдет вверх на {:.5}%",
-                Fore::GREEN.as_str(),
-                prediction * 100.0
-            );
-        } else {
-            str_prediction = format!(
-                "{}Цена пойдет вниз на {:.5}%",
-                Fore::RED.as_str(),
-                prediction.abs() * 100.0
+        if self.config.prints.prediction {
+            let str_prediction: String;
+            if prediction > 0.0 {
+                str_prediction = format!(
+                    "{}Цена пойдет вверх на {:.5}%",
+                    Fore::GREEN.as_str(),
+                    prediction * 100.0
+                );
+            } else {
+                str_prediction = format!(
+                    "{}Цена пойдет вниз на {:.5}%",
+                    Fore::RED.as_str(),
+                    prediction.abs() * 100.0
+                );
+            }
+
+            println!(
+                "{}{} {}",
+                self.print_time(),
+                self.print_symbol,
+                str_prediction
             );
         }
-        println!(
-            "{}{} Предполагаемая цена: {:.7}",
-            self.print_time(),
-            self.print_symbol,
-            price
-        );
-        println!(
-            "{}{} {}",
-            self.print_time(),
-            self.print_symbol,
-            str_prediction
-        );
+
+        if self.config.prints.price {
+            println!(
+                "{}{} Предполагаемая цена: {:.7}",
+                self.print_time(),
+                self.print_symbol,
+                price
+            );
+        }
     }
 
     async fn print_accuracy(&self, counters: Arc<tokio_mutex<Counters>>) {

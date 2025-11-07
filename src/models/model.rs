@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use chrono::Local;
 use smartcore::api::{Transformer, UnsupervisedEstimator};
 use smartcore::ensemble::random_forest_regressor::{
     RandomForestRegressor, RandomForestRegressorParameters,
@@ -13,7 +14,8 @@ use smartcore::preprocessing::numerical::{StandardScaler, StandardScalerParamete
 
 use crate::data::data_interfaces::FlattenedData;
 use crate::data::requests::database::db_req::select_all_candles;
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::config_types::Config;
+use crate::engine::utils::{colors::Fore, config::load_config::load_config};
 
 pub struct RFInterface {
     model: Option<RandomForestRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
@@ -24,19 +26,22 @@ pub struct RFInterface {
     y_train: Option<Vec<f64>>,
     y_val: Option<Vec<f64>>,
     token_columns: Option<Vec<String>>,
+    config: Config,
 }
 
 impl RFInterface {
     pub fn new() -> Self {
+        let config = load_config("config/config.yaml");
         Self {
             model: None,
-            name: "RandomForestRegressor".to_string(),
+            name: config.model.name.clone(),
             scaler: None,
             x_train: None,
             x_val: None,
             y_train: None,
             y_val: None,
             token_columns: None,
+            config,
         }
     }
 
@@ -118,8 +123,13 @@ impl RFInterface {
         y_target: Vec<f64>,
         train_ratio: f32,
     ) -> Result<(DenseMatrix<f64>, DenseMatrix<f64>, Vec<f64>, Vec<f64>)> {
-        let (x_train, x_val, y_train, y_val) =
-            train_test_split(&x, &y_target, train_ratio, true, Some(42));
+        let (x_train, x_val, y_train, y_val) = train_test_split(
+            &x,
+            &y_target,
+            train_ratio,
+            true,
+            Some(self.config.model.seed),
+        );
 
         let scaler = StandardScaler::fit(&x_train, StandardScalerParameters::default())?;
         let x_train_scaled = scaler.transform(&x_train)?;
@@ -142,16 +152,15 @@ impl RFInterface {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<()> {
-        let config = load_config("config/config.yaml").model;
         let params = RandomForestRegressorParameters::default()
-            .with_n_trees(config.n_trees)
-            .with_max_depth(config.max_depth)
-            .with_seed(config.seed);
+            .with_n_trees(self.config.model.n_trees)
+            .with_max_depth(self.config.model.max_depth)
+            .with_seed(self.config.model.seed);
 
         self.model = Some(RandomForestRegressor::fit(x_train, y_train, params)?);
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
-            self.evaluate(xv, yv, true)?;
+            self.evaluate(xv, yv, self.config.prints.model_evualate)?;
         }
 
         Ok(())
@@ -179,7 +188,13 @@ impl RFInterface {
         let accuracy = accuracy(&y_int, &preds) * 100.0;
 
         if print_results {
-            println!("Точность {} составляет {:.3}%", self.name, accuracy);
+            println!(
+                "{}[{}] Точность {} составляет {:.3}%",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                self.name,
+                accuracy
+            );
         }
 
         Ok(accuracy)
@@ -220,7 +235,8 @@ impl RFInterface {
 
     pub fn train(&mut self, data: Vec<FlattenedData>) -> Result<()> {
         let (x, y_target) = self.load_data(data)?;
-        let (x_train, x_val, y_train, y_val) = self.prepare_data(x, y_target, 0.8)?;
+        let (x_train, x_val, y_train, y_val) =
+            self.prepare_data(x, y_target, self.config.model.train_test_split.train_ratio)?;
         self.fit(&x_train, &y_train, Some(&x_val), Some(&y_val))?;
         Ok(())
     }
