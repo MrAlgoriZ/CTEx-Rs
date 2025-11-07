@@ -214,11 +214,7 @@ pub async fn collect_all(token: &str) -> CollectedData {
     )
 }
 
-pub fn flat_all(
-    collected_data: CollectedData,
-    target: Option<f64>,
-    is_significant: Option<bool>,
-) -> FlattenedData {
+pub fn flat_all(collected_data: CollectedData, target: Option<f64>) -> FlattenedData {
     let mut features = Vec::new();
 
     features.push(collected_data.time.hour_sin);
@@ -259,13 +255,8 @@ pub fn flat_all(
 
     features.extend_from_slice(&collected_data.features);
 
-    if target != None && is_significant != None {
+    if target != None {
         features.push(target.unwrap());
-        features.push(if is_significant == Some(true) {
-            1.0
-        } else {
-            0.0
-        });
         FlattenedData::new(collected_data.token.clone(), features, true)
     } else {
         FlattenedData::new(collected_data.token.clone(), features, false)

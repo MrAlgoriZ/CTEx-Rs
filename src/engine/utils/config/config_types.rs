@@ -9,9 +9,9 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct ModelConfig {
-    pub n_estimators: usize,
-    pub max_depth: usize,
-    pub criterion: String,
+    pub n_trees: usize,
+    pub max_depth: u16,
+    pub seed: u64,
 }
 
 #[derive(Debug, Deserialize)]

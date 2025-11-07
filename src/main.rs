@@ -1,31 +1,22 @@
 mod data;
 mod engine;
 mod models;
-use crate::engine::utils::config::load_env::load_env;
 use crate::engine::{
     cycles::manager::{CycleManager, CycleType},
     utils::config::load_config::load_config,
 };
-use crate::models::model::{RFInterface, train_model};
 
-use sqlx::PgPool;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 #[tokio::main]
 async fn main() {
     let symbols = load_config("config/config.yaml").token;
-    let model = Arc::new(Mutex::new(RFInterface::new()));
-    let pool = PgPool::connect(&load_env()[0]).await.unwrap();
-
-    train_model(&pool, &model).await;
-    drop(pool);
 
     let mut cycle_types = HashMap::new();
     for symbol in symbols.clone().into_iter() {
         cycle_types.insert(symbol, CycleType::Trading);
     }
 
-    let manager = CycleManager::new(symbols, Some(model)).with_cycle_types(cycle_types);
+    let manager = CycleManager::new(symbols).with_cycle_types(cycle_types);
     manager.run_all().await;
 }

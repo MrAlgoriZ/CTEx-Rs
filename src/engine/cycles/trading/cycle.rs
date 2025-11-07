@@ -2,7 +2,7 @@ use chrono::{Local, Timelike};
 use sqlx::PgPool;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::{task::spawn_blocking, time::sleep};
+use tokio::{sync::Mutex as tokio_mutex, task::spawn_blocking, time::sleep};
 
 use crate::data::data_interfaces::{CandlesTarget, FlattenedData, ICandle};
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
@@ -42,19 +42,23 @@ impl TradingCycle {
         }
     }
 
-    pub async fn run(&mut self, model: &Arc<Mutex<RFInterface>>) {
+    pub async fn run(
+        &mut self,
+        model: &Arc<Mutex<RFInterface>>,
+        counters: Arc<tokio_mutex<Counters>>,
+    ) {
         let candles1d_to_vol: Vec<ICandle> = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
         self.print_volatility_status(&candles1d_to_vol);
 
-        let mut counters = Counters::new();
-
         let mut target_indicate: Option<bool> = None;
         let mut prediction: Option<f64> = None;
+        let counters_to_loop: Arc<tokio_mutex<Counters>> = counters.clone();
 
         loop {
             self.wait_for_next_interval().await;
-            self.reset_counters_if_needed(&mut counters);
-            let candles = collect_all(&self.symbol).await;
+            self.reset_counters_if_needed(counters_to_loop.clone())
+                .await;
+            let candles: CollectedData = collect_all(&self.symbol).await;
             let candles_target: CandlesTarget = CandlesTarget::new(
                 self.client
                     .fetch_ohlcv(&self.symbol, "15m", 2)
@@ -65,14 +69,15 @@ impl TradingCycle {
             );
 
             if target_indicate == Some(true) {
-                let (target, is_significant) =
+                let target: Option<f64> =
                     process_target(self.last_candles_target.as_ref().unwrap(), &candles_target);
 
-                let diff = (prediction.unwrap() - target.unwrap()).abs();
-                let success = diff < self.config.data.success_threshold;
+                let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
+                let success: bool = diff < self.config.data.success_threshold;
 
                 println!(
-                    "{} {}Pred: {:.5} | Target: {:.5} | Diff {:.5}",
+                    "{}{} {}Pred: {:.5} | Target: {:.5} | Diff {:.5}",
+                    self.print_time(),
                     self.print_symbol,
                     Fore::WHITE.as_str(),
                     prediction.unwrap(),
@@ -80,15 +85,21 @@ impl TradingCycle {
                     diff
                 );
 
-                self.update_counters(prediction.unwrap(), target.unwrap(), &mut counters)
-                    .unwrap();
+                self.update_counters(
+                    prediction.unwrap(),
+                    target.unwrap(),
+                    counters_to_loop.clone(),
+                )
+                .await
+                .unwrap();
                 if !success {
-                    let last_grouped = self.last_grouped_candles.as_ref().unwrap().clone();
+                    let last_grouped: CollectedData =
+                        self.last_grouped_candles.as_ref().unwrap().clone();
                     self.handle_mistake(
-                        spawn_blocking(move || flat_all(last_grouped, target, is_significant))
+                        spawn_blocking(move || flat_all(last_grouped, target))
                             .await
                             .unwrap(),
-                        &mut counters,
+                        counters_to_loop.clone(),
                         model,
                         &self.pool,
                     )
@@ -97,42 +108,44 @@ impl TradingCycle {
                 }
             }
 
-            let candles_to_flattened = candles.clone();
-            let flattened_for_pred =
-                spawn_blocking(move || flat_all(candles_to_flattened, None, None))
+            let candles_to_flattened: CollectedData = candles.clone();
+            let flattened_for_pred: FlattenedData =
+                spawn_blocking(move || flat_all(candles_to_flattened, None))
                     .await
                     .unwrap();
 
             prediction = Some(self.predict(flattened_for_pred, &model).await.unwrap());
-            let restored_price = restore_price(&candles_target, prediction.unwrap());
+            let restored_price: f64 = restore_price(&candles_target, prediction.unwrap());
 
             target_indicate = Some(true);
             self.log_prediction(prediction.unwrap(), restored_price);
             self.last_grouped_candles = Some(candles);
             self.last_candles_target = Some(candles_target);
 
-            self.print_accuracy(&mut counters);
+            self.print_accuracy(counters_to_loop.clone()).await;
         }
     }
 
     // --- Методы ---
     fn print_volatility_status(&self, candles: &[ICandle]) {
-        let volatility = get_volatility(candles);
+        let volatility: f64 = get_volatility(candles);
         println!(
-            "{}Волатильность на токене {} составляет {:.5}",
+            "{}{}Волатильность на токене {} составляет {:.5}",
+            self.print_time(),
             Fore::YELLOW.as_str(),
             self.symbol,
             volatility
         );
     }
 
-    fn reset_counters_if_needed(&self, counters: &mut Counters) {
-        let week = (60 / 15) * 24 * 7;
+    async fn reset_counters_if_needed(&self, counters: Arc<tokio_mutex<Counters>>) {
+        let week: u16 = (60 / 15) * 24 * 7;
         // if counters.total.common >= 1440 {
         //     counters.total.reset();
         // }
-        if counters.get(&self.symbol).common >= week {
-            counters.get(&self.symbol).reset();
+        let mut mut_counters = counters.lock().await;
+        if mut_counters.get(&self.symbol).common >= week {
+            mut_counters.get(&self.symbol).reset();
         }
     }
 
@@ -152,11 +165,7 @@ impl TradingCycle {
 
         sleep(Duration::from_secs(2)).await;
 
-        println!(
-            "{} Цикл запустился в {}",
-            self.print_symbol,
-            Local::now().format("%H:%M:%S")
-        );
+        println!("{}{} Цикл запустился", self.print_time(), self.print_symbol);
     }
 
     async fn predict(
@@ -165,10 +174,10 @@ impl TradingCycle {
         model: &Arc<Mutex<RFInterface>>,
     ) -> Result<f64, String> {
         if !flattened_candles.is_there_a_target() {
-            let model_clone = model.clone();
-            let features = flattened_candles.features;
-            let token = flattened_candles.token;
-            let pred = spawn_blocking(move || {
+            let model_clone: Arc<Mutex<RFInterface>> = model.clone();
+            let features: Vec<f64> = flattened_candles.features;
+            let token: String = flattened_candles.token;
+            let pred: f64 = spawn_blocking(move || {
                 let model_guard = model_clone.lock().unwrap();
                 model_guard.predict(features, Some(&token)).unwrap_or(0.0)
             })
@@ -182,21 +191,22 @@ impl TradingCycle {
         }
     }
 
-    fn update_counters(
+    async fn update_counters(
         &self,
         prediction: f64,
         target: f64,
-        counters: &mut Counters,
+        counters: Arc<tokio_mutex<Counters>>,
     ) -> Result<(), ()> {
-        let diff = (prediction - target).abs();
-        let success_threshold = self.config.data.success_threshold;
+        let diff: f64 = (prediction - target).abs();
+        let success_threshold: f64 = self.config.data.success_threshold;
+        let mut mut_counters = counters.lock().await;
 
-        counters.total.common += 1;
-        counters.get(&self.symbol).common += 1;
+        mut_counters.total.common += 1;
+        mut_counters.get(&self.symbol).common += 1;
 
         if diff < success_threshold {
-            counters.total.success += 1;
-            counters.get(&self.symbol).success += 1;
+            mut_counters.total.success += 1;
+            mut_counters.get(&self.symbol).success += 1;
         }
 
         Ok(())
@@ -209,7 +219,7 @@ impl TradingCycle {
     async fn handle_mistake(
         &self,
         flattened_candles: FlattenedData,
-        counters: &mut Counters,
+        counters: Arc<tokio_mutex<Counters>>,
         model: &Arc<Mutex<RFInterface>>,
         pool: &PgPool,
     ) -> Result<(), ()> {
@@ -226,16 +236,19 @@ impl TradingCycle {
                 )
                 .await
                 .unwrap();
-                counters.total.saved += 1;
-                counters.get(&self.symbol).saved += 1;
-                let check = counters.total.common - counters.total.success;
+
+                let mut mut_counters = counters.lock().await;
+                mut_counters.total.saved += 1;
+                mut_counters.get(&self.symbol).saved += 1;
+                let check = mut_counters.total.common - mut_counters.total.success;
                 if check != 0 && check % 10 == 0 {
                     self.train_model(pool, model).await
                 }
                 Ok(())
             } else {
                 println!(
-                    "{} Данные не сохранены, потому что они - мусор",
+                    "{}{} Данные не сохранены, потому что они - мусор",
+                    self.print_time(),
                     self.print_symbol
                 );
                 Ok(())
@@ -260,19 +273,32 @@ impl TradingCycle {
                 prediction.abs() * 100.0
             );
         }
-        println!("{} Предполагаемая цена: {:.7}", self.print_symbol, price);
-        println!("{} {}", self.print_symbol, str_prediction);
+        println!(
+            "{}{} Предполагаемая цена: {:.7}",
+            self.print_time(),
+            self.print_symbol,
+            price
+        );
+        println!(
+            "{}{} {}",
+            self.print_time(),
+            self.print_symbol,
+            str_prediction
+        );
     }
 
-    fn print_accuracy(&self, counters: &mut Counters) {
-        if counters.total.common != 0 && counters.get(&self.symbol).common != 0 {
-            let local_acc = (counters.get(&self.symbol).success as f64
-                / counters.get(&self.symbol).common as f64)
+    async fn print_accuracy(&self, counters: Arc<tokio_mutex<Counters>>) {
+        let mut mut_counters = counters.lock().await;
+        if mut_counters.total.common != 0 && mut_counters.get(&self.symbol).common != 0 {
+            let local_acc = (mut_counters.get(&self.symbol).success as f64
+                / mut_counters.get(&self.symbol).common as f64)
                 * 100.0;
-            let global_acc = (counters.total.success as f64 / counters.total.common as f64) * 100.0;
+            let global_acc =
+                (mut_counters.total.success as f64 / mut_counters.total.common as f64) * 100.0;
 
             println!(
-                "{} {}L ACC {:.2}% | G ACC {:.2}%",
+                "{}{} {}L ACC {:.2}% | G ACC {:.2}%",
+                self.print_time(),
                 self.print_symbol,
                 Fore::WHITE.as_str(),
                 local_acc,
@@ -292,5 +318,13 @@ impl TradingCycle {
         })
         .await
         .unwrap();
+    }
+
+    fn print_time(&self) -> String {
+        format!(
+            "{}[{}] ",
+            Fore::WHITE.as_str(),
+            Local::now().format("%H:%M:%S")
+        )
     }
 }

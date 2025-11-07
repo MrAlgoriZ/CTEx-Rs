@@ -54,22 +54,20 @@ impl LoaderCycle {
             );
 
             if target_indicate == Some(true) {
-                let (target, is_significant) =
+                let target =
                     process_target(self.last_candles_target.as_ref().unwrap(), &candles_target);
 
                 println!(
-                    "{} {}Target: {:.5} | Significant: {}",
+                    "{} {}Target: {:.5}",
                     self.print_symbol,
                     Fore::WHITE.as_str(),
                     target.unwrap(),
-                    is_significant.unwrap(),
                 );
 
                 let last_grouped = self.last_grouped_candles.as_ref().unwrap().clone();
-                let flatten =
-                    spawn_blocking(move || flat_all(last_grouped, target, is_significant))
-                        .await
-                        .unwrap();
+                let flatten = spawn_blocking(move || flat_all(last_grouped, target))
+                    .await
+                    .unwrap();
                 insert_candle(
                     &self.pool,
                     &self.symbol,
