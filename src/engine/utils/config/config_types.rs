@@ -7,6 +7,7 @@ pub struct Config {
     pub data: DataConfig,
     pub token: Vec<String>,
     pub cycle_type: String,
+    pub mode: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -71,6 +72,7 @@ impl Default for Config {
                 "SOLUSDT".to_string(),
             ],
             cycle_type: "trading".to_string(),
+            mode: "print".to_string(),
         }
     }
 }

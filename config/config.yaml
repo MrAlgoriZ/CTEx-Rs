@@ -7,7 +7,7 @@ model:
     train_ratio: 0.8
 
 data:
-  success_threshold: 0.08
+  success_threshold: 0.1
 
 prints:
   volatility: true
@@ -28,3 +28,4 @@ token:
   - SOLUSDT
 
 cycle_type: "training"
+mode: "log"
