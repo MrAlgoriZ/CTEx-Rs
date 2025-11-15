@@ -8,6 +8,7 @@ model:
 
 data:
   success_threshold: 0.1
+  accuracy_capacity: 192
 
 prints:
   volatility: true
@@ -27,5 +28,5 @@ token:
   - XRPUSDT
   - SOLUSDT
 
-cycle_type: "loader"
+cycle_type: "training"
 mode: "log"

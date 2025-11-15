@@ -59,8 +59,6 @@ impl TrainingCycle {
 
         loop {
             self.wait_for_next_interval().await;
-            self.reset_counters_if_needed(counters_to_loop.clone())
-                .await;
             let candles: CollectedData = collect_all(&self.symbol).await;
             let candles_target: f64 =
                 self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;
@@ -139,17 +137,6 @@ impl TrainingCycle {
         );
     }
 
-    async fn reset_counters_if_needed(&self, counters: Arc<tokio_mutex<Counters>>) {
-        let week: u16 = (60 / 15) * 24 * 7;
-        // if counters.total.common >= 1440 {
-        //     counters.total.reset();
-        // }
-        let mut mut_counters = counters.lock().await;
-        if mut_counters.get(&self.symbol).common >= week {
-            mut_counters.get(&self.symbol).reset();
-        }
-    }
-
     async fn wait_for_next_interval(&self) {
         let now = Local::now();
 
@@ -204,12 +191,9 @@ impl TrainingCycle {
         let success_threshold: f64 = self.config.data.success_threshold;
         let mut mut_counters = counters.lock().await;
 
-        mut_counters.total.common += 1;
-        mut_counters.get(&self.symbol).common += 1;
-
         if diff < success_threshold {
-            mut_counters.total.success += 1;
-            mut_counters.get(&self.symbol).success += 1;
+            mut_counters.total.data.push_back(1);
+            mut_counters.get(&self.symbol).data.push_back(1);
         }
 
         Ok(())
@@ -235,9 +219,9 @@ impl TrainingCycle {
             .unwrap();
 
             let mut mut_counters = counters.lock().await;
-            mut_counters.total.saved += 1;
-            mut_counters.get(&self.symbol).saved += 1;
-            let check = mut_counters.total.common - mut_counters.total.success;
+            mut_counters.total.data.push_back(0);
+            mut_counters.get(&self.symbol).data.push_back(0);
+            let check: u16 = mut_counters.total.data.iter().map(|&v| v as u16).sum();
             if check != 0 && check % 10 == 0 {
                 self.train_model(pool, model).await
             }
@@ -284,12 +268,9 @@ impl TrainingCycle {
 
     async fn print_accuracy(&self, counters: Arc<tokio_mutex<Counters>>) {
         let mut mut_counters = counters.lock().await;
-        if mut_counters.total.common != 0 && mut_counters.get(&self.symbol).common != 0 {
-            let local_acc = (mut_counters.get(&self.symbol).success as f64
-                / mut_counters.get(&self.symbol).common as f64)
-                * 100.0;
-            let global_acc =
-                (mut_counters.total.success as f64 / mut_counters.total.common as f64) * 100.0;
+        if !mut_counters.total.data.is_empty() && !mut_counters.get(&self.symbol).data.is_empty() {
+            let local_acc = mut_counters.get(&self.symbol).get_accuracy();
+            let global_acc = mut_counters.total.get_accuracy();
 
             println!(
                 "{}{} {}L ACC {:.2}% | G ACC {:.2}%",
@@ -299,6 +280,22 @@ impl TrainingCycle {
                 local_acc,
                 global_acc
             );
+
+            if mut_counters.total.data.len() >= 96 {
+                let day_local_acc = mut_counters
+                    .get(&self.symbol)
+                    .get_shifted_accuracy(96)
+                    .unwrap_or(0.0);
+                let day_global_acc = mut_counters.total.get_shifted_accuracy(96).unwrap_or(0.0);
+                println!(
+                    "\n{}{} {}DAY L ACC {:.2}% | DAY G ACC {:.2}%",
+                    self.print_time(),
+                    self.print_symbol,
+                    Fore::WHITE.as_str(),
+                    day_local_acc,
+                    day_global_acc
+                );
+            }
         }
     }
 

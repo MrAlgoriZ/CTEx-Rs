@@ -10,7 +10,7 @@ use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::colors::Fore;
-use crate::engine::utils::config::load_env::load_env;
+use crate::engine::utils::config::{load_config::load_config, load_env::load_env};
 use crate::models::model::{RFInterface, train_model};
 
 #[derive(Clone, Copy)]
@@ -73,7 +73,9 @@ impl CycleManager {
             None
         };
 
-        let counters = Arc::new(tokio_mutex::new(Counters::new()));
+        let counters = Arc::new(tokio_mutex::new(Counters::new(
+            load_config("config/config.yaml").data.accuracy_capacity,
+        )));
 
         for symbol in &self.symbols {
             let cycle_type = self.cycle_type.get(symbol).unwrap_or(&CycleType::Loader);
@@ -160,7 +162,6 @@ impl CycleManager {
             CycleType::Training => {
                 let mut cycle = TrainingCycle::new(symbol.to_string()).await;
 
-                // Модель должна существовать для Training цикла
                 let model = model
                     .as_ref()
                     .expect("Model should be initialized for Training cycle");

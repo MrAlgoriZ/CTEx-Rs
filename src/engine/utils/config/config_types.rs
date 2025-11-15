@@ -22,6 +22,7 @@ pub struct ModelConfig {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct DataConfig {
     pub success_threshold: f64,
+    pub accuracy_capacity: usize,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -61,6 +62,7 @@ impl Default for Config {
             },
             data: DataConfig {
                 success_threshold: 0.08,
+                accuracy_capacity: 96,
             },
             token: vec![
                 "BTCUSDT".to_string(),
