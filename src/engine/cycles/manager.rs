@@ -53,20 +53,26 @@ impl CycleManager {
         self
     }
 
-    // pub fn add_symbol(&mut self, symbol: String, cycle_type: CycleType) {
-    //     if !self.symbols.contains(&symbol) {
-    //         self.symbols.push(symbol.clone());
-    //     }
-    //     self.cycle_type.insert(symbol, cycle_type);
-    // }
-
     pub async fn run_all(&self) {
         let mut tasks_guard = self.tasks.write().await;
-        let model = Arc::new(Mutex::new(RFInterface::new()));
-        let pool = PgPool::connect(&load_env()[0]).await.unwrap();
 
-        train_model(&pool, &model).await;
-        drop(pool);
+        let needs_model = self.symbols.iter().any(|symbol| {
+            matches!(
+                self.cycle_type.get(symbol).unwrap_or(&CycleType::Loader),
+                CycleType::Training
+            )
+        });
+
+        let model = if needs_model {
+            let pool = PgPool::connect(&load_env()[0]).await.unwrap();
+            let model = Arc::new(Mutex::new(RFInterface::new()));
+            train_model(&pool, &model).await;
+            drop(pool);
+            Some(model)
+        } else {
+            None
+        };
+
         let counters = Arc::new(tokio_mutex::new(Counters::new()));
 
         for symbol in &self.symbols {
@@ -81,7 +87,7 @@ impl CycleManager {
             "{}{}",
             Fore::CYAN.as_str(),
             format!(
-                "Запущено {} загрузочных циклов: {}",
+                "Запущено {} циклов: {}",
                 self.symbols.len(),
                 self.symbols.join(", ")
             )
@@ -92,102 +98,11 @@ impl CycleManager {
         self.stop_notify.notified().await;
     }
 
-    // pub async fn run_cycle(&self, symbol: &str) -> Result<(), String> {
-    //     if !self.symbols.contains(&symbol.to_string()) {
-    //         return Err(format!("Символ {} не найден в списке", symbol));
-    //     }
-
-    //     let mut tasks_guard = self.tasks.write().await;
-
-    //     if tasks_guard.contains_key(symbol) {
-    //         return Err(format!("Цикл для {} уже запущен", symbol));
-    //     }
-
-    //     let cycle_type = self.cycle_type.get(symbol).unwrap_or(&CycleType::Loader);
-    //     let handle = self
-    //         .spawn_cycle_with_restart(symbol.to_string(), cycle_type)
-    //         .await;
-    //     tasks_guard.insert(symbol.to_string(), handle);
-
-    //     println!(
-    //         "{}{}",
-    //         Fore::CYAN.as_str(),
-    //         format!("Запущен цикл для {}", symbol)
-    //     );
-    //     Ok(())
-    // }
-
-    // pub async fn run_symbols(&self, symbols: Vec<&str>) {
-    //     let mut tasks_guard = self.tasks.write().await;
-
-    //     for symbol in symbols {
-    //         if !self.symbols.contains(&symbol.to_string()) {
-    //             eprintln!(
-    //                 "{}{}",
-    //                 Fore::YELLOW.as_str(),
-    //                 format!("Символ {} не найден, пропускаем", symbol)
-    //             );
-    //             continue;
-    //         }
-
-    //         let cycle_type = self.cycle_type.get(symbol).unwrap_or(&CycleType::Loader);
-    //         let handle = self
-    //             .spawn_cycle_with_restart(symbol.to_string(), cycle_type)
-    //             .await;
-    //         tasks_guard.insert(symbol.to_string(), handle);
-    //     }
-
-    //     println!(
-    //         "{}{}",
-    //         Fore::CYAN.as_str(),
-    //         format!("Запущено {} циклов", tasks_guard.len())
-    //     );
-    //     drop(tasks_guard);
-
-    //     self.stop_notify.notified().await;
-    // }
-
-    // pub async fn stop_cycle(&self, symbol: &str) -> Result<(), String> {
-    //     let mut tasks_guard = self.tasks.write().await;
-
-    //     if let Some(handle) = tasks_guard.remove(symbol) {
-    //         handle.abort();
-    //         println!(
-    //             "{}{}",
-    //             Fore::YELLOW.as_str(),
-    //             format!("Цикл {} остановлен", symbol)
-    //         );
-    //         Ok(())
-    //     } else {
-    //         Err(format!("Цикл для {} не запущен", symbol))
-    //     }
-    // }
-
-    // pub async fn stop_all(&self) {
-    //     println!("{}Остановка всех загрузочных циклов", Fore::YELLOW.as_str());
-
-    //     *self.should_stop.write().await = true;
-
-    //     let mut tasks_guard = self.tasks.write().await;
-
-    //     for (symbol, handle) in tasks_guard.drain() {
-    //         handle.abort();
-    //         println!(
-    //             "{}{}",
-    //             Fore::YELLOW.as_str(),
-    //             format!("Остановлен цикл: {}", symbol)
-    //         );
-    //     }
-
-    //     self.stop_notify.notify_waiters();
-    //     println!("{}Все циклы остановлены", Fore::YELLOW.as_str());
-    // }
-
     async fn spawn_cycle_with_restart(
         &self,
         symbol: String,
         cycle_type: &CycleType,
-        model: &Arc<Mutex<RFInterface>>,
+        model: &Option<Arc<Mutex<RFInterface>>>,
         counters: Arc<tokio_mutex<Counters>>,
     ) -> JoinHandle<()> {
         let should_stop = Arc::clone(&self.should_stop);
@@ -232,7 +147,7 @@ impl CycleManager {
     async fn run_cycle_once(
         symbol: &str,
         cycle_type: &CycleType,
-        model: &Arc<Mutex<RFInterface>>,
+        model: &Option<Arc<Mutex<RFInterface>>>,
         counters: Arc<tokio_mutex<Counters>>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match cycle_type {
@@ -245,15 +160,16 @@ impl CycleManager {
             CycleType::Training => {
                 let mut cycle = TrainingCycle::new(symbol.to_string()).await;
 
+                // Модель должна существовать для Training цикла
+                let model = model
+                    .as_ref()
+                    .expect("Model should be initialized for Training cycle");
+
                 println!("Запуск TradingCycle для {}", symbol);
                 sleep(Duration::from_secs(10)).await;
-                cycle.run(&model, counters).await;
+                cycle.run(model, counters).await;
             }
         }
         Ok(())
     }
-
-    // pub async fn active_cycles(&self) -> Vec<String> {
-    //     self.tasks.read().await.keys().cloned().collect()
-    // }
 }
