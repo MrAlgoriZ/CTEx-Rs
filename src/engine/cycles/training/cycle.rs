@@ -215,10 +215,6 @@ impl TrainingCycle {
         Ok(())
     }
 
-    fn check_significant(&self, target: f64) -> bool {
-        ((target * 10.0).round() / 10.0) != 0.0
-    }
-
     async fn handle_mistake(
         &self,
         flattened_candles: FlattenedData,
@@ -226,36 +222,26 @@ impl TrainingCycle {
         model: &Arc<Mutex<RFInterface>>,
         pool: &PgPool,
     ) -> Result<(), ()> {
-        let features_len = flattened_candles.features.len();
         if flattened_candles.is_there_a_target() {
-            if self.check_significant(flattened_candles.features[(features_len - 1) - 2]) {
-                insert_candle(
-                    &self.pool,
-                    &self.symbol,
-                    &flattened_candles
-                        .features
-                        .try_into()
-                        .expect("flattened candles len parse failed"),
-                )
-                .await
-                .unwrap();
+            insert_candle(
+                &self.pool,
+                &self.symbol,
+                &flattened_candles
+                    .features
+                    .try_into()
+                    .expect("flattened candles len parse failed"),
+            )
+            .await
+            .unwrap();
 
-                let mut mut_counters = counters.lock().await;
-                mut_counters.total.saved += 1;
-                mut_counters.get(&self.symbol).saved += 1;
-                let check = mut_counters.total.common - mut_counters.total.success;
-                if check != 0 && check % 10 == 0 {
-                    self.train_model(pool, model).await
-                }
-                Ok(())
-            } else {
-                println!(
-                    "{}{} Данные не сохранены, потому что они - мусор",
-                    self.print_time(),
-                    self.print_symbol
-                );
-                Ok(())
+            let mut mut_counters = counters.lock().await;
+            mut_counters.total.saved += 1;
+            mut_counters.get(&self.symbol).saved += 1;
+            let check = mut_counters.total.common - mut_counters.total.success;
+            if check != 0 && check % 10 == 0 {
+                self.train_model(pool, model).await
             }
+            Ok(())
         } else {
             Err(())
         }
