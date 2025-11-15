@@ -1,12 +1,9 @@
-use crate::data::data_interfaces::CandlesTarget;
-
-pub fn process_target(candles1: &CandlesTarget, candles2: &CandlesTarget) -> Option<f64> {
-    // target = (futurePrice - currentPrice) / (dayHigh - dayLow)
-    let target =
-        (candles2.close - candles1.close) / (candles2.day_price.high - candles2.day_price.low);
+pub fn process_target(close1: f64, close2: f64) -> Option<f64> {
+    // target = (futurePrice - currentPrice) / currentPrice
+    let target = (close2 - close1) / close1;
     Some(target)
 }
 
-pub fn restore_price(candles: &CandlesTarget, target: f64) -> f64 {
-    candles.close + target * (candles.day_price.high - candles.day_price.low)
+pub fn restore_price(close: f64, target: f64) -> f64 {
+    close * (1.0 + target)
 }

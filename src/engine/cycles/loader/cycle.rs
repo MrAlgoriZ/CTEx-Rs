@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use std::time::Duration;
 use tokio::{task::spawn_blocking, time::sleep};
 
-use crate::data::data_interfaces::{CandlesTarget, ICandle};
+use crate::data::data_interfaces::ICandle;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::process_target;
 use crate::data::process::volatility::get_volatility;
@@ -17,7 +17,7 @@ use crate::engine::utils::config::load_env::load_env;
 pub struct LoaderCycle {
     pub symbol: String,
     last_grouped_candles: Option<CollectedData>,
-    last_candles_target: Option<CandlesTarget>,
+    last_candles_target: Option<f64>,
     config: Config,
     print_symbol: String,
     client: BinanceClient,
@@ -50,18 +50,11 @@ impl LoaderCycle {
         loop {
             self.wait_for_next_interval().await;
             let candles = collect_all(&self.symbol).await;
-            let candles_target: CandlesTarget = CandlesTarget::new(
-                self.client
-                    .fetch_ohlcv(&self.symbol, "15m", 2)
-                    .await
-                    .try_into()
-                    .unwrap(),
-                self.client.fetch_day_price(&self.symbol).await,
-            );
+            let candles_target: f64 =
+                self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;
 
             if target_indicate == Some(true) {
-                let target =
-                    process_target(self.last_candles_target.as_ref().unwrap(), &candles_target);
+                let target = process_target(self.last_candles_target.unwrap(), candles_target);
 
                 if self.config.prints.target {
                     println!(

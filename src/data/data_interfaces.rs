@@ -82,17 +82,3 @@ impl FlattenedData {
         self.with_target
     }
 }
-
-pub struct CandlesTarget {
-    pub close: f64,
-    pub day_price: IDayPrice,
-}
-
-impl CandlesTarget {
-    pub fn new(ohlcv: [ICandle; 2], day_price: IDayPrice) -> Self {
-        CandlesTarget {
-            close: ohlcv[0].close,
-            day_price,
-        }
-    }
-}

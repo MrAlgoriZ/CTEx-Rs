@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::{sync::Mutex as tokio_mutex, task::spawn_blocking, time::sleep};
 
-use crate::data::data_interfaces::{CandlesTarget, FlattenedData, ICandle};
+use crate::data::data_interfaces::{FlattenedData, ICandle};
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::process::volatility::get_volatility;
@@ -20,7 +20,7 @@ use crate::models::model::RFInterface;
 pub struct TrainingCycle {
     pub symbol: String,
     last_grouped_candles: Option<CollectedData>,
-    last_candles_target: Option<CandlesTarget>,
+    last_candles_target: Option<f64>,
     print_symbol: String,
     client: BinanceClient,
     config: Config,
@@ -62,18 +62,12 @@ impl TrainingCycle {
             self.reset_counters_if_needed(counters_to_loop.clone())
                 .await;
             let candles: CollectedData = collect_all(&self.symbol).await;
-            let candles_target: CandlesTarget = CandlesTarget::new(
-                self.client
-                    .fetch_ohlcv(&self.symbol, "15m", 2)
-                    .await
-                    .try_into()
-                    .unwrap(),
-                self.client.fetch_day_price(&self.symbol).await,
-            );
+            let candles_target: f64 =
+                self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;
 
             if target_indicate == Some(true) {
                 let target: Option<f64> =
-                    process_target(self.last_candles_target.as_ref().unwrap(), &candles_target);
+                    process_target(self.last_candles_target.unwrap(), candles_target);
 
                 let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
                 let success: bool = diff < self.config.data.success_threshold;
@@ -120,7 +114,7 @@ impl TrainingCycle {
                     .unwrap();
 
             prediction = Some(self.predict(flattened_for_pred, &model).await.unwrap());
-            let restored_price: f64 = restore_price(&candles_target, prediction.unwrap());
+            let restored_price: f64 = restore_price(candles_target, prediction.unwrap());
 
             target_indicate = Some(true);
             self.log_prediction(prediction.unwrap(), restored_price);
