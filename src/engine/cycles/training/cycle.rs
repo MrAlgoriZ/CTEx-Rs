@@ -193,7 +193,7 @@ impl TrainingCycle {
 
         if diff < success_threshold {
             mut_counters.total.data.push_back(1);
-            mut_counters.get(&self.symbol).data.push_back(1);
+            mut_counters.get_mut(&self.symbol).data.push_back(1);
         }
 
         Ok(())
@@ -220,7 +220,7 @@ impl TrainingCycle {
 
             let mut mut_counters = counters.lock().await;
             mut_counters.total.data.push_back(0);
-            mut_counters.get(&self.symbol).data.push_back(0);
+            mut_counters.get_mut(&self.symbol).data.push_back(0);
             let check: u16 = mut_counters.total.data.iter().map(|&v| v as u16).sum();
             if check != 0 && check % 10 == 0 {
                 self.train_model(pool, model).await
@@ -268,8 +268,10 @@ impl TrainingCycle {
 
     async fn print_accuracy(&self, counters: Arc<tokio_mutex<Counters>>) {
         let mut mut_counters = counters.lock().await;
-        if !mut_counters.total.data.is_empty() && !mut_counters.get(&self.symbol).data.is_empty() {
-            let local_acc = mut_counters.get(&self.symbol).get_accuracy();
+        if !mut_counters.total.data.is_empty()
+            && !mut_counters.get_mut(&self.symbol).data.is_empty()
+        {
+            let local_acc = mut_counters.get_mut(&self.symbol).get_accuracy();
             let global_acc = mut_counters.total.get_accuracy();
 
             println!(
@@ -283,7 +285,7 @@ impl TrainingCycle {
 
             if mut_counters.total.data.len() >= 96 {
                 let day_local_acc = mut_counters
-                    .get(&self.symbol)
+                    .get_mut(&self.symbol)
                     .get_shifted_accuracy(96)
                     .unwrap_or(0.0);
                 let day_global_acc = mut_counters.total.get_shifted_accuracy(96).unwrap_or(0.0);

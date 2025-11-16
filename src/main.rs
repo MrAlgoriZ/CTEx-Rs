@@ -1,12 +1,18 @@
+mod backend;
 mod data;
 mod engine;
 mod models;
-use crate::engine::{
-    cycles::manager::{CycleManager, CycleType},
-    utils::config::load_config::{ensure_config_exists, load_config},
+use crate::{
+    backend::app::Api,
+    engine::{
+        cycles::manager::{CycleManager, CycleType},
+        state::counters::Counters,
+        utils::config::load_config::{ensure_config_exists, load_config},
+    },
 };
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::RwLock;
 
 const CONFIG_PATH: &'static str = "config/config.yaml";
 
@@ -24,6 +30,28 @@ async fn main() {
         );
     }
 
-    let manager = CycleManager::new(symbols).with_cycle_types(cycle_types);
-    manager.run_all().await;
+    let counters = Arc::new(tokio::sync::Mutex::new(Counters::new(
+        load_config(CONFIG_PATH).data.accuracy_capacity,
+    )));
+
+    let manager = Arc::new(RwLock::new(
+        CycleManager::new(symbols)
+            .with_cycle_types(cycle_types)
+            .with_counters(counters.clone()),
+    ));
+
+    let manager_clone = manager.clone();
+    let manager_task = tokio::spawn(async move {
+        manager_clone.read().await.run_all().await;
+    });
+
+    let api = Api::new(manager.clone(), counters).await;
+    let api_task = tokio::spawn(async move {
+        api.run().await;
+    });
+
+    tokio::select! {
+        _ = manager_task => println!("Manager завершился!"),
+        _ = api_task => println!("API завершилось!"),
+    }
 }

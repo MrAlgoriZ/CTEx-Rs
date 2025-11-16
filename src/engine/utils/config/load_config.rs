@@ -25,6 +25,5 @@ pub fn ensure_config_exists(path: &str) {
         file.write_all(yaml.as_bytes())
             .expect("Не удалось записать дефолтный конфиг");
         println!("Создан дефолтный конфиг: {}", path);
-    } else {
     }
 }

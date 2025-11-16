@@ -53,10 +53,15 @@ impl Counters {
         }
     }
 
-    pub fn get(&mut self, symbol: &str) -> &mut SymbolCounters<u8> {
+    pub fn get_mut(&mut self, symbol: &str) -> &mut SymbolCounters<u8> {
         let key = symbol.to_lowercase();
         self.symbols
             .entry(key)
             .or_insert_with(|| SymbolCounters::new(self.capacity))
+    }
+
+    pub fn get_option(&self, symbol: &str) -> Option<&SymbolCounters<u8>> {
+        let key = symbol.to_lowercase();
+        self.symbols.get(&key)
     }
 }

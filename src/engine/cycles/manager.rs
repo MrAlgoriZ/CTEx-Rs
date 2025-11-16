@@ -10,7 +10,7 @@ use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::colors::Fore;
-use crate::engine::utils::config::{load_config::load_config, load_env::load_env};
+use crate::engine::utils::config::load_env::load_env;
 use crate::models::model::{RFInterface, train_model};
 
 #[derive(Clone, Copy)]
@@ -35,6 +35,7 @@ pub struct CycleManager {
     tasks: Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
     stop_notify: Arc<Notify>,
     should_stop: Arc<RwLock<bool>>,
+    counters: Arc<tokio_mutex<Counters>>,
 }
 
 impl CycleManager {
@@ -45,11 +46,17 @@ impl CycleManager {
             tasks: Arc::new(RwLock::new(HashMap::new())),
             stop_notify: Arc::new(Notify::new()),
             should_stop: Arc::new(RwLock::new(false)),
+            counters: Arc::new(tokio_mutex::new(Counters::new(96))),
         }
     }
 
     pub fn with_cycle_types(mut self, cycle_types: HashMap<String, CycleType>) -> Self {
         self.cycle_type = cycle_types;
+        self
+    }
+
+    pub fn with_counters(mut self, counters: Arc<tokio_mutex<Counters>>) -> Self {
+        self.counters = counters;
         self
     }
 
@@ -73,14 +80,10 @@ impl CycleManager {
             None
         };
 
-        let counters = Arc::new(tokio_mutex::new(Counters::new(
-            load_config("config/config.yaml").data.accuracy_capacity,
-        )));
-
         for symbol in &self.symbols {
             let cycle_type = self.cycle_type.get(symbol).unwrap_or(&CycleType::Loader);
             let handle = self
-                .spawn_cycle_with_restart(symbol.clone(), cycle_type, &model, counters.clone())
+                .spawn_cycle_with_restart(symbol.clone(), cycle_type, &model, self.counters.clone())
                 .await;
             tasks_guard.insert(symbol.clone(), handle);
         }
@@ -172,5 +175,9 @@ impl CycleManager {
             }
         }
         Ok(())
+    }
+
+    pub async fn active_cycles(&self) -> Vec<String> {
+        self.tasks.read().await.keys().cloned().collect()
     }
 }

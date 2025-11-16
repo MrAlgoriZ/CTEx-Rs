@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
     pub model: ModelConfig,
+    pub backend: BackendConfig,
     pub prints: PrintsConfig,
     pub data: DataConfig,
     pub token: Vec<String>,
@@ -37,6 +38,11 @@ pub struct PrintsConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+pub struct BackendConfig {
+    pub listener: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TTSConfig {
     pub train_ratio: f32,
 }
@@ -51,6 +57,9 @@ impl Default for Config {
                 seed: 42,
                 train_test_split: TTSConfig { train_ratio: 0.8 },
             },
+            backend: BackendConfig {
+                listener: "0.0.0.0:3000".to_string(),
+            },
             prints: PrintsConfig {
                 volatility: true,
                 cycle_start: true,
@@ -61,7 +70,7 @@ impl Default for Config {
                 accuracy: true,
             },
             data: DataConfig {
-                success_threshold: 0.08,
+                success_threshold: 8.0,
                 accuracy_capacity: 96,
             },
             token: vec![
