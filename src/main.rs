@@ -36,14 +36,13 @@ async fn main() {
 
     let manager = Arc::new(RwLock::new(
         CycleManager::new(symbols)
-            .await
             .with_cycle_types(cycle_types)
             .with_counters(counters.clone()),
     ));
 
     let manager_clone = manager.clone();
     let manager_task = tokio::spawn(async move {
-        manager_clone.write().await.run_all().await;
+        manager_clone.read().await.run_all().await;
     });
 
     let api = Api::new(manager.clone(), counters).await;

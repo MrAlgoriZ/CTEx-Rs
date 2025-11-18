@@ -1,6 +1,5 @@
 use chrono::{Local, Timelike};
 use sqlx::PgPool;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::{task::spawn_blocking, time::sleep};
 
@@ -26,14 +25,14 @@ pub struct LoaderCycle {
 }
 
 impl LoaderCycle {
-    pub async fn new(symbol: String, client: Arc<BinanceClient>) -> Self {
+    pub async fn new(symbol: String) -> Self {
         LoaderCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol,
             last_grouped_candles: None,
             last_candles_target: None,
             config: load_config("config/config.yaml"),
-            client: (*client).clone(),
+            client: BinanceClient::new().await,
             pool: PgPool::connect(&load_env()[0])
                 .await
                 .expect("Database connection failed"),

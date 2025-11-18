@@ -34,11 +34,7 @@ impl Api {
         counters: Arc<Mutex<Counters>>,
     ) -> Router {
         let structure = ApiStructure::default();
-        let state = ApiState {
-            manager,
-            counters,
-            // hashed_password: String::from("123"),
-        };
+        let state = ApiState { manager, counters };
 
         Router::new()
             .route(&structure.root, get(commands::root))
