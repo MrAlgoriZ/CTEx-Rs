@@ -1,8 +1,6 @@
 use crate::engine::utils::config::config_types::Config;
-use std::fs;
-use std::fs::File;
-use std::io::BufReader;
-use std::io::Write;
+use std::fs::{self, File};
+use std::io::{BufReader, Write};
 use std::path::Path;
 
 pub fn load_config(path: &str) -> Config {

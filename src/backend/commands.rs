@@ -64,3 +64,33 @@ pub async fn token_accuracy(
         None => Ok(Json(0.0)),
     }
 }
+
+// #[derive(Debug, Deserialize)]
+// pub struct AddCycleRequest {
+//     hashed_password: String,
+// }
+
+// pub async fn add_cycle(
+//     State(state): State<ApiState>,
+//     Path(token): Path<String>,
+//     Json(payload): Json<AddCycleRequest>,
+// ) -> Result<Json<String>, StatusCode> {
+//     if payload.hashed_password != state.hashed_password {
+//         return Ok(Json("Неверный пароль".to_string()));
+//     }
+//     let mut manager = state.manager.write().await;
+
+//     let success = manager
+//         .add_cycle(
+//             token.clone(),
+//             CycleType::from_str(&load_config(CONFIG_PATH).cycle_type),
+//         )
+//         .await
+//         .is_ok();
+
+//     if success {
+//         Ok(Json(format!("Цикл для токена '{}' успешно запущен", token)))
+//     } else {
+//         Ok(Json("Не удалось запустить цикл".to_string()))
+//     }
+// }

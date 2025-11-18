@@ -28,13 +28,13 @@ pub struct TrainingCycle {
 }
 
 impl TrainingCycle {
-    pub async fn new(symbol: String) -> Self {
+    pub async fn new(symbol: String, client: Arc<BinanceClient>) -> Self {
         TrainingCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol,
             last_grouped_candles: None,
             last_candles_target: None,
-            client: BinanceClient::new().await,
+            client: (*client).clone(),
             config: load_config("config/config.yaml"),
             pool: PgPool::connect(&load_env()[0])
                 .await
@@ -221,8 +221,14 @@ impl TrainingCycle {
             let mut mut_counters = counters.lock().await;
             mut_counters.total.data.push_back(0);
             mut_counters.get_mut(&self.symbol).data.push_back(0);
-            let check: u16 = mut_counters.total.data.iter().map(|&v| v as u16).sum();
-            if check != 0 && check % 10 == 0 {
+            let check = mut_counters
+                .total
+                .data
+                .iter()
+                .rev()
+                .take(5)
+                .collect::<Vec<_>>();
+            if check.len() == 5 && check.iter().all(|&&v| v == 0) {
                 self.train_model(pool, model).await
             }
             Ok(())

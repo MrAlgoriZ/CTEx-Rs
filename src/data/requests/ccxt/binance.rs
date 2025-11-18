@@ -8,6 +8,7 @@ use crate::data::data_interfaces::*;
 
 const MINIMAL_VALUE: f64 = 0.00000000000000001;
 
+#[derive(Clone)]
 pub struct BinanceClient {
     market: Arc<Market>,
 }
