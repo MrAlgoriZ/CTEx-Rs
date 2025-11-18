@@ -1,3 +1,3 @@
 pub mod app;
 pub mod commands;
-pub mod stucture;
+pub mod structure;

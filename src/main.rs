@@ -6,13 +6,12 @@ use crate::{
     backend::app::Api,
     engine::{
         cycles::manager::{CycleManager, CycleType},
-        state::counters::Counters,
         utils::config::load_config::{ensure_config_exists, load_config},
     },
 };
 
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 
 const CONFIG_PATH: &'static str = "config/config.yaml";
 
@@ -30,28 +29,25 @@ async fn main() {
         );
     }
 
-    let counters = Arc::new(tokio::sync::Mutex::new(Counters::new(
-        load_config(CONFIG_PATH).data.accuracy_capacity,
-    )));
+    let mut manager = CycleManager::new().await;
 
-    let manager = Arc::new(RwLock::new(
-        CycleManager::new(symbols)
-            .with_cycle_types(cycle_types)
-            .with_counters(counters.clone()),
-    ));
+    // Запускаем циклы
+    manager.run_all(symbols, cycle_types).await.unwrap();
 
-    let manager_clone = manager.clone();
-    let manager_task = tokio::spawn(async move {
-        manager_clone.read().await.run_all().await;
-    });
+    let counter_handle = manager.counter_handle();
+    let supervisor_handle = manager.supervisor_handle();
 
-    let api = Api::new(manager.clone(), counters).await;
+    // API с обоими handles
+    let api = Api::new(supervisor_handle, counter_handle).await;
     let api_task = tokio::spawn(async move {
         api.run().await;
     });
 
+    // Ожидание завершения или Ctrl+C
     tokio::select! {
-        _ = manager_task => println!("Manager завершился!"),
         _ = api_task => println!("API завершилось!"),
+        _ = tokio::signal::ctrl_c() => {
+            println!("Получен сигнал завершения!");
+        }
     }
 }

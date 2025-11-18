@@ -1,19 +1,72 @@
+// ============================================================================
+// manager.rs
+// ============================================================================
 use sqlx::PgPool;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::sync::Mutex as tokio_mutex;
-use tokio::sync::{Notify, RwLock};
-use tokio::task::JoinHandle;
+use std::sync::Arc;
+use tokio::sync::{Mutex as TokioMutex, mpsc, oneshot};
 use tokio::time::{Duration, sleep};
 
+use crate::CONFIG_PATH;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::colors::Fore;
+use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::models::model::{RFInterface, train_model};
 
-#[derive(Clone, Copy)]
+// ============================================================================
+// MESSAGES
+// ============================================================================
+
+#[derive(Debug)]
+pub enum SupervisorCommand {
+    StartCycle {
+        symbol: String,
+        cycle_type: CycleType,
+        respond_to: oneshot::Sender<Result<(), String>>,
+    },
+    StopCycle {
+        symbol: String,
+        respond_to: oneshot::Sender<Result<(), String>>,
+    },
+    StopAll {
+        respond_to: oneshot::Sender<()>,
+    },
+    ListActive {
+        respond_to: oneshot::Sender<Vec<String>>,
+    },
+}
+
+#[derive(Debug)]
+pub enum CounterCommand {
+    Increment {
+        symbol: String,
+        value: u8,
+    },
+    GetAccuracy {
+        symbol: String,
+        respond_to: oneshot::Sender<Option<f64>>,
+    },
+    GetShiftedAccuracy {
+        symbol: String,
+        window: usize,
+        respond_to: oneshot::Sender<Option<f64>>,
+    },
+    GetTotalAccuracy {
+        respond_to: oneshot::Sender<f64>,
+    },
+    GetTotalShiftedAccuracy {
+        window: usize,
+        respond_to: oneshot::Sender<Option<f64>>,
+    },
+    GetTotalLen {
+        respond_to: oneshot::Sender<usize>,
+    },
+}
+
+#[derive(Clone, Copy, Debug)]
 pub enum CycleType {
     Loader,
     Training,
@@ -24,141 +77,256 @@ impl CycleType {
         match cycle_type {
             "training" => CycleType::Training,
             "loader" => CycleType::Loader,
-            _ => panic!("Cycle type must be 'trading' or 'loader'"),
+            _ => panic!("Cycle type must be 'training' or 'loader'"),
         }
     }
 }
 
-pub struct CycleManager {
-    symbols: Vec<String>,
-    cycle_type: HashMap<String, CycleType>,
-    tasks: Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
-    stop_notify: Arc<Notify>,
-    should_stop: Arc<RwLock<bool>>,
-    counters: Arc<tokio_mutex<Counters>>,
+// ============================================================================
+// COUNTER ACTOR - Единственный владелец Counters
+// ============================================================================
+
+struct CounterActor {
+    counters: Counters,
+    inbox: mpsc::Receiver<CounterCommand>,
 }
 
-impl CycleManager {
-    pub fn new(symbols: Vec<String>) -> Self {
-        Self {
-            symbols: symbols.clone(),
-            cycle_type: HashMap::new(),
-            tasks: Arc::new(RwLock::new(HashMap::new())),
-            stop_notify: Arc::new(Notify::new()),
-            should_stop: Arc::new(RwLock::new(false)),
-            counters: Arc::new(tokio_mutex::new(Counters::new(96))),
+impl CounterActor {
+    fn new(capacity: usize) -> (Self, mpsc::Sender<CounterCommand>) {
+        let (tx, rx) = mpsc::channel(1000);
+        (
+            Self {
+                counters: Counters::new(capacity),
+                inbox: rx,
+            },
+            tx,
+        )
+    }
+
+    async fn run(mut self) {
+        println!("{}CounterActor запущен", Fore::CYAN.as_str());
+
+        while let Some(cmd) = self.inbox.recv().await {
+            match cmd {
+                CounterCommand::Increment { symbol, value } => {
+                    self.counters.total.data.push_back(value);
+                    self.counters.get_mut(&symbol).data.push_back(value);
+                }
+                CounterCommand::GetAccuracy { symbol, respond_to } => {
+                    let acc = self.counters.get_option(&symbol).map(|c| c.get_accuracy());
+                    let _ = respond_to.send(acc);
+                }
+                CounterCommand::GetShiftedAccuracy {
+                    symbol,
+                    window,
+                    respond_to,
+                } => {
+                    let acc = self
+                        .counters
+                        .get_option(&symbol)
+                        .and_then(|c| c.get_shifted_accuracy(window));
+                    let _ = respond_to.send(acc);
+                }
+                CounterCommand::GetTotalAccuracy { respond_to } => {
+                    let acc = if !self.counters.total.data.is_empty() {
+                        self.counters.total.get_accuracy()
+                    } else {
+                        0.0
+                    };
+                    let _ = respond_to.send(acc);
+                }
+                CounterCommand::GetTotalShiftedAccuracy { window, respond_to } => {
+                    let acc = self.counters.total.get_shifted_accuracy(window);
+                    let _ = respond_to.send(acc);
+                }
+                CounterCommand::GetTotalLen { respond_to } => {
+                    let len = self.counters.total.data.len();
+                    let _ = respond_to.send(len);
+                }
+            }
         }
+
+        println!("{}CounterActor остановлен", Fore::YELLOW.as_str());
+    }
+}
+
+// ============================================================================
+// WORKER HANDLE
+// ============================================================================
+
+struct WorkerHandle {
+    symbol: String,
+    task: tokio::task::JoinHandle<()>,
+    shutdown_tx: mpsc::Sender<()>,
+}
+
+impl WorkerHandle {
+    async fn stop(self) {
+        let _ = self.shutdown_tx.send(()).await;
+        let _ = self.task.await;
+        println!("{}Worker {} остановлен", Fore::YELLOW.as_str(), self.symbol);
+    }
+}
+
+// ============================================================================
+// SUPERVISOR - Управляет жизненным циклом воркеров
+// ============================================================================
+
+struct CycleSupervisor {
+    workers: HashMap<String, WorkerHandle>,
+    model: Option<Arc<TokioMutex<RFInterface>>>,
+    counter_handle: mpsc::Sender<CounterCommand>,
+    inbox: mpsc::Receiver<SupervisorCommand>,
+}
+
+impl CycleSupervisor {
+    fn new(
+        model: Option<Arc<TokioMutex<RFInterface>>>,
+        counter_handle: mpsc::Sender<CounterCommand>,
+    ) -> (Self, mpsc::Sender<SupervisorCommand>) {
+        let (tx, rx) = mpsc::channel(50);
+
+        (
+            Self {
+                workers: HashMap::new(),
+                model,
+                counter_handle,
+                inbox: rx,
+            },
+            tx,
+        )
     }
 
-    pub fn with_cycle_types(mut self, cycle_types: HashMap<String, CycleType>) -> Self {
-        self.cycle_type = cycle_types;
-        self
+    async fn run(mut self) {
+        println!("{}Supervisor запущен", Fore::CYAN.as_str());
+
+        while let Some(cmd) = self.inbox.recv().await {
+            match cmd {
+                SupervisorCommand::StartCycle {
+                    symbol,
+                    cycle_type,
+                    respond_to,
+                } => {
+                    let result = self.start_worker(symbol, cycle_type).await;
+                    let _ = respond_to.send(result);
+                }
+
+                SupervisorCommand::StopCycle { symbol, respond_to } => {
+                    let result = self.stop_worker(&symbol).await;
+                    let _ = respond_to.send(result);
+                }
+
+                SupervisorCommand::StopAll { respond_to } => {
+                    self.stop_all_workers().await;
+                    let _ = respond_to.send(());
+                }
+
+                SupervisorCommand::ListActive { respond_to } => {
+                    let active: Vec<String> = self.workers.keys().cloned().collect();
+                    let _ = respond_to.send(active);
+                }
+            }
+        }
+
+        println!("{}Supervisor остановлен", Fore::YELLOW.as_str());
     }
 
-    pub fn with_counters(mut self, counters: Arc<tokio_mutex<Counters>>) -> Self {
-        self.counters = counters;
-        self
-    }
+    async fn start_worker(&mut self, symbol: String, cycle_type: CycleType) -> Result<(), String> {
+        if self.workers.contains_key(&symbol) {
+            return Err(format!("Worker {} уже запущен", symbol));
+        }
 
-    pub async fn run_all(&self) {
-        let mut tasks_guard = self.tasks.write().await;
+        if matches!(cycle_type, CycleType::Training) && self.model.is_none() {
+            return Err("Model не инициализирована для Training цикла".to_string());
+        }
 
-        let needs_model = self.symbols.iter().any(|symbol| {
-            matches!(
-                self.cycle_type.get(symbol).unwrap_or(&CycleType::Loader),
-                CycleType::Training
-            )
+        let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
+        let model = self.model.clone();
+        let counter_tx = self.counter_handle.clone();
+        let symbol_clone = symbol.clone();
+
+        let task = tokio::spawn(async move {
+            Self::worker_loop(symbol_clone, cycle_type, model, counter_tx, shutdown_rx).await;
         });
 
-        let model = if needs_model {
-            let pool = PgPool::connect(&load_env()[0]).await.unwrap();
-            let model = Arc::new(Mutex::new(RFInterface::new()));
-            train_model(&pool, &model).await;
-            drop(pool);
-            Some(model)
-        } else {
-            None
-        };
-
-        for symbol in &self.symbols {
-            let cycle_type = self.cycle_type.get(symbol).unwrap_or(&CycleType::Loader);
-            let handle = self
-                .spawn_cycle_with_restart(symbol.clone(), cycle_type, &model, self.counters.clone())
-                .await;
-            tasks_guard.insert(symbol.clone(), handle);
-        }
-
-        println!(
-            "{}{}",
-            Fore::CYAN.as_str(),
-            format!(
-                "Запущено {} циклов: {}",
-                self.symbols.len(),
-                self.symbols.join(", ")
-            )
+        self.workers.insert(
+            symbol.clone(),
+            WorkerHandle {
+                symbol: symbol.clone(),
+                task,
+                shutdown_tx,
+            },
         );
 
-        drop(tasks_guard);
-
-        self.stop_notify.notified().await;
+        println!(
+            "{}Worker {} запущен ({:?})",
+            Fore::GREEN.as_str(),
+            symbol,
+            cycle_type
+        );
+        Ok(())
     }
 
-    async fn spawn_cycle_with_restart(
-        &self,
-        symbol: String,
-        cycle_type: &CycleType,
-        model: &Option<Arc<Mutex<RFInterface>>>,
-        counters: Arc<tokio_mutex<Counters>>,
-    ) -> JoinHandle<()> {
-        let should_stop = Arc::clone(&self.should_stop);
-        let symbol_clone = symbol.clone();
-        let cycle_type_clone = *cycle_type;
-        let model_clone = model.clone();
-        let counters_clone = counters.clone();
+    async fn stop_worker(&mut self, symbol: &str) -> Result<(), String> {
+        match self.workers.remove(symbol) {
+            Some(handle) => {
+                handle.stop().await;
+                Ok(())
+            }
+            None => Err(format!("Worker {} не найден", symbol)),
+        }
+    }
 
-        tokio::spawn(async move {
-            loop {
-                if *should_stop.read().await {
+    async fn stop_all_workers(&mut self) {
+        let workers = std::mem::take(&mut self.workers);
+        for (_, handle) in workers {
+            handle.stop().await;
+        }
+    }
+
+    async fn worker_loop(
+        symbol: String,
+        cycle_type: CycleType,
+        model: Option<Arc<TokioMutex<RFInterface>>>,
+        counter_tx: mpsc::Sender<CounterCommand>,
+        mut shutdown_rx: mpsc::Receiver<()>,
+    ) {
+        loop {
+            tokio::select! {
+                _ = shutdown_rx.recv() => {
+                    println!("{}Worker {} получил сигнал остановки", Fore::YELLOW.as_str(), symbol);
                     break;
                 }
 
-                match Self::run_cycle_once(
-                    &symbol_clone,
-                    &cycle_type_clone,
-                    &model_clone,
-                    counters_clone.clone(),
-                )
-                .await
-                {
-                    Ok(_) => {
-                        break;
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "{}{}",
-                            Fore::RED.as_str(),
-                            format!(
-                                "Цикл {} упал с ошибкой: {}, перезапуск через 5 секунд",
-                                symbol_clone, e
-                            )
-                        );
-                        sleep(Duration::from_secs(5)).await;
+                result = Self::run_cycle_once(&symbol, cycle_type, &model, &counter_tx) => {
+                    match result {
+                        Ok(_) => {
+                            println!("{}Worker {} завершился нормально", Fore::GREEN.as_str(), symbol);
+                            break;
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "{}Worker {} упал: {}, рестарт через 5 сек",
+                                Fore::RED.as_str(), symbol, e
+                            );
+                            sleep(Duration::from_secs(5)).await;
+                        }
                     }
                 }
             }
-        })
+        }
     }
 
     async fn run_cycle_once(
         symbol: &str,
-        cycle_type: &CycleType,
-        model: &Option<Arc<Mutex<RFInterface>>>,
-        counters: Arc<tokio_mutex<Counters>>,
+        cycle_type: CycleType,
+        model: &Option<Arc<TokioMutex<RFInterface>>>,
+        counter_tx: &mpsc::Sender<CounterCommand>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match cycle_type {
             CycleType::Loader => {
                 let mut cycle = LoaderCycle::new(symbol.to_string()).await;
-                println!("Запуск LoaderCycle для {}", symbol);
+                println!("{}Запуск LoaderCycle для {}", Fore::CYAN.as_str(), symbol);
                 sleep(Duration::from_secs(10)).await;
                 cycle.run().await;
             }
@@ -169,15 +337,158 @@ impl CycleManager {
                     .as_ref()
                     .expect("Model should be initialized for Training cycle");
 
-                println!("Запуск TradingCycle для {}", symbol);
+                println!("{}Запуск TrainingCycle для {}", Fore::CYAN.as_str(), symbol);
                 sleep(Duration::from_secs(10)).await;
-                cycle.run(model, counters).await;
+                cycle.run(model, counter_tx).await;
             }
         }
         Ok(())
     }
+}
+
+// ============================================================================
+// PUBLIC API - Тонкая обертка над Supervisor
+// ============================================================================
+
+pub struct CycleManager {
+    supervisor_tx: mpsc::Sender<SupervisorCommand>,
+    counter_tx: mpsc::Sender<CounterCommand>,
+    _counter_task: tokio::task::JoinHandle<()>,
+    _supervisor_task: tokio::task::JoinHandle<()>,
+}
+
+impl CycleManager {
+    pub async fn new() -> Self {
+        let capacity = load_config(CONFIG_PATH).data.accuracy_capacity;
+        let (counter_actor, counter_tx) = CounterActor::new(capacity);
+        let counter_task = tokio::spawn(counter_actor.run());
+
+        let (supervisor, supervisor_tx) = CycleSupervisor::new(None, counter_tx.clone());
+        let supervisor_task = tokio::spawn(supervisor.run());
+
+        Self {
+            supervisor_tx,
+            counter_tx,
+            _counter_task: counter_task,
+            _supervisor_task: supervisor_task,
+        }
+    }
+
+    pub fn with_cycle_types(self, _cycle_types: HashMap<String, CycleType>) -> Self {
+        self
+    }
+
+    pub fn with_counters(self, _counters: mpsc::Sender<CounterCommand>) -> Self {
+        self
+    }
+
+    pub async fn run_all(
+        &mut self,
+        symbols: Vec<String>,
+        cycle_types: HashMap<String, CycleType>,
+    ) -> Result<(), String> {
+        let needs_model = symbols.iter().any(|symbol| {
+            matches!(
+                cycle_types.get(symbol).unwrap_or(&CycleType::Loader),
+                CycleType::Training
+            )
+        });
+
+        if needs_model {
+            // Останавливаем текущий supervisor
+            let (tx, rx) = oneshot::channel();
+            self.supervisor_tx
+                .send(SupervisorCommand::StopAll { respond_to: tx })
+                .await
+                .map_err(|_| "Supervisor недоступен")?;
+            let _ = rx.await;
+
+            // Инициализируем модель
+            let pool = PgPool::connect(&load_env()[0])
+                .await
+                .map_err(|e| format!("DB connection error: {}", e))?;
+            let model = Arc::new(TokioMutex::new(RFInterface::new()));
+            train_model(&pool, &model).await;
+            drop(pool);
+
+            // Запускаем новый supervisor с моделью
+            let (supervisor, new_supervisor_tx) =
+                CycleSupervisor::new(Some(model), self.counter_tx.clone());
+            let supervisor_task = tokio::spawn(supervisor.run());
+
+            // Обновляем handles
+            self.supervisor_tx = new_supervisor_tx;
+            self._supervisor_task = supervisor_task;
+        }
+
+        for symbol in &symbols {
+            let cycle_type = cycle_types.get(symbol).unwrap_or(&CycleType::Loader);
+            self.add_cycle(symbol.clone(), *cycle_type).await?;
+        }
+
+        println!(
+            "{}Запущено {} циклов: {}",
+            Fore::CYAN.as_str(),
+            symbols.len(),
+            symbols.join(", ")
+        );
+
+        Ok(())
+    }
+
+    pub async fn add_cycle(&self, symbol: String, cycle_type: CycleType) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.supervisor_tx
+            .send(SupervisorCommand::StartCycle {
+                symbol,
+                cycle_type,
+                respond_to: tx,
+            })
+            .await
+            .map_err(|_| "Supervisor недоступен".to_string())?;
+
+        rx.await
+            .map_err(|_| "Нет ответа от Supervisor".to_string())?
+    }
+
+    pub async fn stop_cycle(&self, symbol: String) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.supervisor_tx
+            .send(SupervisorCommand::StopCycle {
+                symbol,
+                respond_to: tx,
+            })
+            .await
+            .map_err(|_| "Supervisor недоступен".to_string())?;
+
+        rx.await
+            .map_err(|_| "Нет ответа от Supervisor".to_string())?
+    }
+
+    pub async fn stop_all(&self) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.supervisor_tx
+            .send(SupervisorCommand::StopAll { respond_to: tx })
+            .await
+            .map_err(|_| "Supervisor недоступен".to_string())?;
+
+        rx.await.map_err(|_| "Нет ответа от Supervisor".to_string())
+    }
 
     pub async fn active_cycles(&self) -> Vec<String> {
-        self.tasks.read().await.keys().cloned().collect()
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .supervisor_tx
+            .send(SupervisorCommand::ListActive { respond_to: tx })
+            .await;
+        rx.await.unwrap_or_default()
+    }
+
+    pub fn counter_handle(&self) -> mpsc::Sender<CounterCommand> {
+        self.counter_tx.clone()
+    }
+
+    pub fn supervisor_handle(&self) -> mpsc::Sender<SupervisorCommand> {
+        self.supervisor_tx.clone()
     }
 }

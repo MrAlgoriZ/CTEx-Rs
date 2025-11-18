@@ -1,6 +1,10 @@
+// ============================================================================
+// backend/commands.rs
+// ============================================================================
 use crate::{
     CONFIG_PATH,
-    backend::stucture::{ApiState, ApiStructure},
+    backend::structure::{ApiState, ApiStructure},
+    engine::cycles::manager::{CounterCommand, CycleType, SupervisorCommand},
     engine::utils::config::load_config::load_config,
 };
 use axum::{
@@ -9,58 +13,294 @@ use axum::{
     http::StatusCode,
 };
 use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
+
+// ============================================================================
+// ТИПЫ ЗАПРОСОВ И ОТВЕТОВ
+// ============================================================================
 
 #[derive(Serialize)]
-pub struct Tokens {
-    tokens: Vec<String>,
+pub struct ApiResponse<T> {
+    pub success: bool,
+    pub data: Option<T>,
+    pub message: Option<String>,
 }
 
-fn default_period() -> usize {
-    load_config(CONFIG_PATH).data.accuracy_capacity
+impl<T> ApiResponse<T> {
+    fn success(data: T) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            message: None,
+        }
+    }
+
+    fn error(message: String) -> Self {
+        Self {
+            success: false,
+            data: None,
+            message: Some(message),
+        }
+    }
 }
 
 #[derive(Deserialize)]
-pub struct Window {
-    #[serde(default = "default_period")]
-    period: usize,
+pub struct AddCycleRequest {
+    pub symbol: String,
+    #[serde(rename = "type")]
+    pub cycle_type: String, // "loader" или "training"
 }
 
-pub async fn root() -> String {
-    format!("{:#?}", ApiStructure::default())
+#[derive(Deserialize)]
+pub struct AccuracyQuery {
+    #[serde(default = "default_window")]
+    pub window: usize,
 }
 
-pub async fn tokens(State(state): State<ApiState>) -> Json<Tokens> {
-    let manager = state.manager.read().await;
-    let active = manager.active_cycles().await;
-
-    Json(Tokens { tokens: active })
+fn default_window() -> usize {
+    load_config(CONFIG_PATH).data.accuracy_capacity
 }
 
-pub async fn total_accuracy(
+#[derive(Serialize)]
+pub struct CycleInfo {
+    pub symbol: String,
+}
+
+#[derive(Serialize)]
+pub struct AccuracyInfo {
+    pub symbol: String,
+    pub accuracy: f64,
+    pub window: usize,
+}
+
+#[derive(Serialize)]
+pub struct HealthStatus {
+    pub status: String,
+    pub version: String,
+}
+
+// ============================================================================
+// ИНФОРМАЦИОННЫЕ ЭНДПОИНТЫ
+// ============================================================================
+
+// GET /
+pub async fn root() -> Json<ApiResponse<ApiStructure>> {
+    Json(ApiResponse::success(ApiStructure::default()))
+}
+
+// GET /health
+pub async fn health() -> Json<ApiResponse<HealthStatus>> {
+    Json(ApiResponse::success(HealthStatus {
+        status: "ok".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+    }))
+}
+
+// ============================================================================
+// УПРАВЛЕНИЕ ЦИКЛАМИ
+// ============================================================================
+
+// GET /cycles
+pub async fn cycles_list(
     State(state): State<ApiState>,
-    Query(window): Query<Window>,
-) -> Json<f64> {
-    let counters = state.counters.lock().await;
+) -> Result<Json<ApiResponse<Vec<CycleInfo>>>, StatusCode> {
+    let (tx, rx) = oneshot::channel();
 
-    Json(
-        counters
-            .total
-            .get_shifted_accuracy(window.period)
-            .unwrap_or(0.0),
-    )
+    state
+        .supervisor_handle
+        .send(SupervisorCommand::ListActive { respond_to: tx })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let active = rx.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let cycles: Vec<CycleInfo> = active
+        .into_iter()
+        .map(|symbol| CycleInfo { symbol })
+        .collect();
+
+    Ok(Json(ApiResponse::success(cycles)))
 }
 
-pub async fn token_accuracy(
+// POST /cycles
+// Body: { "symbol": "BTCUSDT", "type": "training" }
+pub async fn cycle_add(
+    State(state): State<ApiState>,
+    Json(payload): Json<AddCycleRequest>,
+) -> Result<Json<ApiResponse<String>>, StatusCode> {
+    let cycle_type = match payload.cycle_type.to_lowercase().as_str() {
+        "training" => CycleType::Training,
+        "loader" => CycleType::Loader,
+        _ => {
+            return Ok(Json(ApiResponse::error(
+                "Тип цикла должен быть 'training' или 'loader'".to_string(),
+            )));
+        }
+    };
+
+    let (tx, rx) = oneshot::channel();
+
+    state
+        .supervisor_handle
+        .send(SupervisorCommand::StartCycle {
+            symbol: payload.symbol.clone(),
+            cycle_type,
+            respond_to: tx,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    match rx.await {
+        Ok(Ok(())) => Ok(Json(ApiResponse::success(format!(
+            "Цикл {} успешно запущен",
+            payload.symbol
+        )))),
+        Ok(Err(e)) => Ok(Json(ApiResponse::error(e))),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+// DELETE /cycles/:symbol
+pub async fn cycle_stop(
     State(state): State<ApiState>,
     Path(symbol): Path<String>,
-    Query(params): Query<Window>,
-) -> Result<Json<f64>, StatusCode> {
-    let counters_guard = state.counters.lock().await;
-    match counters_guard.get_option(&symbol) {
-        Some(counters) => {
-            let acc = counters.get_shifted_accuracy(params.period).unwrap_or(0.0);
-            Ok(Json(acc))
-        }
-        None => Ok(Json(0.0)),
+) -> Result<Json<ApiResponse<String>>, StatusCode> {
+    let (tx, rx) = oneshot::channel();
+
+    state
+        .supervisor_handle
+        .send(SupervisorCommand::StopCycle {
+            symbol: symbol.clone(),
+            respond_to: tx,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    match rx.await {
+        Ok(Ok(())) => Ok(Json(ApiResponse::success(format!(
+            "Цикл {} остановлен",
+            symbol
+        )))),
+        Ok(Err(e)) => Ok(Json(ApiResponse::error(e))),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
+}
+
+// DELETE /cycles
+pub async fn cycles_stop_all(
+    State(state): State<ApiState>,
+) -> Result<Json<ApiResponse<String>>, StatusCode> {
+    let (tx, rx) = oneshot::channel();
+
+    state
+        .supervisor_handle
+        .send(SupervisorCommand::StopAll { respond_to: tx })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    rx.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(ApiResponse::success(
+        "Все циклы остановлены".to_string(),
+    )))
+}
+
+// ============================================================================
+// МЕТРИКИ И СТАТИСТИКА
+// ============================================================================
+
+// GET /accuracy/total?window=100
+pub async fn accuracy_total(
+    State(state): State<ApiState>,
+    Query(query): Query<AccuracyQuery>,
+) -> Result<Json<ApiResponse<f64>>, StatusCode> {
+    let (tx, rx) = oneshot::channel();
+
+    state
+        .counter_handle
+        .send(CounterCommand::GetTotalShiftedAccuracy {
+            window: query.window,
+            respond_to: tx,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let accuracy = rx
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .unwrap_or(0.0);
+
+    Ok(Json(ApiResponse::success(accuracy)))
+}
+
+// GET /accuracy/:symbol?window=100
+pub async fn accuracy_token(
+    State(state): State<ApiState>,
+    Path(symbol): Path<String>,
+    Query(query): Query<AccuracyQuery>,
+) -> Result<Json<ApiResponse<f64>>, StatusCode> {
+    let (tx, rx) = oneshot::channel();
+
+    state
+        .counter_handle
+        .send(CounterCommand::GetShiftedAccuracy {
+            symbol: symbol.to_uppercase(),
+            window: query.window,
+            respond_to: tx,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let accuracy = rx
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .unwrap_or(0.0);
+
+    Ok(Json(ApiResponse::success(accuracy)))
+}
+
+// GET /accuracy?window=100
+pub async fn accuracy_all_tokens(
+    State(state): State<ApiState>,
+    Query(query): Query<AccuracyQuery>,
+) -> Result<Json<ApiResponse<Vec<AccuracyInfo>>>, StatusCode> {
+    // Получаем список активных циклов
+    let (tx_list, rx_list) = oneshot::channel();
+    state
+        .supervisor_handle
+        .send(SupervisorCommand::ListActive {
+            respond_to: tx_list,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let symbols = rx_list
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Получаем accuracy для каждого символа
+    let mut accuracies = Vec::new();
+
+    for symbol in symbols {
+        let (tx, rx) = oneshot::channel();
+
+        let _ = state
+            .counter_handle
+            .send(CounterCommand::GetShiftedAccuracy {
+                symbol: symbol.clone(),
+                window: query.window,
+                respond_to: tx,
+            })
+            .await;
+
+        if let Ok(Some(accuracy)) = rx.await {
+            accuracies.push(AccuracyInfo {
+                symbol,
+                accuracy,
+                window: query.window,
+            });
+        }
+    }
+
+    Ok(Json(ApiResponse::success(accuracies)))
 }

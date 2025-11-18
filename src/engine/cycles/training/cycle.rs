@@ -1,8 +1,12 @@
+// ============================================================================
+// training/cycle.rs
+// ============================================================================
 use chrono::{Local, Timelike};
 use sqlx::PgPool;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::{sync::Mutex as tokio_mutex, task::spawn_blocking, time::sleep};
+use tokio::sync::{mpsc, oneshot};
+use tokio::{sync::Mutex as TokioMutex, task::spawn_blocking, time::sleep};
 
 use crate::data::data_interfaces::{FlattenedData, ICandle};
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
@@ -10,7 +14,7 @@ use crate::data::process::target::{process_target, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::database::db_req::{insert_candle, select_all_candles};
-use crate::engine::state::counters::*;
+use crate::engine::cycles::manager::CounterCommand;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
@@ -44,8 +48,8 @@ impl TrainingCycle {
 
     pub async fn run(
         &mut self,
-        model: &Arc<Mutex<RFInterface>>,
-        counters: Arc<tokio_mutex<Counters>>,
+        model: &Arc<TokioMutex<RFInterface>>,
+        counter_tx: &mpsc::Sender<CounterCommand>,
     ) {
         if self.config.prints.volatility {
             let candles1d_to_vol: Vec<ICandle> =
@@ -55,7 +59,6 @@ impl TrainingCycle {
 
         let mut target_indicate: Option<bool> = None;
         let mut prediction: Option<f64> = None;
-        let counters_to_loop: Arc<tokio_mutex<Counters>> = counters.clone();
 
         loop {
             self.wait_for_next_interval().await;
@@ -82,13 +85,10 @@ impl TrainingCycle {
                     );
                 }
 
-                self.update_counters(
-                    prediction.unwrap(),
-                    target.unwrap(),
-                    counters_to_loop.clone(),
-                )
-                .await
-                .unwrap();
+                self.update_counters(prediction.unwrap(), target.unwrap(), counter_tx)
+                    .await
+                    .unwrap();
+
                 if !success {
                     let last_grouped: CollectedData =
                         self.last_grouped_candles.as_ref().unwrap().clone();
@@ -96,7 +96,7 @@ impl TrainingCycle {
                         spawn_blocking(move || flat_all(last_grouped, target))
                             .await
                             .unwrap(),
-                        counters_to_loop.clone(),
+                        counter_tx,
                         model,
                         &self.pool,
                     )
@@ -120,7 +120,7 @@ impl TrainingCycle {
             self.last_candles_target = Some(candles_target);
 
             if self.config.prints.accuracy {
-                self.print_accuracy(counters_to_loop.clone()).await;
+                self.print_accuracy(counter_tx).await;
             }
         }
     }
@@ -161,14 +161,14 @@ impl TrainingCycle {
     async fn predict(
         &self,
         flattened_candles: FlattenedData,
-        model: &Arc<Mutex<RFInterface>>,
+        model: &Arc<TokioMutex<RFInterface>>,
     ) -> Result<f64, String> {
         if !flattened_candles.is_there_a_target() {
-            let model_clone: Arc<Mutex<RFInterface>> = model.clone();
+            let model_clone: Arc<TokioMutex<RFInterface>> = model.clone();
             let features: Vec<f64> = flattened_candles.features;
             let token: String = flattened_candles.token;
             let pred: f64 = spawn_blocking(move || {
-                let model_guard = model_clone.lock().unwrap();
+                let model_guard = model_clone.blocking_lock();
                 model_guard.predict(features, Some(&token)).unwrap_or(0.0)
             })
             .await
@@ -185,16 +185,19 @@ impl TrainingCycle {
         &self,
         prediction: f64,
         target: f64,
-        counters: Arc<tokio_mutex<Counters>>,
+        counter_tx: &mpsc::Sender<CounterCommand>,
     ) -> Result<(), ()> {
         let diff: f64 = (prediction - target).abs();
         let success_threshold: f64 = self.config.data.success_threshold;
-        let mut mut_counters = counters.lock().await;
 
-        if diff < success_threshold {
-            mut_counters.total.data.push_back(1);
-            mut_counters.get_mut(&self.symbol).data.push_back(1);
-        }
+        let value = if diff < success_threshold { 1 } else { 0 };
+
+        let _ = counter_tx
+            .send(CounterCommand::Increment {
+                symbol: self.symbol.clone(),
+                value,
+            })
+            .await;
 
         Ok(())
     }
@@ -202,8 +205,8 @@ impl TrainingCycle {
     async fn handle_mistake(
         &self,
         flattened_candles: FlattenedData,
-        counters: Arc<tokio_mutex<Counters>>,
-        model: &Arc<Mutex<RFInterface>>,
+        counter_tx: &mpsc::Sender<CounterCommand>,
+        model: &Arc<TokioMutex<RFInterface>>,
         pool: &PgPool,
     ) -> Result<(), ()> {
         if flattened_candles.is_there_a_target() {
@@ -218,13 +221,18 @@ impl TrainingCycle {
             .await
             .unwrap();
 
-            let mut mut_counters = counters.lock().await;
-            mut_counters.total.data.push_back(0);
-            mut_counters.get_mut(&self.symbol).data.push_back(0);
-            let check: u16 = mut_counters.total.data.iter().map(|&v| v as u16).sum();
-            if check != 0 && check % 10 == 0 {
-                self.train_model(pool, model).await
+            // Получаем текущую сумму для проверки
+            let (tx, rx) = oneshot::channel();
+            let _ = counter_tx
+                .send(CounterCommand::GetTotalLen { respond_to: tx })
+                .await;
+
+            if let Ok(total_len) = rx.await {
+                if total_len != 0 && total_len % 10 == 0 {
+                    self.train_model(pool, model).await;
+                }
             }
+
             Ok(())
         } else {
             Err(())
@@ -266,14 +274,25 @@ impl TrainingCycle {
         }
     }
 
-    async fn print_accuracy(&self, counters: Arc<tokio_mutex<Counters>>) {
-        let mut mut_counters = counters.lock().await;
-        if !mut_counters.total.data.is_empty()
-            && !mut_counters.get_mut(&self.symbol).data.is_empty()
-        {
-            let local_acc = mut_counters.get_mut(&self.symbol).get_accuracy();
-            let global_acc = mut_counters.total.get_accuracy();
+    async fn print_accuracy(&self, counter_tx: &mpsc::Sender<CounterCommand>) {
+        // Получаем локальную точность
+        let (tx_local, rx_local) = oneshot::channel();
+        let _ = counter_tx
+            .send(CounterCommand::GetAccuracy {
+                symbol: self.symbol.clone(),
+                respond_to: tx_local,
+            })
+            .await;
 
+        // Получаем глобальную точность
+        let (tx_global, rx_global) = oneshot::channel();
+        let _ = counter_tx
+            .send(CounterCommand::GetTotalAccuracy {
+                respond_to: tx_global,
+            })
+            .await;
+
+        if let (Ok(Some(local_acc)), Ok(global_acc)) = (rx_local.await, rx_global.await) {
             println!(
                 "{}{} {}L ACC {:.2}% | G ACC {:.2}%",
                 self.print_time(),
@@ -283,29 +302,55 @@ impl TrainingCycle {
                 global_acc
             );
 
-            if mut_counters.total.data.len() >= 96 {
-                let day_local_acc = mut_counters
-                    .get_mut(&self.symbol)
-                    .get_shifted_accuracy(96)
-                    .unwrap_or(0.0);
-                let day_global_acc = mut_counters.total.get_shifted_accuracy(96).unwrap_or(0.0);
-                println!(
-                    "\n{}{} {}DAY L ACC {:.2}% | DAY G ACC {:.2}%",
-                    self.print_time(),
-                    self.print_symbol,
-                    Fore::WHITE.as_str(),
-                    day_local_acc,
-                    day_global_acc
-                );
+            // Проверяем длину для дневной статистики
+            let (tx_len, rx_len) = oneshot::channel();
+            let _ = counter_tx
+                .send(CounterCommand::GetTotalLen { respond_to: tx_len })
+                .await;
+
+            if let Ok(total_len) = rx_len.await {
+                if total_len >= 96 {
+                    // Получаем дневную локальную точность
+                    let (tx_day_local, rx_day_local) = oneshot::channel();
+                    let _ = counter_tx
+                        .send(CounterCommand::GetShiftedAccuracy {
+                            symbol: self.symbol.clone(),
+                            window: 96,
+                            respond_to: tx_day_local,
+                        })
+                        .await;
+
+                    // Получаем дневную глобальную точность
+                    let (tx_day_global, rx_day_global) = oneshot::channel();
+                    let _ = counter_tx
+                        .send(CounterCommand::GetTotalShiftedAccuracy {
+                            window: 96,
+                            respond_to: tx_day_global,
+                        })
+                        .await;
+
+                    if let (Ok(Some(day_local_acc)), Ok(Some(day_global_acc))) =
+                        (rx_day_local.await, rx_day_global.await)
+                    {
+                        println!(
+                            "\n{}{} {}DAY L ACC {:.2}% | DAY G ACC {:.2}%",
+                            self.print_time(),
+                            self.print_symbol,
+                            Fore::WHITE.as_str(),
+                            day_local_acc,
+                            day_global_acc
+                        );
+                    }
+                }
             }
         }
     }
 
-    async fn train_model(&self, pool: &PgPool, model: &Arc<Mutex<RFInterface>>) {
+    async fn train_model(&self, pool: &PgPool, model: &Arc<TokioMutex<RFInterface>>) {
         let data = select_all_candles(pool).await.unwrap();
         let model_clone = model.clone();
         spawn_blocking(move || {
-            let mut model_guard = model_clone.lock().unwrap();
+            let mut model_guard = model_clone.blocking_lock();
             model_guard
                 .train(data)
                 .expect("The model faced a problem with learning");

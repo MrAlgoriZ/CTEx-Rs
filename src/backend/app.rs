@@ -2,17 +2,18 @@ use crate::{
     CONFIG_PATH,
     backend::{
         commands,
-        stucture::{ApiState, ApiStructure},
+        structure::{ApiState, ApiStructure},
     },
     engine::{
-        cycles::manager::CycleManager, state::counters::Counters,
+        cycles::manager::{CounterCommand, SupervisorCommand},
         utils::config::load_config::load_config,
     },
 };
-
-use axum::{Router, routing::get};
-use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use axum::{
+    Router,
+    routing::{delete, get, post},
+};
+use tokio::sync::mpsc;
 
 pub struct Api {
     listener: tokio::net::TcpListener,
@@ -20,31 +21,58 @@ pub struct Api {
 }
 
 impl Api {
-    pub async fn new(manager: Arc<RwLock<CycleManager>>, counters: Arc<Mutex<Counters>>) -> Self {
+    pub async fn new(
+        supervisor_handle: mpsc::Sender<SupervisorCommand>,
+        counter_handle: mpsc::Sender<CounterCommand>,
+    ) -> Self {
+        let config = load_config(CONFIG_PATH);
+        let listener = tokio::net::TcpListener::bind(&config.backend.listener)
+            .await
+            .expect(&format!("Failed to bind to {}", config.backend.listener));
+
+        println!("API слушает на {}", config.backend.listener);
+
         Api {
-            listener: tokio::net::TcpListener::bind(load_config(CONFIG_PATH).backend.listener)
-                .await
-                .unwrap(),
-            app: Self::init_app(manager, counters).await,
+            listener,
+            app: Self::init_app(supervisor_handle, counter_handle),
         }
     }
 
-    pub async fn init_app(
-        manager: Arc<RwLock<CycleManager>>,
-        counters: Arc<Mutex<Counters>>,
+    fn init_app(
+        supervisor_handle: mpsc::Sender<SupervisorCommand>,
+        counter_handle: mpsc::Sender<CounterCommand>,
     ) -> Router {
         let structure = ApiStructure::default();
-        let state = ApiState { manager, counters };
+        let state = ApiState {
+            supervisor_handle,
+            counter_handle,
+        };
 
         Router::new()
+            // Информационные эндпоинты
             .route(&structure.root, get(commands::root))
-            .route(&structure.active_tokens, get(commands::tokens))
-            .route(&structure.total_accuracy, get(commands::total_accuracy))
-            .route(&structure.token_accuracy, get(commands::token_accuracy))
+            .route(&structure.health, get(commands::health))
+            // Управление циклами
+            .route(&structure.cycles_list, get(commands::cycles_list))
+            .route(&structure.cycle_add, post(commands::cycle_add))
+            .route(&structure.cycle_stop, delete(commands::cycle_stop))
+            .route(
+                &structure.cycles_stop_all,
+                delete(commands::cycles_stop_all),
+            )
+            // Метрики и статистика
+            .route(&structure.accuracy_total, get(commands::accuracy_total))
+            .route(&structure.accuracy_token, get(commands::accuracy_token))
+            .route(
+                &structure.accuracy_all_tokens,
+                get(commands::accuracy_all_tokens),
+            )
             .with_state(state)
     }
 
     pub async fn run(self) {
-        axum::serve(self.listener, self.app).await.unwrap();
+        axum::serve(self.listener, self.app)
+            .await
+            .expect("API server failed");
     }
 }
