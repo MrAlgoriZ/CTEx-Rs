@@ -94,12 +94,18 @@ impl CounterActor {
     }
 
     async fn run(mut self) {
-        println!(
-            "{}[{}] {}CounterActor запущен",
-            Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S"),
-            Fore::CYAN.as_str()
-        );
+        if load_config(CONFIG_PATH)
+            .prints
+            .manager
+            .additional_manager_prints
+        {
+            println!(
+                "{}[{}] {}CounterActor запущен",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                Fore::CYAN.as_str()
+            );
+        }
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
@@ -141,12 +147,18 @@ impl CounterActor {
             }
         }
 
-        println!(
-            "{}[{}] {}CounterActor остановлен",
-            Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S"),
-            Fore::YELLOW.as_str()
-        );
+        if load_config(CONFIG_PATH)
+            .prints
+            .manager
+            .additional_manager_prints
+        {
+            println!(
+                "{}[{}] {}CounterActor остановлен",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                Fore::YELLOW.as_str()
+            );
+        }
     }
 }
 
@@ -160,13 +172,15 @@ impl WorkerHandle {
     async fn stop(self) {
         let _ = self.shutdown_tx.send(()).await;
         let _ = self.task.await;
-        println!(
-            "{}[{}] {}Worker {} остановлен",
-            Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S"),
-            Fore::YELLOW.as_str(),
-            self.symbol
-        );
+        if load_config(CONFIG_PATH).prints.manager.manager_init {
+            println!(
+                "{}[{}] {}Worker {} остановлен",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                Fore::YELLOW.as_str(),
+                self.symbol
+            );
+        }
     }
 }
 
@@ -196,12 +210,18 @@ impl CycleSupervisor {
     }
 
     async fn run(mut self) {
-        println!(
-            "{}[{}] {}Supervisor запущен",
-            Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S"),
-            Fore::CYAN.as_str()
-        );
+        if load_config(CONFIG_PATH)
+            .prints
+            .manager
+            .additional_manager_prints
+        {
+            println!(
+                "{}[{}] {}Supervisor запущен",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                Fore::CYAN.as_str()
+            );
+        }
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
@@ -231,12 +251,18 @@ impl CycleSupervisor {
             }
         }
 
-        println!(
-            "{}[{}] {}Supervisor остановлен",
-            Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S"),
-            Fore::YELLOW.as_str()
-        );
+        if load_config(CONFIG_PATH)
+            .prints
+            .manager
+            .additional_manager_prints
+        {
+            println!(
+                "{}[{}] {}Supervisor остановлен",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                Fore::YELLOW.as_str()
+            );
+        }
     }
 
     async fn start_worker(&mut self, symbol: String, cycle_type: CycleType) -> Result<(), String> {
@@ -266,14 +292,16 @@ impl CycleSupervisor {
             },
         );
 
-        println!(
-            "{}[{}] {}Worker {} запущен ({:?})",
-            Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S"),
-            Fore::GREEN.as_str(),
-            symbol,
-            cycle_type
-        );
+        if load_config(CONFIG_PATH).prints.manager.manager_init {
+            println!(
+                "{}[{}] {}Worker {} запущен ({:?})",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                Fore::GREEN.as_str(),
+                symbol,
+                cycle_type
+            );
+        }
         Ok(())
     }
 
@@ -304,26 +332,30 @@ impl CycleSupervisor {
         loop {
             tokio::select! {
                 _ = shutdown_rx.recv() => {
-                    println!(
-                        "{}[{}] {}Worker {} получил сигнал остановки",
-                        Fore::WHITE.as_str(),
-                        Local::now().format("%H:%M:%S"),
-                        Fore::YELLOW.as_str(),
-                        symbol
-                    );
+                    if load_config(CONFIG_PATH).prints.manager.manager_init {
+                        println!(
+                            "{}[{}] {}Worker {} получил сигнал остановки",
+                            Fore::WHITE.as_str(),
+                            Local::now().format("%H:%M:%S"),
+                            Fore::YELLOW.as_str(),
+                            symbol
+                        );
+                    }
                     break;
                 }
 
                 result = Self::run_cycle_once(&symbol, cycle_type, &model, &counter_tx) => {
                     match result {
                         Ok(_) => {
-                            println!(
-                                "{}[{}] {}Worker {} завершился нормально",
-                                Fore::WHITE.as_str(),
-                                Local::now().format("%H:%M:%S"),
-                                Fore::GREEN.as_str(),
-                                symbol
-                            );
+                            if load_config(CONFIG_PATH).prints.manager.manager_init {
+                                println!(
+                                    "{}[{}] {}Worker {} завершился нормально",
+                                    Fore::WHITE.as_str(),
+                                    Local::now().format("%H:%M:%S"),
+                                    Fore::GREEN.as_str(),
+                                    symbol
+                                );
+                            }
                             break;
                         }
                         Err(e) => {
@@ -430,14 +462,16 @@ impl CycleManager {
             self.add_cycle(symbol.clone(), *cycle_type).await?;
         }
 
-        println!(
-            "{}[{}] {}Запущено {} циклов: {}",
-            Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S"),
-            Fore::CYAN.as_str(),
-            symbols.len(),
-            symbols.join(", ")
-        );
+        if load_config(CONFIG_PATH).prints.manager.manager_init {
+            println!(
+                "{}[{}] {}Запущено {} циклов: {}",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                Fore::CYAN.as_str(),
+                symbols.len(),
+                symbols.join(", ")
+            );
+        }
 
         Ok(())
     }

@@ -30,8 +30,6 @@ impl Api {
             .await
             .expect(&format!("Failed to bind to {}", config.backend.listener));
 
-        println!("API слушает на {}", config.backend.listener);
-
         Api {
             listener,
             app: Self::init_app(supervisor_handle, counter_handle),
@@ -51,7 +49,6 @@ impl Api {
         Router::new()
             .route(&structure.root, get(commands::root))
             .route(&structure.health, get(commands::health))
-            
             .route(&structure.cycles_list, get(commands::cycles_list))
             .route(&structure.cycle_add, post(commands::cycle_add))
             .route(&structure.cycle_stop, delete(commands::cycle_stop))
@@ -59,7 +56,6 @@ impl Api {
                 &structure.cycles_stop_all,
                 delete(commands::cycles_stop_all),
             )
-            
             .route(&structure.accuracy_total, get(commands::accuracy_total))
             .route(&structure.accuracy_token, get(commands::accuracy_token))
             .route(

@@ -15,13 +15,17 @@ data:
   accuracy_capacity: 192
 
 prints:
-  volatility: true
-  cycle_start: false
-  model_evualate: true
-  price: false
-  target: true
-  prediction: true
-  accuracy: true
+  model_evualate: false
+  cycle:
+    volatility: true
+    cycle_start: false
+    price: false
+    target: true
+    prediction: true
+    accuracy: true
+  manager:
+    manager_init: true
+    additional_manager_prints: true
 
 token:
   - BTCUSDT

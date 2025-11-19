@@ -40,7 +40,7 @@ impl LoaderCycle {
     }
 
     pub async fn run(&mut self) {
-        if self.config.prints.volatility {
+        if self.config.prints.cycle.volatility {
             let candles1d_to_vol: Vec<ICandle> =
                 self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
             self.print_volatility_status(&candles1d_to_vol);
@@ -58,7 +58,7 @@ impl LoaderCycle {
                 let target: Option<f64> =
                     process_target(self.last_candles_target.unwrap(), candles_target);
 
-                if self.config.prints.target {
+                if self.config.prints.cycle.target {
                     println!(
                         "{}{} {}Target: {:.5}",
                         self.print_time(),
@@ -115,7 +115,7 @@ impl LoaderCycle {
 
         sleep(Duration::from_secs(2)).await;
 
-        if self.config.prints.cycle_start {
+        if self.config.prints.cycle.cycle_start {
             println!("{}{} Цикл запустился", self.print_time(), self.print_symbol);
         }
     }

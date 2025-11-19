@@ -48,7 +48,7 @@ impl TrainingCycle {
         model: &Arc<TokioMutex<RFInterface>>,
         counter_tx: &mpsc::Sender<CounterCommand>,
     ) {
-        if self.config.prints.volatility {
+        if self.config.prints.cycle.volatility {
             let candles1d_to_vol: Vec<ICandle> =
                 self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
             self.print_volatility_status(&candles1d_to_vol);
@@ -70,7 +70,7 @@ impl TrainingCycle {
                 let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
                 let success: bool = diff < self.config.data.success_threshold;
 
-                if self.config.prints.target {
+                if self.config.prints.cycle.target {
                     println!(
                         "{}{} {}Pred: {:.5} | Target: {:.5} | Diff {:.5}",
                         self.print_time(),
@@ -116,7 +116,7 @@ impl TrainingCycle {
             self.last_grouped_candles = Some(candles);
             self.last_candles_target = Some(candles_target);
 
-            if self.config.prints.accuracy {
+            if self.config.prints.cycle.accuracy {
                 self.print_accuracy(counter_tx).await;
             }
         }
@@ -150,7 +150,7 @@ impl TrainingCycle {
 
         sleep(Duration::from_secs(2)).await;
 
-        if self.config.prints.cycle_start {
+        if self.config.prints.cycle.cycle_start {
             println!("{}{} Цикл запустился", self.print_time(), self.print_symbol);
         }
     }
@@ -236,7 +236,7 @@ impl TrainingCycle {
     }
 
     fn log_prediction(&self, prediction: f64, price: f64) {
-        if self.config.prints.prediction {
+        if self.config.prints.cycle.prediction {
             let str_prediction: String;
             if prediction > 0.0 {
                 str_prediction = format!(
@@ -260,7 +260,7 @@ impl TrainingCycle {
             );
         }
 
-        if self.config.prints.price {
+        if self.config.prints.cycle.price {
             println!(
                 "{}{} Предполагаемая цена: {:.7}",
                 self.print_time(),
