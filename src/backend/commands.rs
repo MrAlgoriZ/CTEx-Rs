@@ -123,6 +123,13 @@ pub async fn cycle_add(
         return Ok(Json(ApiResponse::error("Неверный пароль".to_string())));
     }
 
+    if !state.client.test_token(&payload.symbol).await.is_ok() {
+        return Ok(Json(ApiResponse::error(format!(
+            "Токена {} не существует",
+            payload.symbol
+        ))));
+    }
+
     let cycle_type = match payload.cycle_type.to_lowercase().as_str() {
         "training" => CycleType::Training,
         "loader" => CycleType::Loader,

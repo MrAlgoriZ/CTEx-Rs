@@ -1,3 +1,4 @@
+use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::{
     CONFIG_PATH,
     backend::{
@@ -13,6 +14,7 @@ use axum::{
     Router,
     routing::{delete, get, post},
 };
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 pub struct Api {
@@ -32,18 +34,20 @@ impl Api {
 
         Api {
             listener,
-            app: Self::init_app(supervisor_handle, counter_handle),
+            app: Self::init_app(supervisor_handle, counter_handle).await,
         }
     }
 
-    fn init_app(
+    async fn init_app(
         supervisor_handle: mpsc::Sender<SupervisorCommand>,
         counter_handle: mpsc::Sender<CounterCommand>,
     ) -> Router {
         let structure = ApiStructure::default();
+        let client = Arc::new(BinanceClient::new().await);
         let state = ApiState {
             supervisor_handle,
             counter_handle,
+            client,
         };
 
         Router::new()

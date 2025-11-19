@@ -1,11 +1,16 @@
-use crate::engine::cycles::manager::{CounterCommand, SupervisorCommand};
+use crate::{
+    data::requests::ccxt::binance::BinanceClient,
+    engine::cycles::manager::{CounterCommand, SupervisorCommand},
+};
 use serde::Serialize;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 #[derive(Clone)]
 pub struct ApiState {
     pub supervisor_handle: mpsc::Sender<SupervisorCommand>,
     pub counter_handle: mpsc::Sender<CounterCommand>,
+    pub client: Arc<BinanceClient>,
 }
 
 #[derive(Debug, Serialize)]
