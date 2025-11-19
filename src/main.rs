@@ -10,8 +10,7 @@ use crate::{
     },
 };
 
-use std::{collections::HashMap, sync::Arc};
-use tokio::sync::Mutex;
+use std::collections::HashMap;
 
 const CONFIG_PATH: &'static str = "config/config.yaml";
 
@@ -31,19 +30,16 @@ async fn main() {
 
     let mut manager = CycleManager::new().await;
 
-    // Запускаем циклы
     manager.run_all(symbols, cycle_types).await.unwrap();
 
     let counter_handle = manager.counter_handle();
     let supervisor_handle = manager.supervisor_handle();
 
-    // API с обоими handles
     let api = Api::new(supervisor_handle, counter_handle).await;
     let api_task = tokio::spawn(async move {
         api.run().await;
     });
 
-    // Ожидание завершения или Ctrl+C
     tokio::select! {
         _ = api_task => println!("API завершилось!"),
         _ = tokio::signal::ctrl_c() => {

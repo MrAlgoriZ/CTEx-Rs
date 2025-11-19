@@ -49,10 +49,9 @@ impl Api {
         };
 
         Router::new()
-            // Информационные эндпоинты
             .route(&structure.root, get(commands::root))
             .route(&structure.health, get(commands::health))
-            // Управление циклами
+            
             .route(&structure.cycles_list, get(commands::cycles_list))
             .route(&structure.cycle_add, post(commands::cycle_add))
             .route(&structure.cycle_stop, delete(commands::cycle_stop))
@@ -60,7 +59,7 @@ impl Api {
                 &structure.cycles_stop_all,
                 delete(commands::cycles_stop_all),
             )
-            // Метрики и статистика
+            
             .route(&structure.accuracy_total, get(commands::accuracy_total))
             .route(&structure.accuracy_token, get(commands::accuracy_token))
             .route(

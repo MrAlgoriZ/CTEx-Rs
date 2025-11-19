@@ -45,39 +45,37 @@ impl LoaderCycle {
                 self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
             self.print_volatility_status(&candles1d_to_vol);
         }
+
         let mut target_indicate: Option<bool> = None;
 
         loop {
             self.wait_for_next_interval().await;
-            let candles = collect_all(&self.symbol).await;
+            let candles: CollectedData = collect_all(&self.symbol).await;
             let candles_target: f64 =
                 self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;
 
             if target_indicate == Some(true) {
-                let target = process_target(self.last_candles_target.unwrap(), candles_target);
+                let target: Option<f64> =
+                    process_target(self.last_candles_target.unwrap(), candles_target);
 
                 if self.config.prints.target {
                     println!(
-                        "{}[{}] {} {}Target: {:.5}",
-                        Fore::WHITE.as_str(),
-                        Local::now().format("%H:%M:%S"),
+                        "{}{} {}Target: {:.5}",
+                        self.print_time(),
                         self.print_symbol,
                         Fore::WHITE.as_str(),
                         target.unwrap(),
                     );
                 }
 
-                let last_grouped = self.last_grouped_candles.as_ref().unwrap().clone();
-                let flatten = spawn_blocking(move || flat_all(last_grouped, target))
-                    .await
-                    .unwrap();
-                insert_candle(
+                let last_grouped: CollectedData =
+                    self.last_grouped_candles.as_ref().unwrap().clone();
+
+                self.save_data(
+                    spawn_blocking(move || flat_all(last_grouped, target))
+                        .await
+                        .unwrap(),
                     &self.pool,
-                    &self.symbol,
-                    &flatten
-                        .features
-                        .try_into()
-                        .expect("flattened candles len parse failed"),
                 )
                 .await
                 .unwrap();
@@ -91,11 +89,10 @@ impl LoaderCycle {
 
     // --- Методы ---
     fn print_volatility_status(&self, candles: &[ICandle]) {
-        let volatility = get_volatility(candles);
+        let volatility: f64 = get_volatility(candles);
         println!(
-            "{}[{}] {}Волатильность на токене {} составляет {:.5}",
-            Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S"),
+            "{}{}Волатильность на токене {} составляет {:.5}",
+            self.print_time(),
             Fore::YELLOW.as_str(),
             self.symbol,
             volatility
@@ -119,12 +116,37 @@ impl LoaderCycle {
         sleep(Duration::from_secs(2)).await;
 
         if self.config.prints.cycle_start {
-            println!(
-                "{}[{}] {} Цикл запустился",
-                Fore::WHITE.as_str(),
-                Local::now().format("%H:%M:%S"),
-                self.print_symbol,
-            );
+            println!("{}{} Цикл запустился", self.print_time(), self.print_symbol);
         }
+    }
+
+    async fn save_data(
+        &self,
+        flattened_candles: crate::data::data_interfaces::FlattenedData,
+        pool: &PgPool,
+    ) -> Result<(), ()> {
+        if flattened_candles.is_there_a_target() {
+            insert_candle(
+                pool,
+                &self.symbol,
+                &flattened_candles
+                    .features
+                    .try_into()
+                    .expect("flattened candles len parse failed"),
+            )
+            .await
+            .unwrap();
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    fn print_time(&self) -> String {
+        format!(
+            "{}[{}] ",
+            Fore::WHITE.as_str(),
+            Local::now().format("%H:%M:%S")
+        )
     }
 }

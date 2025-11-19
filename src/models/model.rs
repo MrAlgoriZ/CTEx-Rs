@@ -136,7 +136,6 @@ impl RFInterface {
         let x_train_scaled = scaler.transform(&x_train)?;
         let x_val_scaled = scaler.transform(&x_val)?;
 
-        // Store
         self.scaler = Some(scaler);
         self.x_train = Some(x_train_scaled.clone());
         self.x_val = Some(x_val_scaled.clone());

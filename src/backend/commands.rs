@@ -1,6 +1,3 @@
-// ============================================================================
-// backend/commands.rs
-// ============================================================================
 use crate::{
     CONFIG_PATH,
     backend::structure::{ApiState, ApiStructure},
@@ -15,9 +12,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
-// ============================================================================
-// ТИПЫ ЗАПРОСОВ И ОТВЕТОВ
-// ============================================================================
+fn verify_password(input: String) -> bool {
+    let cfg = load_config(CONFIG_PATH);
+    input == cfg.backend.admin_password
+}
 
 #[derive(Serialize)]
 pub struct ApiResponse<T> {
@@ -48,7 +46,8 @@ impl<T> ApiResponse<T> {
 pub struct AddCycleRequest {
     pub symbol: String,
     #[serde(rename = "type")]
-    pub cycle_type: String, // "loader" или "training"
+    pub cycle_type: String,
+    pub password: String,
 }
 
 #[derive(Deserialize)]
@@ -79,16 +78,15 @@ pub struct HealthStatus {
     pub version: String,
 }
 
-// ============================================================================
-// ИНФОРМАЦИОННЫЕ ЭНДПОИНТЫ
-// ============================================================================
+#[derive(Deserialize)]
+pub struct PasswordRequest {
+    pub password: String,
+}
 
-// GET /
 pub async fn root() -> Json<ApiResponse<ApiStructure>> {
     Json(ApiResponse::success(ApiStructure::default()))
 }
 
-// GET /health
 pub async fn health() -> Json<ApiResponse<HealthStatus>> {
     Json(ApiResponse::success(HealthStatus {
         status: "ok".to_string(),
@@ -96,11 +94,6 @@ pub async fn health() -> Json<ApiResponse<HealthStatus>> {
     }))
 }
 
-// ============================================================================
-// УПРАВЛЕНИЕ ЦИКЛАМИ
-// ============================================================================
-
-// GET /cycles
 pub async fn cycles_list(
     State(state): State<ApiState>,
 ) -> Result<Json<ApiResponse<Vec<CycleInfo>>>, StatusCode> {
@@ -122,12 +115,14 @@ pub async fn cycles_list(
     Ok(Json(ApiResponse::success(cycles)))
 }
 
-// POST /cycles
-// Body: { "symbol": "BTCUSDT", "type": "training" }
 pub async fn cycle_add(
     State(state): State<ApiState>,
     Json(payload): Json<AddCycleRequest>,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
+    if !verify_password(payload.password) {
+        return Ok(Json(ApiResponse::error("Неверный пароль".to_string())));
+    }
+
     let cycle_type = match payload.cycle_type.to_lowercase().as_str() {
         "training" => CycleType::Training,
         "loader" => CycleType::Loader,
@@ -160,11 +155,15 @@ pub async fn cycle_add(
     }
 }
 
-// DELETE /cycles/:symbol
 pub async fn cycle_stop(
     State(state): State<ApiState>,
     Path(symbol): Path<String>,
+    Json(payload): Json<PasswordRequest>,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
+    if !verify_password(payload.password) {
+        return Ok(Json(ApiResponse::error("Неверный пароль".to_string())));
+    }
+
     let (tx, rx) = oneshot::channel();
 
     state
@@ -186,10 +185,14 @@ pub async fn cycle_stop(
     }
 }
 
-// DELETE /cycles
 pub async fn cycles_stop_all(
     State(state): State<ApiState>,
+    Json(payload): Json<PasswordRequest>,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
+    if !verify_password(payload.password) {
+        return Ok(Json(ApiResponse::error("Неверный пароль".to_string())));
+    }
+
     let (tx, rx) = oneshot::channel();
 
     state
@@ -205,11 +208,6 @@ pub async fn cycles_stop_all(
     )))
 }
 
-// ============================================================================
-// МЕТРИКИ И СТАТИСТИКА
-// ============================================================================
-
-// GET /accuracy/total?window=100
 pub async fn accuracy_total(
     State(state): State<ApiState>,
     Query(query): Query<AccuracyQuery>,
@@ -233,7 +231,6 @@ pub async fn accuracy_total(
     Ok(Json(ApiResponse::success(accuracy)))
 }
 
-// GET /accuracy/:symbol?window=100
 pub async fn accuracy_token(
     State(state): State<ApiState>,
     Path(symbol): Path<String>,
@@ -259,12 +256,10 @@ pub async fn accuracy_token(
     Ok(Json(ApiResponse::success(accuracy)))
 }
 
-// GET /accuracy?window=100
 pub async fn accuracy_all_tokens(
     State(state): State<ApiState>,
     Query(query): Query<AccuracyQuery>,
 ) -> Result<Json<ApiResponse<Vec<AccuracyInfo>>>, StatusCode> {
-    // Получаем список активных циклов
     let (tx_list, rx_list) = oneshot::channel();
     state
         .supervisor_handle
@@ -278,7 +273,6 @@ pub async fn accuracy_all_tokens(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Получаем accuracy для каждого символа
     let mut accuracies = Vec::new();
 
     for symbol in symbols {

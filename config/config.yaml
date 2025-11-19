@@ -8,6 +8,7 @@ model:
 
 backend:
   listener: "0.0.0.0:3000"
+  admin_password: "123"
 
 data:
   success_threshold: 8.0
@@ -31,5 +32,5 @@ token:
   - XRPUSDT
   - SOLUSDT
 
-cycle_type: "training"
+cycle_type: "loader"
 mode: "log"

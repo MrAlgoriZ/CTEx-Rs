@@ -1,9 +1,5 @@
 const EPSILON: f64 = 1e-8;
 
-// pub fn close_return(close: f64, close_prev: f64) -> f64 {
-//     (close - close_prev) / close_prev
-// }
-
 pub fn spread_rel(ask: f64, bid: f64, mid: f64) -> f64 {
     ask - bid / mid
 }

@@ -11,12 +11,6 @@ const OHLCV_LEN: usize = 10;
 const OHLCV_FETCH_LEN: usize = 11;
 const FEATURES_LEN: usize = 70;
 
-/*
-   Symbol, sin & cos of time, ohclv, bid, ask, day_ohl, mean_price,
-   spread_rel, ohlcv_1h, ohlcv_1d, mid_price, pressure_side,
-   bid_ask_ratio, mid_distance_day_highlow, body, body_strength
-*/
-
 pub struct AddFeatures {
     ohlcv: [ICandle; OHLCV_LEN],
     ohlcv1h: [ICandle; OHLCV_LEN],

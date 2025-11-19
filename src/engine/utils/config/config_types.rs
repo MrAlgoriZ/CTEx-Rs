@@ -40,6 +40,7 @@ pub struct PrintsConfig {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BackendConfig {
     pub listener: String,
+    pub admin_password: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -59,6 +60,7 @@ impl Default for Config {
             },
             backend: BackendConfig {
                 listener: "0.0.0.0:3000".to_string(),
+                admin_password: "123".to_string(),
             },
             prints: PrintsConfig {
                 volatility: true,

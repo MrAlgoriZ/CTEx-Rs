@@ -1,6 +1,3 @@
-// ============================================================================
-// training/cycle.rs
-// ============================================================================
 use chrono::{Local, Timelike};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -221,7 +218,6 @@ impl TrainingCycle {
             .await
             .unwrap();
 
-            // Получаем текущую сумму для проверки
             let (tx, rx) = oneshot::channel();
             let _ = counter_tx
                 .send(CounterCommand::GetTotalLen { respond_to: tx })
@@ -275,7 +271,6 @@ impl TrainingCycle {
     }
 
     async fn print_accuracy(&self, counter_tx: &mpsc::Sender<CounterCommand>) {
-        // Получаем локальную точность
         let (tx_local, rx_local) = oneshot::channel();
         let _ = counter_tx
             .send(CounterCommand::GetAccuracy {
@@ -284,7 +279,6 @@ impl TrainingCycle {
             })
             .await;
 
-        // Получаем глобальную точность
         let (tx_global, rx_global) = oneshot::channel();
         let _ = counter_tx
             .send(CounterCommand::GetTotalAccuracy {
@@ -302,7 +296,6 @@ impl TrainingCycle {
                 global_acc
             );
 
-            // Проверяем длину для дневной статистики
             let (tx_len, rx_len) = oneshot::channel();
             let _ = counter_tx
                 .send(CounterCommand::GetTotalLen { respond_to: tx_len })
@@ -310,7 +303,6 @@ impl TrainingCycle {
 
             if let Ok(total_len) = rx_len.await {
                 if total_len >= 96 {
-                    // Получаем дневную локальную точность
                     let (tx_day_local, rx_day_local) = oneshot::channel();
                     let _ = counter_tx
                         .send(CounterCommand::GetShiftedAccuracy {
@@ -320,7 +312,6 @@ impl TrainingCycle {
                         })
                         .await;
 
-                    // Получаем дневную глобальную точность
                     let (tx_day_global, rx_day_global) = oneshot::channel();
                     let _ = counter_tx
                         .send(CounterCommand::GetTotalShiftedAccuracy {

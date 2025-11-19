@@ -1,6 +1,4 @@
-// ============================================================================
-// manager.rs
-// ============================================================================
+use chrono::Local;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,10 +13,6 @@ use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::models::model::{RFInterface, train_model};
-
-// ============================================================================
-// MESSAGES
-// ============================================================================
 
 #[derive(Debug)]
 pub enum SupervisorCommand {
@@ -82,10 +76,6 @@ impl CycleType {
     }
 }
 
-// ============================================================================
-// COUNTER ACTOR - Единственный владелец Counters
-// ============================================================================
-
 struct CounterActor {
     counters: Counters,
     inbox: mpsc::Receiver<CounterCommand>,
@@ -104,7 +94,12 @@ impl CounterActor {
     }
 
     async fn run(mut self) {
-        println!("{}CounterActor запущен", Fore::CYAN.as_str());
+        println!(
+            "{}[{}] {}CounterActor запущен",
+            Fore::WHITE.as_str(),
+            Local::now().format("%H:%M:%S"),
+            Fore::CYAN.as_str()
+        );
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
@@ -146,13 +141,14 @@ impl CounterActor {
             }
         }
 
-        println!("{}CounterActor остановлен", Fore::YELLOW.as_str());
+        println!(
+            "{}[{}] {}CounterActor остановлен",
+            Fore::WHITE.as_str(),
+            Local::now().format("%H:%M:%S"),
+            Fore::YELLOW.as_str()
+        );
     }
 }
-
-// ============================================================================
-// WORKER HANDLE
-// ============================================================================
 
 struct WorkerHandle {
     symbol: String,
@@ -164,13 +160,15 @@ impl WorkerHandle {
     async fn stop(self) {
         let _ = self.shutdown_tx.send(()).await;
         let _ = self.task.await;
-        println!("{}Worker {} остановлен", Fore::YELLOW.as_str(), self.symbol);
+        println!(
+            "{}[{}] {}Worker {} остановлен",
+            Fore::WHITE.as_str(),
+            Local::now().format("%H:%M:%S"),
+            Fore::YELLOW.as_str(),
+            self.symbol
+        );
     }
 }
-
-// ============================================================================
-// SUPERVISOR - Управляет жизненным циклом воркеров
-// ============================================================================
 
 struct CycleSupervisor {
     workers: HashMap<String, WorkerHandle>,
@@ -198,7 +196,12 @@ impl CycleSupervisor {
     }
 
     async fn run(mut self) {
-        println!("{}Supervisor запущен", Fore::CYAN.as_str());
+        println!(
+            "{}[{}] {}Supervisor запущен",
+            Fore::WHITE.as_str(),
+            Local::now().format("%H:%M:%S"),
+            Fore::CYAN.as_str()
+        );
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
@@ -228,7 +231,12 @@ impl CycleSupervisor {
             }
         }
 
-        println!("{}Supervisor остановлен", Fore::YELLOW.as_str());
+        println!(
+            "{}[{}] {}Supervisor остановлен",
+            Fore::WHITE.as_str(),
+            Local::now().format("%H:%M:%S"),
+            Fore::YELLOW.as_str()
+        );
     }
 
     async fn start_worker(&mut self, symbol: String, cycle_type: CycleType) -> Result<(), String> {
@@ -259,7 +267,9 @@ impl CycleSupervisor {
         );
 
         println!(
-            "{}Worker {} запущен ({:?})",
+            "{}[{}] {}Worker {} запущен ({:?})",
+            Fore::WHITE.as_str(),
+            Local::now().format("%H:%M:%S"),
             Fore::GREEN.as_str(),
             symbol,
             cycle_type
@@ -294,14 +304,26 @@ impl CycleSupervisor {
         loop {
             tokio::select! {
                 _ = shutdown_rx.recv() => {
-                    println!("{}Worker {} получил сигнал остановки", Fore::YELLOW.as_str(), symbol);
+                    println!(
+                        "{}[{}] {}Worker {} получил сигнал остановки",
+                        Fore::WHITE.as_str(),
+                        Local::now().format("%H:%M:%S"),
+                        Fore::YELLOW.as_str(),
+                        symbol
+                    );
                     break;
                 }
 
                 result = Self::run_cycle_once(&symbol, cycle_type, &model, &counter_tx) => {
                     match result {
                         Ok(_) => {
-                            println!("{}Worker {} завершился нормально", Fore::GREEN.as_str(), symbol);
+                            println!(
+                                "{}[{}] {}Worker {} завершился нормально",
+                                Fore::WHITE.as_str(),
+                                Local::now().format("%H:%M:%S"),
+                                Fore::GREEN.as_str(),
+                                symbol
+                            );
                             break;
                         }
                         Err(e) => {
@@ -326,7 +348,6 @@ impl CycleSupervisor {
         match cycle_type {
             CycleType::Loader => {
                 let mut cycle = LoaderCycle::new(symbol.to_string()).await;
-                println!("{}Запуск LoaderCycle для {}", Fore::CYAN.as_str(), symbol);
                 sleep(Duration::from_secs(10)).await;
                 cycle.run().await;
             }
@@ -337,7 +358,6 @@ impl CycleSupervisor {
                     .as_ref()
                     .expect("Model should be initialized for Training cycle");
 
-                println!("{}Запуск TrainingCycle для {}", Fore::CYAN.as_str(), symbol);
                 sleep(Duration::from_secs(10)).await;
                 cycle.run(model, counter_tx).await;
             }
@@ -345,10 +365,6 @@ impl CycleSupervisor {
         Ok(())
     }
 }
-
-// ============================================================================
-// PUBLIC API - Тонкая обертка над Supervisor
-// ============================================================================
 
 pub struct CycleManager {
     supervisor_tx: mpsc::Sender<SupervisorCommand>,
@@ -374,14 +390,6 @@ impl CycleManager {
         }
     }
 
-    pub fn with_cycle_types(self, _cycle_types: HashMap<String, CycleType>) -> Self {
-        self
-    }
-
-    pub fn with_counters(self, _counters: mpsc::Sender<CounterCommand>) -> Self {
-        self
-    }
-
     pub async fn run_all(
         &mut self,
         symbols: Vec<String>,
@@ -395,7 +403,6 @@ impl CycleManager {
         });
 
         if needs_model {
-            // Останавливаем текущий supervisor
             let (tx, rx) = oneshot::channel();
             self.supervisor_tx
                 .send(SupervisorCommand::StopAll { respond_to: tx })
@@ -403,7 +410,6 @@ impl CycleManager {
                 .map_err(|_| "Supervisor недоступен")?;
             let _ = rx.await;
 
-            // Инициализируем модель
             let pool = PgPool::connect(&load_env()[0])
                 .await
                 .map_err(|e| format!("DB connection error: {}", e))?;
@@ -411,12 +417,10 @@ impl CycleManager {
             train_model(&pool, &model).await;
             drop(pool);
 
-            // Запускаем новый supervisor с моделью
             let (supervisor, new_supervisor_tx) =
                 CycleSupervisor::new(Some(model), self.counter_tx.clone());
             let supervisor_task = tokio::spawn(supervisor.run());
 
-            // Обновляем handles
             self.supervisor_tx = new_supervisor_tx;
             self._supervisor_task = supervisor_task;
         }
@@ -427,7 +431,9 @@ impl CycleManager {
         }
 
         println!(
-            "{}Запущено {} циклов: {}",
+            "{}[{}] {}Запущено {} циклов: {}",
+            Fore::WHITE.as_str(),
+            Local::now().format("%H:%M:%S"),
             Fore::CYAN.as_str(),
             symbols.len(),
             symbols.join(", ")
@@ -449,39 +455,6 @@ impl CycleManager {
 
         rx.await
             .map_err(|_| "Нет ответа от Supervisor".to_string())?
-    }
-
-    pub async fn stop_cycle(&self, symbol: String) -> Result<(), String> {
-        let (tx, rx) = oneshot::channel();
-        self.supervisor_tx
-            .send(SupervisorCommand::StopCycle {
-                symbol,
-                respond_to: tx,
-            })
-            .await
-            .map_err(|_| "Supervisor недоступен".to_string())?;
-
-        rx.await
-            .map_err(|_| "Нет ответа от Supervisor".to_string())?
-    }
-
-    pub async fn stop_all(&self) -> Result<(), String> {
-        let (tx, rx) = oneshot::channel();
-        self.supervisor_tx
-            .send(SupervisorCommand::StopAll { respond_to: tx })
-            .await
-            .map_err(|_| "Supervisor недоступен".to_string())?;
-
-        rx.await.map_err(|_| "Нет ответа от Supervisor".to_string())
-    }
-
-    pub async fn active_cycles(&self) -> Vec<String> {
-        let (tx, rx) = oneshot::channel();
-        let _ = self
-            .supervisor_tx
-            .send(SupervisorCommand::ListActive { respond_to: tx })
-            .await;
-        rx.await.unwrap_or_default()
     }
 
     pub fn counter_handle(&self) -> mpsc::Sender<CounterCommand> {
