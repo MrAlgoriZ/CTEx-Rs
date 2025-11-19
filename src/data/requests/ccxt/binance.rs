@@ -124,4 +124,24 @@ impl BinanceClient {
             )
             .await;
     }
+
+    pub async fn test_token(&self, symbol: &str) -> Result<(), String> {
+        let token = symbol.to_string();
+
+        let result = self
+            .run_blocking(
+                move |market| match market.get_book_ticker(&token) {
+                    Ok(_) => Ok(Ok(())),
+                    Err(_) => Err(String::from("Token not found")),
+                },
+                Err(()),
+            )
+            .await;
+
+        if result.is_ok() {
+            return Ok(());
+        }
+
+        Err(String::from("Token not found"))
+    }
 }

@@ -91,8 +91,8 @@ impl Default for Config {
                 },
             },
             data: DataConfig {
-                success_threshold: 8.0,
-                accuracy_capacity: 96,
+                success_threshold: 2.0,
+                accuracy_capacity: 192,
             },
             token: vec!["BTCUSDT".to_string()],
             cycle_type: "trading".to_string(),

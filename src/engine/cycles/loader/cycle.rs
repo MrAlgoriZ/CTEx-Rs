@@ -40,6 +40,9 @@ impl LoaderCycle {
     }
 
     pub async fn run(&mut self) {
+        if !self.client.test_token(&self.symbol).await.is_ok() {
+            return;
+        }
         if self.config.prints.cycle.volatility {
             let candles1d_to_vol: Vec<ICandle> =
                 self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;

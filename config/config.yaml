@@ -36,5 +36,5 @@ token:
   - XRPUSDT
   - SOLUSDT
 
-cycle_type: "loader"
+cycle_type: "training"
 mode: "log"
