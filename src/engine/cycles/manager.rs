@@ -110,11 +110,14 @@ impl CounterActor {
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
                 CounterCommand::Increment { symbol, value } => {
-                    self.counters.total.data.push_back(value);
-                    self.counters.get_mut(&symbol).data.push_back(value);
+                    self.counters.total.push(value);
+                    self.counters.get_mut(&symbol.to_uppercase()).push(value);
                 }
                 CounterCommand::GetAccuracy { symbol, respond_to } => {
-                    let acc = self.counters.get_option(&symbol).map(|c| c.get_accuracy());
+                    let acc = self
+                        .counters
+                        .get_option(&symbol.to_uppercase())
+                        .map(|c| c.get_accuracy());
                     let _ = respond_to.send(acc);
                 }
                 CounterCommand::GetShiftedAccuracy {
@@ -124,7 +127,7 @@ impl CounterActor {
                 } => {
                     let acc = self
                         .counters
-                        .get_option(&symbol)
+                        .get_option(&symbol.to_uppercase())
                         .and_then(|c| c.get_shifted_accuracy(window));
                     let _ = respond_to.send(acc);
                 }

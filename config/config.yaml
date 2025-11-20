@@ -11,7 +11,7 @@ backend:
   admin_password: "123"
 
 data:
-  success_threshold: 8.0
+  success_threshold: 1.0
   accuracy_capacity: 192
 
 prints:
@@ -37,4 +37,4 @@ token:
   - SOLUSDT
 
 cycle_type: "training"
-mode: "log"
+mode: "print"

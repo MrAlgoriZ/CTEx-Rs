@@ -194,7 +194,7 @@ impl TrainingCycle {
 
         let _ = counter_tx
             .send(CounterCommand::Increment {
-                symbol: self.symbol.clone(),
+                symbol: self.symbol.to_uppercase().clone(),
                 value,
             })
             .await;
@@ -277,7 +277,7 @@ impl TrainingCycle {
         let (tx_local, rx_local) = oneshot::channel();
         let _ = counter_tx
             .send(CounterCommand::GetAccuracy {
-                symbol: self.symbol.clone(),
+                symbol: self.symbol.to_uppercase().clone(),
                 respond_to: tx_local,
             })
             .await;
@@ -298,45 +298,6 @@ impl TrainingCycle {
                 local_acc,
                 global_acc
             );
-
-            let (tx_len, rx_len) = oneshot::channel();
-            let _ = counter_tx
-                .send(CounterCommand::GetTotalLen { respond_to: tx_len })
-                .await;
-
-            if let Ok(total_len) = rx_len.await {
-                if total_len >= 96 {
-                    let (tx_day_local, rx_day_local) = oneshot::channel();
-                    let _ = counter_tx
-                        .send(CounterCommand::GetShiftedAccuracy {
-                            symbol: self.symbol.clone(),
-                            window: 96,
-                            respond_to: tx_day_local,
-                        })
-                        .await;
-
-                    let (tx_day_global, rx_day_global) = oneshot::channel();
-                    let _ = counter_tx
-                        .send(CounterCommand::GetTotalShiftedAccuracy {
-                            window: 96,
-                            respond_to: tx_day_global,
-                        })
-                        .await;
-
-                    if let (Ok(Some(day_local_acc)), Ok(Some(day_global_acc))) =
-                        (rx_day_local.await, rx_day_global.await)
-                    {
-                        println!(
-                            "\n{}{} {}DAY L ACC {:.2}% | DAY G ACC {:.2}%",
-                            self.print_time(),
-                            self.print_symbol,
-                            Fore::WHITE.as_str(),
-                            day_local_acc,
-                            day_global_acc
-                        );
-                    }
-                }
-            }
         }
     }
 

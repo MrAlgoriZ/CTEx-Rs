@@ -3,13 +3,22 @@ use std::collections::{HashMap, VecDeque};
 #[derive(Clone)]
 pub struct SymbolCounters<T> {
     pub data: VecDeque<T>,
+    capacity: usize,
 }
 
 impl<T> SymbolCounters<T> {
     fn new(capacity: usize) -> Self {
         SymbolCounters {
             data: VecDeque::with_capacity(capacity),
+            capacity,
         }
+    }
+
+    pub fn push(&mut self, value: T) {
+        if self.data.len() == self.capacity {
+            self.data.pop_front();
+        }
+        self.data.push_back(value);
     }
 }
 
@@ -54,14 +63,14 @@ impl Counters {
     }
 
     pub fn get_mut(&mut self, symbol: &str) -> &mut SymbolCounters<u8> {
-        let key = symbol.to_lowercase();
+        let key = symbol.to_uppercase();
         self.symbols
             .entry(key)
             .or_insert_with(|| SymbolCounters::new(self.capacity))
     }
 
     pub fn get_option(&self, symbol: &str) -> Option<&SymbolCounters<u8>> {
-        let key = symbol.to_lowercase();
+        let key = symbol.to_uppercase();
         self.symbols.get(&key)
     }
 }
