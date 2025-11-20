@@ -20,15 +20,14 @@
 
   - Data (настройка данных):
     - success_threshold: порог успешности обучения модели
+    - accuracy_capacity: сколько максимум успехов/ошибок будет помещаться в счетчиках
 
+  - Backend (настройка бекенда):
+    - listener: по какому ip и порту работает бекенд
+    - admin_password: захешированный пароль администратора
+     
   - Prints (настройка вывода):
-    - volatility: Выводить и обрабатывать ли волатильность токенов
-    - cycle_start: Выводить ли фразу "Цикл запустился" каждый раз, когда он запускается
-    - model_evualate: Выводить ли проверку точности модели
-    - price: Выводить ли предполагаемую цену (на основе таргета)
-    - target: Выводить ли таргет
-    - prediction: Выводить ли предикты модели
-    - accuracy: Выводить ли реальную точность модели на основе счетчиков
+    - Различные выводы, можете протестировать
 
   - Cycle type (настройка цикла): какой цикл запустить? (на выбор loader, training, в будущем больше вариантов)
 
@@ -39,8 +38,10 @@
       - ETHUSDT
       - BNBUSDT
       ```
-    Поддерживаемые токены: BTCUSDT, ETHUSDT, BNBUSDT, DOGEUSDT, ADAUSDT, XRPUSDT, SOLUSDT, DOTUSDT, AVAXUSDT, MATICUSDT, LINKUSDT, LTCUSDT, BCHUSDT, TRXUSDT, NEARUSDT, APTUSDT, TONUSDT, SUIUSDT, FILUSDT, FTMUSDT
-    Если вдруг вы захотите использовать токен, который не поддерживается, то ничего не произойдет, просто счет этого токена будет засчитываться в глобальный счетчик, что может вызвать неправильный дебаг, но глобально технических проблем не будет, просто будет искаженный вывод.
+    Поддерживаются все токены, которые есть на binance.
+    Если вдруг вы захотите использовать токен, который не поддерживается, то ничего не произойдет, токен остановит цикл в самом начале.
+  - Cycle_type: тип цикла (поддерживаются: "loader", "training")
+  - Mode: тип вывода ("log": без цвета, "print": с цветом)
 
 ## Подготовка базы данных
 Ваша таблица должна иметь определенное название (candles) и определенное количество столбцов, а именно 233 значений, где первое значение - Токен (String | TEXT), а последнее - target. Остальные имена столбцов не важны. (В будущем будет обновленно, чтобы можно было использовать любое значение, а также различные варианты загрузки датасета (помимо базы данных) )
@@ -69,56 +70,62 @@ cargo build --release && ./target/release/CTEx-Rs
 ### Структура проекта:
 ```
 ├── Cargo.lock
-├── Cargo.toml                          - Зависимости для сборки
-├── config/
-│   └── config.yaml                     - Основной конфиг
-├── LICENSE                             - Лицензия (проприетарная)
-├── README.md                           - Этот файл
-└── src/
-    ├── data/
-    │   ├── data_interfaces.rs          - Интерфейсы структур данных
+├── Cargo.toml
+├── config
+│   └── config.yaml
+├── LICENSE
+├── README.md
+└── src
+    ├── backend
+    │   ├── app.rs
+    │   ├── commands.rs
     │   ├── mod.rs
-    │   ├── process/
-    │   │   ├── data_collection.rs      - Обработка данных
-    │   │   ├── features.rs             - feature-engineering
+    │   ├── README.md
+    │   └── structure.rs
+    ├── data
+    │   ├── data_interfaces.rs
+    │   ├── mod.rs
+    │   ├── process
+    │   │   ├── data_collection.rs
+    │   │   ├── features.rs
     │   │   ├── mod.rs
-    │   │   ├── target.rs               - Обработка таргета
-    │   │   └── volatility.rs           - Обработка волатильности рынка
-    │   └── requests/
-    │       ├── ccxt/
-    │       │   ├── binance.rs          - Запросы к API бирж
+    │   │   ├── target.rs
+    │   │   └── volatility.rs
+    │   └── requests
+    │       ├── ccxt
+    │       │   ├── binance.rs
     │       │   └── mod.rs
-    │       ├── database/
-    │       │   ├── db_req.rs           - Запросы к базе данных
+    │       ├── database
+    │       │   ├── db_req.rs
     │       │   └── mod.rs
     │       ├── mod.rs
-    │       └── time_req.rs             - Обработка временных признаков
-    ├── engine/
-    │   ├── cycles/                     - Основные циклы
-    │   │   ├── loader/                 - Загрузочный цикл (просто загружает данные в бд)
+    │       └── time_req.rs
+    ├── engine
+    │   ├── cycles
+    │   │   ├── loader
     │   │   │   ├── cycle.rs
     │   │   │   └── mod.rs
-    │   │   ├── manager.rs              - Менеджер циклов (удобный запуск)
+    │   │   ├── manager.rs
     │   │   ├── mod.rs
-    │   │   └── trading/                - Торговый цикл (на данный момент используется для тренировки нейросети, в будущем также и для торговли)
+    │   │   └── training
     │   │       ├── cycle.rs
     │   │       └── mod.rs
     │   ├── mod.rs
-    │   ├── state/
-    │   │   ├── counters.rs             - Счетчики для отображения точности какого-либо торгового цикла
+    │   ├── state
+    │   │   ├── counters.rs
     │   │   └── mod.rs
-    │   └── utils/
-    │       ├── colors.rs               - Утилита для цветного вывода
-    │       ├── config/
-    │       │   ├── config_types.rs     - Типы для парсинга конфига
-    │       │   ├── load_config.rs      - Парсинг конфига
-    │       │   ├── load_env.rs         - Парсинг переменных окружения
+    │   └── utils
+    │       ├── colors.rs
+    │       ├── config
+    │       │   ├── config_types.rs
+    │       │   ├── load_config.rs
+    │       │   ├── load_env.rs
     │       │   └── mod.rs
     │       ├── mod.rs
-    │       └── processor.rs            - Другая обработка данных (например приведение к одному процентному соотношению)
-    ├── main.rs                         - Точка входа
-    └── models/
-        ├── model.rs                    - Модель RandomForestRegressor с удобной реализацией в виде RFInterface
+    │       └── processor.rs
+    ├── main.rs
+    └── models
+        ├── model.rs
         └── mod.rs
 ```
 ## Лицензия
