@@ -223,11 +223,15 @@ impl TrainingCycle {
 
             let (tx, rx) = oneshot::channel();
             let _ = counter_tx
-                .send(CounterCommand::GetTotalLen { respond_to: tx })
+                .send(CounterCommand::GetShiftedAccuracy {
+                    symbol: self.symbol.clone(),
+                    window: 2,
+                    respond_to: tx,
+                })
                 .await;
 
-            if let Ok(total_len) = rx.await {
-                if total_len != 0 && total_len % 10 == 0 {
+            if let Ok(shifted_acc) = rx.await {
+                if shifted_acc.unwrap_or(0.0) == 0.0 {
                     self.train_model(pool, model).await;
                 }
             }

@@ -55,9 +55,6 @@ pub enum CounterCommand {
         window: usize,
         respond_to: oneshot::Sender<Option<f64>>,
     },
-    GetTotalLen {
-        respond_to: oneshot::Sender<usize>,
-    },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -142,10 +139,6 @@ impl CounterActor {
                 CounterCommand::GetTotalShiftedAccuracy { window, respond_to } => {
                     let acc = self.counters.total.get_shifted_accuracy(window);
                     let _ = respond_to.send(acc);
-                }
-                CounterCommand::GetTotalLen { respond_to } => {
-                    let len = self.counters.total.data.len();
-                    let _ = respond_to.send(len);
                 }
             }
         }
