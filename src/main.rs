@@ -35,15 +35,20 @@ async fn main() {
     let counter_handle = manager.counter_handle();
     let supervisor_handle = manager.supervisor_handle();
 
-    let api = Api::new(supervisor_handle, counter_handle).await;
-    let api_task = tokio::spawn(async move {
-        api.run().await;
-    });
+    if config.backend.enabled {
+        let api = Api::new(supervisor_handle, counter_handle).await;
+        let api_task = tokio::spawn(async move {
+            api.run().await;
+        });
 
-    tokio::select! {
-        _ = api_task => println!("API завершилось!"),
-        _ = tokio::signal::ctrl_c() => {
-            println!("Получен сигнал завершения!");
+        tokio::select! {
+            _ = api_task => println!("API завершилось!"),
+            _ = tokio::signal::ctrl_c() => {
+                println!("Получен сигнал завершения!");
+            }
         }
+    } else {
+        tokio::signal::ctrl_c().await.unwrap();
+        println!("Получен сигнал завершения!");
     }
 }

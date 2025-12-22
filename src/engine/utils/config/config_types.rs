@@ -35,6 +35,7 @@ pub struct PrintsConfig {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BackendConfig {
+    pub enabled: bool,
     pub listener: String,
     pub admin_password: String,
 }
@@ -71,6 +72,7 @@ impl Default for Config {
                 train_test_split: TTSConfig { train_ratio: 0.8 },
             },
             backend: BackendConfig {
+                enabled: true,
                 listener: "0.0.0.0:3000".to_string(),
                 admin_password: "123".to_string(),
             },

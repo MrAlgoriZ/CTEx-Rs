@@ -7,6 +7,7 @@ model:
     train_ratio: 0.8
 
 backend:
+  enabled: true
   listener: "0.0.0.0:3000"
   admin_password: "123"
 
