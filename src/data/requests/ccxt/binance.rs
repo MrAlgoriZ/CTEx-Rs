@@ -6,7 +6,7 @@ use binance::market::Market;
 
 use crate::data::data_interfaces::*;
 
-const MINIMAL_VALUE: f64 = 0.00000000000000001;
+const MINIMAL_VALUE: f64 = f64::MIN;
 
 pub struct BinanceClient {
     market: Arc<Market>,

@@ -49,7 +49,6 @@ impl<T: Copy + Into<u16>> SymbolCounters<T> {
 #[derive(Clone)]
 pub struct Counters {
     pub symbols: HashMap<String, SymbolCounters<u8>>,
-    pub total: SymbolCounters<u8>,
     pub capacity: usize,
 }
 
@@ -57,7 +56,6 @@ impl Counters {
     pub fn new(capacity: usize) -> Self {
         Counters {
             symbols: HashMap::new(),
-            total: SymbolCounters::new(capacity),
             capacity,
         }
     }

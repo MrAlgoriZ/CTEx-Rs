@@ -107,7 +107,6 @@ impl CounterActor {
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
                 CounterCommand::Increment { symbol, value } => {
-                    self.counters.total.push(value);
                     self.counters.get_mut(&symbol.to_uppercase()).push(value);
                 }
                 CounterCommand::GetAccuracy { symbol, respond_to } => {
@@ -129,16 +128,32 @@ impl CounterActor {
                     let _ = respond_to.send(acc);
                 }
                 CounterCommand::GetTotalAccuracy { respond_to } => {
-                    let acc = if !self.counters.total.data.is_empty() {
-                        self.counters.total.get_accuracy()
-                    } else {
+                    let values = self.counters.symbols.values();
+                    let count = values.len();
+
+                    let acc = if count == 0 {
                         0.0
+                    } else {
+                        values.map(|c| c.get_accuracy()).sum::<f64>() / count as f64
                     };
+
                     let _ = respond_to.send(acc);
                 }
+
                 CounterCommand::GetTotalShiftedAccuracy { window, respond_to } => {
-                    let acc = self.counters.total.get_shifted_accuracy(window);
-                    let _ = respond_to.send(acc);
+                    let values = self.counters.symbols.values();
+                    let count = values.len();
+
+                    let acc = if count == 0 {
+                        0.0
+                    } else {
+                        values
+                            .map(|c| c.get_shifted_accuracy(window).unwrap_or(0.0))
+                            .sum::<f64>()
+                            / count as f64
+                    };
+
+                    let _ = respond_to.send(Some(acc));
                 }
             }
         }
