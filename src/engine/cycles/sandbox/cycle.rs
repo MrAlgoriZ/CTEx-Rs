@@ -46,7 +46,7 @@ impl SandboxCycle {
             pool: PgPool::connect(&load_env()[0])
                 .await
                 .expect("Database connection failed"),
-            risk_engine: RiskEngine::new(symbol),
+            risk_engine: RiskEngine::new(symbol, load_config("config/config.yaml")),
             feedback_engine: FeedBackEngine::new(load_config("config/config.yaml")),
             // accounts: Vec::new(),
         }
@@ -123,9 +123,10 @@ impl SandboxCycle {
                 self.feedback_engine
                     .update_trading_mode(volatility, self.risk_engine.risk_threshold);
                 println!(
-                    "Риски {:.3}, trading_mode: {:?}",
+                    "Риски {:.3}, trading_mode: {:?}, tdv: {}",
                     self.risk_engine.risk_threshold,
-                    self.feedback_engine.trading_mode.clone().unwrap()
+                    self.feedback_engine.trading_mode.clone().unwrap(),
+                    self.feedback_engine.trading_mode_value
                 );
             }
 
@@ -350,12 +351,11 @@ impl SandboxCycle {
     }
 }
 
-const THRESHOLD_RATIO: f64 = 1.25; // TODO Добавить изменение в конфиге
-
 #[derive(Debug, Clone)]
 enum TradingMode {
     Agressive,
     Conservative,
+    Neutral,
 }
 
 struct FeedBackEngine {
@@ -369,10 +369,10 @@ struct FeedBackEngine {
 impl FeedBackEngine {
     fn new(config: Config) -> Self {
         Self {
-            last_diffs: VecDeque::with_capacity(5), // TODO Добавить изменение в конфиге
+            last_diffs: VecDeque::with_capacity(config.behaviour.feedback_engine_capacity),
             success_threshold: config.behaviour.success_threshold.default,
             trading_mode: None,
-            trading_mode_value: 0.0,
+            trading_mode_value: config.behaviour.trading_mode_value.default,
             config,
         }
     }
@@ -395,44 +395,46 @@ impl FeedBackEngine {
         };
 
         let avg = trimmed.iter().sum::<f64>() / trimmed.len() as f64;
-        let mut new_threshold = avg * THRESHOLD_RATIO;
-        if new_threshold > self.config.behaviour.success_threshold.maximum {
-            new_threshold = self.config.behaviour.success_threshold.maximum;
-        } else if new_threshold < self.config.behaviour.success_threshold.minimum {
-            new_threshold = self.config.behaviour.success_threshold.minimum;
-        }
-        self.success_threshold = new_threshold;
+        let new_threshold = avg * self.config.behaviour.success_threshold.ratio;
+        self.success_threshold = new_threshold.clamp(
+            self.config.behaviour.success_threshold.minimum,
+            self.config.behaviour.success_threshold.maximum,
+        );
     }
 
     fn update_trading_mode(&mut self, volatility: f64, risk_threshold: f64) {
-        let volatility_factor = volatility.clamp(0.02, 0.1);
-        let risk_factor = (1.0 / risk_threshold).clamp(0.5, 2.0);
+        let volatility_norm = volatility.clamp(0.02, 0.1) / 0.1;
+        let risk_norm = (1.0 / risk_threshold).clamp(0.5, 2.0) / 2.0;
 
-        self.trading_mode_value =
-            (self.trading_mode_value * 0.8 + risk_factor * 0.2) / volatility_factor;
+        let pressure = risk_norm - volatility_norm;
 
-        let trading_mode_new_value = self.trading_mode_value.clamp(0.0, 1.0);
+        self.trading_mode_value = (self.trading_mode_value * 0.85 + pressure * 0.15).clamp(
+            self.config.behaviour.trading_mode_value.minimum,
+            self.config.behaviour.trading_mode_value.maximum,
+        );
 
-        if trading_mode_new_value <= 0.5 {
-            self.trading_mode = Some(TradingMode::Conservative);
+        self.trading_mode = if self.trading_mode_value > 0.2 {
+            Some(TradingMode::Agressive)
+        } else if self.trading_mode_value < -0.2 {
+            Some(TradingMode::Conservative)
         } else {
-            self.trading_mode = Some(TradingMode::Agressive);
-        }
-
-        self.trading_mode_value = trading_mode_new_value;
+            Some(TradingMode::Neutral)
+        };
     }
 }
 
 struct RiskEngine {
     risk_threshold: f64,
     symbol: String,
+    config: Config,
 }
 
 impl RiskEngine {
-    fn new(symbol: String) -> Self {
+    fn new(symbol: String, config: Config) -> Self {
         Self {
-            risk_threshold: 0.5,
+            risk_threshold: config.behaviour.risk_threshold.default,
             symbol,
+            config,
         }
     }
 
@@ -458,7 +460,10 @@ impl RiskEngine {
             let risk_modifier = (1.0 / accuracy).clamp(0.5, 2.0);
 
             self.risk_threshold =
-                (volatility * 100.0 * risk_modifier * 0.4) + self.risk_threshold * 0.6; // TODO Добавить настройку дефолтного risk_threshold в конфиге
+                ((volatility * 100.0 * risk_modifier * 0.4) + self.risk_threshold * 0.6).clamp(
+                    self.config.behaviour.risk_threshold.minimum,
+                    self.config.behaviour.risk_threshold.maximum,
+                );
         }
     }
 }

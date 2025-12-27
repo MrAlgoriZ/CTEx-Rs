@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 
 static CONFIG_CACHE: OnceLock<Config> = OnceLock::new();
 
-fn load_config_with_cache(path: &str) -> &'static Config {
+pub fn load_config_with_cache(path: &str) -> &'static Config {
     CONFIG_CACHE.get_or_init(|| {
         let file = File::open(path).expect("Cannot open config file");
         let reader = BufReader::new(file);

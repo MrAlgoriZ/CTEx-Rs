@@ -23,11 +23,29 @@ pub struct ModelConfig {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BehaviourConfig {
     pub success_threshold: SuccessThresholdConfig,
+    pub risk_threshold: RiskThresholdConfig,
+    pub trading_mode_value: TradingModeConfig,
     pub accuracy_capacity: usize,
+    pub feedback_engine_capacity: usize,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SuccessThresholdConfig {
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+    pub ratio: f64,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RiskThresholdConfig {
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TradingModeConfig {
     pub minimum: f64,
     pub default: f64,
     pub maximum: f64,
@@ -104,8 +122,20 @@ impl Default for Config {
                     minimum: 0.2,
                     default: 1.0,
                     maximum: 1.7,
+                    ratio: 1.25,
+                },
+                risk_threshold: RiskThresholdConfig {
+                    minimum: 0.5,
+                    default: 1.0,
+                    maximum: 3.0,
+                },
+                trading_mode_value: TradingModeConfig {
+                    minimum: -1.0,
+                    default: 0.0,
+                    maximum: 1.0,
                 },
                 accuracy_capacity: 192,
+                feedback_engine_capacity: 5,
             },
             token: vec!["BTCUSDT".to_string()],
             cycle_type: "trading".to_string(),

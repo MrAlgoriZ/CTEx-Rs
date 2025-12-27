@@ -16,7 +16,17 @@ behaviour:
     minimum: 0.2
     default: 1.0
     maximum: 1.7
+    ratio: 1.25
+  risk_threshold:
+    minimum: 0.5
+    default: 1.0
+    maximum: 3.0
+  trading_mode_value:
+    minimum: -1.0
+    default: 0.0
+    maximum: 1.0
   accuracy_capacity: 192
+  feedback_engine_capacity: 5
 
 prints:
   model_evualate: false
