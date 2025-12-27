@@ -22,8 +22,15 @@ pub struct ModelConfig {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DataConfig {
-    pub success_threshold: f64,
+    pub success_threshold: SuccessThresholdConfig,
     pub accuracy_capacity: usize,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SuccessThresholdConfig {
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -93,7 +100,11 @@ impl Default for Config {
                 },
             },
             data: DataConfig {
-                success_threshold: 2.0,
+                success_threshold: SuccessThresholdConfig {
+                    minimum: 0.2,
+                    default: 1.0,
+                    maximum: 1.7,
+                },
                 accuracy_capacity: 192,
             },
             token: vec!["BTCUSDT".to_string()],

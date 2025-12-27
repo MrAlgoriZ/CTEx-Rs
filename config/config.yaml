@@ -12,7 +12,10 @@ backend:
   admin_password: "123"
 
 data:
-  success_threshold: 1.0
+  success_threshold:
+    minimum: 0.2
+    default: 1.0
+    maximum: 1.7
   accuracy_capacity: 192
 
 prints:

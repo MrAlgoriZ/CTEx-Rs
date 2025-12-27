@@ -71,7 +71,7 @@ impl TrainingCycle {
                     process_target(self.last_candles_target.unwrap(), candles_target);
 
                 let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
-                let success: bool = diff < self.config.data.success_threshold;
+                let success: bool = diff < self.config.data.success_threshold.default;
 
                 if self.config.prints.cycle.target {
                     println!(
@@ -188,7 +188,7 @@ impl TrainingCycle {
         counter_tx: &mpsc::Sender<CounterCommand>,
     ) -> Result<(), ()> {
         let diff: f64 = (prediction - target).abs();
-        let success_threshold: f64 = self.config.data.success_threshold;
+        let success_threshold: f64 = self.config.data.success_threshold.default;
 
         let value = if diff < success_threshold { 1 } else { 0 };
 
