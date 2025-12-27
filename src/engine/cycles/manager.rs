@@ -418,7 +418,7 @@ pub struct CycleManager {
 
 impl CycleManager {
     pub async fn new() -> Self {
-        let capacity = load_config(CONFIG_PATH).data.accuracy_capacity;
+        let capacity = load_config(CONFIG_PATH).behaviour.accuracy_capacity;
         let (counter_actor, counter_tx) = CounterActor::new(capacity);
         let counter_task = tokio::spawn(counter_actor.run());
 

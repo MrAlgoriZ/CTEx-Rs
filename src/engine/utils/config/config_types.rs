@@ -5,7 +5,7 @@ pub struct Config {
     pub model: ModelConfig,
     pub backend: BackendConfig,
     pub prints: PrintsConfig,
-    pub data: DataConfig,
+    pub behaviour: BehaviourConfig,
     pub token: Vec<String>,
     pub cycle_type: String,
     pub mode: String,
@@ -21,7 +21,7 @@ pub struct ModelConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct DataConfig {
+pub struct BehaviourConfig {
     pub success_threshold: SuccessThresholdConfig,
     pub accuracy_capacity: usize,
 }
@@ -99,7 +99,7 @@ impl Default for Config {
                     additional_manager_prints: true,
                 },
             },
-            data: DataConfig {
+            behaviour: BehaviourConfig {
                 success_threshold: SuccessThresholdConfig {
                     minimum: 0.2,
                     default: 1.0,

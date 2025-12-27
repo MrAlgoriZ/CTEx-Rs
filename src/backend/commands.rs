@@ -57,7 +57,7 @@ pub struct AccuracyQuery {
 }
 
 fn default_window() -> usize {
-    load_config(CONFIG_PATH).data.accuracy_capacity
+    load_config(CONFIG_PATH).behaviour.accuracy_capacity
 }
 
 #[derive(Serialize)]

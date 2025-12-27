@@ -78,7 +78,7 @@ impl SandboxCycle {
                     process_target(self.last_candles_target.unwrap(), candles_target);
 
                 let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
-                let success: bool = diff < self.config.data.success_threshold;
+                let success: bool = diff < self.config.behaviour.success_threshold.default;
 
                 if self.config.prints.cycle.target {
                     println!(
@@ -195,7 +195,7 @@ impl SandboxCycle {
         counter_tx: &mpsc::Sender<CounterCommand>,
     ) -> Result<(), ()> {
         let diff: f64 = (prediction - target).abs();
-        let success_threshold: f64 = self.config.data.success_threshold;
+        let success_threshold: f64 = self.config.behaviour.success_threshold.default;
 
         let value = if diff < success_threshold { 1 } else { 0 };
 
@@ -350,10 +350,10 @@ struct FeedBackEngine {
 }
 
 impl FeedBackEngine {
-    fn new(success_threshold: f64, config: Config) -> Self {
+    fn new(config: Config) -> Self {
         Self {
             last_diffs: VecDeque::with_capacity(5), // TODO Добавить изменение в конфиге
-            success_threshold,
+            success_threshold: config.behaviour.success_threshold.default,
             trading_mode: None,
             trading_mode_value: 0.0,
             config,
@@ -379,12 +379,10 @@ impl FeedBackEngine {
 
         let avg = trimmed.iter().sum::<f64>() / trimmed.len() as f64;
         let mut new_threshold = avg * THRESHOLD_RATIO;
-        if new_threshold > self.config.data.success_threshold * THRESHOLD_RATIO {
-            // TODO Добавить минимальные и максимальные значения success threshold (сейчас есть только default)
-            new_threshold = self.config.data.success_threshold * THRESHOLD_RATIO;
-        } else if new_threshold < 0.3 {
-            // Магическое число (минимальное значение success threshold)
-            new_threshold = 0.3;
+        if new_threshold > self.config.behaviour.success_threshold.maximum {
+            new_threshold = self.config.behaviour.success_threshold.maximum;
+        } else if new_threshold < self.config.behaviour.success_threshold.minimum {
+            new_threshold = self.config.behaviour.success_threshold.minimum;
         }
         self.success_threshold = new_threshold;
     }

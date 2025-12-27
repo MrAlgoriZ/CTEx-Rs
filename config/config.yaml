@@ -11,7 +11,7 @@ backend:
   listener: "0.0.0.0:3000"
   admin_password: "123"
 
-data:
+behaviour:
   success_threshold:
     minimum: 0.2
     default: 1.0
