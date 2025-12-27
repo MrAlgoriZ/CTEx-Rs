@@ -1,12 +1,14 @@
+// use binance::account::Account;
 use chrono::{Local, Timelike};
 use sqlx::PgPool;
 use std::collections::VecDeque;
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::{sync::Mutex as TokioMutex, task::spawn_blocking, time::sleep};
 
-use crate::data::data_interfaces::{FlattenedData, ICandle};
+use crate::data::data_interfaces::FlattenedData;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::process::volatility::get_volatility;
@@ -27,16 +29,16 @@ pub struct SandboxCycle {
     client: BinanceClient,
     config: Config,
     pool: PgPool,
-    trading_mode: Option<TradingMode>,
-    risk_engine: Option<RiskEngine>,
-    feedback_engine: Option<FeedBackEngine>,
+    risk_engine: RiskEngine,
+    feedback_engine: FeedBackEngine,
+    // accounts: Vec<Account>,
 }
 
 impl SandboxCycle {
     pub async fn new(symbol: String) -> Self {
         SandboxCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
-            symbol: symbol,
+            symbol: symbol.clone(),
             last_grouped_candles: None,
             last_candles_target: None,
             client: BinanceClient::new().await,
@@ -44,9 +46,9 @@ impl SandboxCycle {
             pool: PgPool::connect(&load_env()[0])
                 .await
                 .expect("Database connection failed"),
-            trading_mode: None,
-            risk_engine: None,
-            feedback_engine: None,
+            risk_engine: RiskEngine::new(symbol),
+            feedback_engine: FeedBackEngine::new(load_config("config/config.yaml")),
+            // accounts: Vec::new(),
         }
     }
 
@@ -58,16 +60,18 @@ impl SandboxCycle {
         if !self.client.test_token(&self.symbol).await.is_ok() {
             return;
         }
-        if self.config.prints.cycle.volatility {
-            let candles1d_to_vol: Vec<ICandle> =
-                self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
-            self.print_volatility_status(&candles1d_to_vol);
-        }
 
         let mut target_indicate: Option<bool> = None;
         let mut prediction: Option<f64> = None;
 
         loop {
+            let candles1d_to_vol = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
+            let volatility: f64 = get_volatility(&candles1d_to_vol);
+
+            if self.config.prints.cycle.volatility && target_indicate == None {
+                self.print_volatility_status(volatility);
+            }
+
             self.wait_for_next_interval().await;
             let candles: CollectedData = collect_all(&self.symbol).await;
             let candles_target: f64 =
@@ -78,7 +82,7 @@ impl SandboxCycle {
                     process_target(self.last_candles_target.unwrap(), candles_target);
 
                 let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
-                let success: bool = diff < self.config.behaviour.success_threshold.default;
+                let success: bool = diff < self.feedback_engine.success_threshold;
 
                 if self.config.prints.cycle.target {
                     println!(
@@ -96,6 +100,9 @@ impl SandboxCycle {
                     .await
                     .unwrap();
 
+                self.feedback_engine.update_last_diffs(diff);
+                self.feedback_engine.update_success_threshold();
+
                 if !success {
                     let last_grouped: CollectedData =
                         self.last_grouped_candles.as_ref().unwrap().clone();
@@ -110,6 +117,16 @@ impl SandboxCycle {
                     .await
                     .unwrap();
                 }
+
+                self.risk_engine.update_risk(volatility, counter_tx).await;
+
+                self.feedback_engine
+                    .update_trading_mode(volatility, self.risk_engine.risk_threshold);
+                println!(
+                    "Риски {:.3}, trading_mode: {:?}",
+                    self.risk_engine.risk_threshold,
+                    self.feedback_engine.trading_mode.clone().unwrap()
+                );
             }
 
             let candles_to_flattened: CollectedData = candles.clone();
@@ -133,10 +150,9 @@ impl SandboxCycle {
     }
 
     // --- Методы ---
-    fn print_volatility_status(&self, candles: &[ICandle]) {
-        let volatility: f64 = get_volatility(candles);
+    fn print_volatility_status(&self, volatility: f64) {
         println!(
-            "{}{}Волатильность на токене {} составляет {:.5}",
+            "{}{}Волатильность на токене {} составляет {:.3}",
             self.print_time(),
             Fore::YELLOW.as_str(),
             self.symbol,
@@ -336,6 +352,7 @@ impl SandboxCycle {
 
 const THRESHOLD_RATIO: f64 = 1.25; // TODO Добавить изменение в конфиге
 
+#[derive(Debug, Clone)]
 enum TradingMode {
     Agressive,
     Conservative,
@@ -388,7 +405,7 @@ impl FeedBackEngine {
     }
 
     fn update_trading_mode(&mut self, volatility: f64, risk_threshold: f64) {
-        let volatility_factor = volatility.clamp(0.5, 2.0);
+        let volatility_factor = volatility.clamp(0.02, 0.1);
         let risk_factor = (1.0 / risk_threshold).clamp(0.5, 2.0);
 
         self.trading_mode_value =
@@ -408,13 +425,13 @@ impl FeedBackEngine {
 
 struct RiskEngine {
     risk_threshold: f64,
-    symbol: &'static str,
+    symbol: String,
 }
 
 impl RiskEngine {
-    fn new(risk_threshold: f64, symbol: &'static str) -> Self {
+    fn new(symbol: String) -> Self {
         Self {
-            risk_threshold,
+            risk_threshold: 0.5,
             symbol,
         }
     }
@@ -440,7 +457,8 @@ impl RiskEngine {
 
             let risk_modifier = (1.0 / accuracy).clamp(0.5, 2.0);
 
-            self.risk_threshold = (volatility * risk_modifier * 0.4) + self.risk_threshold * 0.6;
+            self.risk_threshold =
+                (volatility * 100.0 * risk_modifier * 0.4) + self.risk_threshold * 0.6; // TODO Добавить настройку дефолтного risk_threshold в конфиге
         }
     }
 }

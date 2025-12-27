@@ -40,5 +40,5 @@ token:
   - XRPUSDT
   - SOLUSDT
 
-cycle_type: "training"
+cycle_type: "sandbox"
 mode: "print"

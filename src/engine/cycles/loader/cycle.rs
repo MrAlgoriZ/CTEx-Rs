@@ -94,7 +94,7 @@ impl LoaderCycle {
     fn print_volatility_status(&self, candles: &[ICandle]) {
         let volatility: f64 = get_volatility(candles);
         println!(
-            "{}{}Волатильность на токене {} составляет {:.5}",
+            "{}{}Волатильность на токене {} составляет {:.3}",
             self.print_time(),
             Fore::YELLOW.as_str(),
             self.symbol,

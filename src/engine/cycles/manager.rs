@@ -7,6 +7,7 @@ use tokio::time::{Duration, sleep};
 
 use crate::CONFIG_PATH;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
+use crate::engine::cycles::sandbox::cycle::SandboxCycle;
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::colors::Fore;
@@ -61,6 +62,7 @@ pub enum CounterCommand {
 pub enum CycleType {
     Loader,
     Training,
+    Sandbox,
 }
 
 impl CycleType {
@@ -68,6 +70,7 @@ impl CycleType {
         match cycle_type {
             "training" => CycleType::Training,
             "loader" => CycleType::Loader,
+            "sandbox" => CycleType::Sandbox,
             _ => panic!("Cycle type must be 'training' or 'loader'"),
         }
     }
@@ -281,8 +284,8 @@ impl CycleSupervisor {
             return Err(format!("Worker {} уже запущен", symbol));
         }
 
-        if matches!(cycle_type, CycleType::Training) && self.model.is_none() {
-            return Err("Model не инициализирована для Training цикла".to_string());
+        if matches!(cycle_type, CycleType::Training | CycleType::Sandbox) && self.model.is_none() {
+            return Err("Model не инициализирована для цикла".to_string());
         }
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
@@ -404,6 +407,16 @@ impl CycleSupervisor {
                 sleep(Duration::from_secs(10)).await;
                 cycle.run(model, counter_tx).await;
             }
+            CycleType::Sandbox => {
+                let mut cycle = SandboxCycle::new(symbol.to_string()).await;
+
+                let model = model
+                    .as_ref()
+                    .expect("Model should be initialized for Training cycle");
+
+                sleep(Duration::from_secs(10)).await;
+                cycle.run(model, counter_tx).await;
+            }
         }
         Ok(())
     }
@@ -441,7 +454,7 @@ impl CycleManager {
         let needs_model = symbols.iter().any(|symbol| {
             matches!(
                 cycle_types.get(symbol).unwrap_or(&CycleType::Loader),
-                CycleType::Training
+                CycleType::Training | CycleType::Sandbox
             )
         });
 
