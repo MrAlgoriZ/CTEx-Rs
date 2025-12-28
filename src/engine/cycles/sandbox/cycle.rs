@@ -164,7 +164,7 @@ impl SandboxCycle {
                     self.account
                         .sell(
                             &self.symbol,
-                            amount * self.account.get_balance(),
+                            amount * self.account.get_token_balance(&self.symbol),
                             &self.client,
                         )
                         .await
@@ -661,9 +661,9 @@ impl DummyAccount {
         self.balance
     }
 
-    // pub fn get_token_balance(&self, token: &str) -> f64 {
-    //     self.tokens.get(token).copied().unwrap_or(0.0)
-    // }
+    pub fn get_token_balance(&self, token: &str) -> f64 {
+        self.tokens.get(token).copied().unwrap_or(0.0)
+    }
 
     // pub fn get_tokens(&self) -> &HashMap<String, f64> {
     //     &self.tokens
