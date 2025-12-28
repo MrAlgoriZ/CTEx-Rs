@@ -152,10 +152,22 @@ impl SandboxCycle {
                 .await;
             match choice {
                 TradingChoice::Buy(amount) => {
-                    self.account.buy(&self.symbol, amount, &self.client).await
+                    self.account
+                        .buy(
+                            &self.symbol,
+                            amount * self.account.get_balance(),
+                            &self.client,
+                        )
+                        .await
                 }
                 TradingChoice::Sell(amount) => {
-                    self.account.sell(&self.symbol, amount, &self.client).await
+                    self.account
+                        .sell(
+                            &self.symbol,
+                            amount * self.account.get_balance(),
+                            &self.client,
+                        )
+                        .await
                 }
                 TradingChoice::DoNothing => {}
             }
@@ -645,9 +657,9 @@ impl DummyAccount {
         }
     }
 
-    // pub fn get_balance(&self) -> f64 {
-    //     self.balance
-    // }
+    pub fn get_balance(&self) -> f64 {
+        self.balance
+    }
 
     // pub fn get_token_balance(&self, token: &str) -> f64 {
     //     self.tokens.get(token).copied().unwrap_or(0.0)
