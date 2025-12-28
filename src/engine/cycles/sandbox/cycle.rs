@@ -1,7 +1,6 @@
-// use binance::account::Account;
 use chrono::{Local, Timelike};
 use sqlx::PgPool;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,7 +30,7 @@ pub struct SandboxCycle {
     pool: PgPool,
     risk_engine: RiskEngine,
     feedback_engine: FeedBackEngine,
-    // accounts: Vec<Account>,
+    account: DummyAccount,
 }
 
 impl SandboxCycle {
@@ -48,7 +47,7 @@ impl SandboxCycle {
                 .expect("Database connection failed"),
             risk_engine: RiskEngine::new(symbol, load_config("config/config.yaml")),
             feedback_engine: FeedBackEngine::new(load_config("config/config.yaml")),
-            // accounts: Vec::new(),
+            account: DummyAccount::with_balance(100.0),
         }
     }
 
@@ -147,6 +146,21 @@ impl SandboxCycle {
             if self.config.prints.cycle.accuracy {
                 self.print_accuracy(counter_tx).await;
             }
+
+            let choice = self
+                .generate_choice(prediction.unwrap(), volatility, counter_tx)
+                .await;
+            match choice {
+                TradingChoice::Buy(amount) => {
+                    self.account.buy(&self.symbol, amount, &self.client).await
+                }
+                TradingChoice::Sell(amount) => {
+                    self.account.sell(&self.symbol, amount, &self.client).await
+                }
+                TradingChoice::DoNothing => {}
+            }
+
+            self.print_account_balance().await;
         }
     }
 
@@ -349,6 +363,81 @@ impl SandboxCycle {
             Local::now().format("%H:%M:%S")
         )
     }
+
+    async fn generate_choice(
+        &self,
+        prediction: f64,
+        volatility: f64,
+        counter_tx: &mpsc::Sender<CounterCommand>,
+    ) -> TradingChoice {
+        let mut diffs: Vec<f64> = self.feedback_engine.last_diffs.iter().cloned().collect();
+        diffs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let trimmed = if diffs.len() >= 3 {
+            &diffs[1..diffs.len() - 1]
+        } else {
+            &diffs
+        };
+
+        let avg_diffs = trimmed.iter().sum::<f64>() / trimmed.len() as f64;
+        let real_accuracy = 1.0 - avg_diffs;
+        let (tx_local, rx_local) = oneshot::channel();
+        let _ = counter_tx
+            .send(CounterCommand::GetAccuracy {
+                symbol: self.symbol.to_uppercase().clone(),
+                respond_to: tx_local,
+            })
+            .await;
+
+        let (tx_global, rx_global) = oneshot::channel();
+        let _ = counter_tx
+            .send(CounterCommand::GetTotalAccuracy {
+                respond_to: tx_global,
+            })
+            .await;
+
+        let accuracy =
+            if let (Ok(Some(local_acc)), Ok(global_acc)) = (rx_local.await, rx_global.await) {
+                (local_acc * 0.6 + global_acc * 0.4) / 100.0
+            } else {
+                0.0
+            };
+
+        let accuracy_diff = accuracy - real_accuracy;
+
+        if accuracy_diff <= 5.0 {
+            let choice: f64 = (prediction
+                * self.feedback_engine.trading_mode_value.abs()
+                * 100.0
+                * volatility
+                * 100.0
+                * real_accuracy
+                * 100.0)
+                / self.risk_engine.risk_threshold;
+            if choice > 0.1 {
+                return TradingChoice::Buy(choice);
+            } else if choice < -0.1 {
+                return TradingChoice::Sell(choice.abs());
+            } else {
+                return TradingChoice::DoNothing;
+            }
+        }
+        TradingChoice::DoNothing
+    }
+
+    async fn print_account_balance(&self) {
+        println!(
+            "{}DummyAccount total balance = {} USDT",
+            self.print_time(),
+            self.account.get_total_value(&self.client).await
+        )
+    }
+}
+
+enum TradingChoice {
+    Buy(f64),  // Percent
+    Sell(f64), // Also percent
+    DoNothing,
 }
 
 #[derive(Debug, Clone)]
@@ -466,4 +555,149 @@ impl RiskEngine {
                 );
         }
     }
+}
+
+// Dummy crypto balance
+#[derive(Debug, Clone)]
+pub struct DummyAccount {
+    balance: f64,                 // Main balance (Tether USDT)
+    tokens: HashMap<String, f64>, // Token name & Balance
+}
+
+impl DummyAccount {
+    // pub fn new() -> Self {
+    //     DummyAccount {
+    //         balance: 0.0,
+    //         tokens: HashMap::new(),
+    //     }
+    // }
+
+    pub fn with_balance(balance: f64) -> Self {
+        DummyAccount {
+            balance,
+            tokens: HashMap::new(),
+        }
+    }
+
+    pub async fn buy(&mut self, token: &str, amount: f64, client: &BinanceClient) {
+        if amount <= 0.0 {
+            return;
+        }
+
+        if self.balance < amount {
+            return;
+        }
+
+        let ask = client.fetch_ticker(token).await.ask;
+
+        if ask <= 0.0 {
+            return;
+        }
+
+        let token_amount = amount / ask;
+
+        self.balance -= amount;
+        self.add_token_balance(token, token_amount);
+    }
+
+    pub async fn sell(&mut self, token: &str, amount: f64, client: &BinanceClient) {
+        if amount <= 0.0 {
+            return;
+        }
+
+        let current_balance = self.tokens.get(token).copied().unwrap_or(0.0);
+
+        if current_balance < amount {
+            return;
+        }
+
+        let bid = client.fetch_ticker(token).await.bid;
+
+        if bid <= 0.0 {
+            return;
+        }
+
+        let usdt_amount = amount * bid;
+
+        self.remove_token_balance(token, amount);
+        self.balance += usdt_amount;
+    }
+
+    pub fn add_token_balance(&mut self, token: &str, amount: f64) {
+        if amount <= 0.0 {
+            return;
+        }
+
+        *self.tokens.entry(token.to_string()).or_insert(0.0) += amount;
+    }
+
+    pub fn remove_token_balance(&mut self, token: &str, amount: f64) {
+        if amount <= 0.0 {
+            return;
+        }
+
+        if let Some(balance) = self.tokens.get_mut(token) {
+            *balance -= amount;
+
+            if *balance <= 0.0 {
+                self.tokens.remove(token);
+            }
+        }
+    }
+
+    // pub fn get_balance(&self) -> f64 {
+    //     self.balance
+    // }
+
+    // pub fn get_token_balance(&self, token: &str) -> f64 {
+    //     self.tokens.get(token).copied().unwrap_or(0.0)
+    // }
+
+    // pub fn get_tokens(&self) -> &HashMap<String, f64> {
+    //     &self.tokens
+    // }
+
+    // pub fn deposit(&mut self, amount: f64) -> Result<(), String> {
+    //     if amount <= 0.0 {
+    //         return Err("Deposit amount must be positive".to_string());
+    //     }
+    //     self.balance += amount;
+    //     Ok(())
+    // }
+
+    // pub fn withdraw(&mut self, amount: f64) -> Result<(), String> {
+    //     if amount <= 0.0 {
+    //         return Err("Withdrawal amount must be positive".to_string());
+    //     }
+    //     if self.balance < amount {
+    //         return Err(format!(
+    //             "Insufficient balance. Available: {}, Required: {}",
+    //             self.balance, amount
+    //         ));
+    //     }
+    //     self.balance -= amount;
+    //     Ok(())
+    // }
+
+    pub async fn get_total_value(&self, client: &BinanceClient) -> f64 {
+        let mut total = self.balance;
+
+        for (token, amount) in &self.tokens {
+            let bid = client.fetch_ticker(token).await.bid;
+            total += amount * bid;
+        }
+
+        total
+    }
+
+    // pub async fn liquidate_all(&mut self, client: &BinanceClient) {
+    //     let tokens: Vec<String> = self.tokens.keys().cloned().collect();
+
+    //     for token in tokens {
+    //         let amount = self.get_token_balance(&token);
+    //         if amount > 0.0 {
+    //             self.sell(&token, amount, client).await;
+    //         }
+    //     }
+    // }
 }
