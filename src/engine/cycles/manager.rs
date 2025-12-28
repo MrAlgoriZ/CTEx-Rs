@@ -7,7 +7,7 @@ use tokio::time::{Duration, sleep};
 
 use crate::CONFIG_PATH;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
-use crate::engine::cycles::sandbox::cycle::SandboxCycle;
+use crate::engine::cycles::sandbox::cycle::{DummyAccount, SandboxCycle};
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::colors::Fore;
@@ -290,11 +290,20 @@ impl CycleSupervisor {
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
         let model = self.model.clone();
+        let account = Some(Arc::new(TokioMutex::new(DummyAccount::with_balance(100.0))));
         let counter_tx = self.counter_handle.clone();
         let symbol_clone = symbol.clone();
 
         let task = tokio::spawn(async move {
-            Self::worker_loop(symbol_clone, cycle_type, model, counter_tx, shutdown_rx).await;
+            Self::worker_loop(
+                symbol_clone,
+                cycle_type,
+                model,
+                account,
+                counter_tx,
+                shutdown_rx,
+            )
+            .await;
         });
 
         self.workers.insert(
@@ -340,6 +349,7 @@ impl CycleSupervisor {
         symbol: String,
         cycle_type: CycleType,
         model: Option<Arc<TokioMutex<RFInterface>>>,
+        account: Option<Arc<TokioMutex<DummyAccount>>>,
         counter_tx: mpsc::Sender<CounterCommand>,
         mut shutdown_rx: mpsc::Receiver<()>,
     ) {
@@ -358,7 +368,7 @@ impl CycleSupervisor {
                     break;
                 }
 
-                result = Self::run_cycle_once(&symbol, cycle_type, &model, &counter_tx) => {
+                result = Self::run_cycle_once(&symbol, cycle_type, &model, &account, &counter_tx) => {
                     match result {
                         Ok(_) => {
                             if load_config(CONFIG_PATH).prints.manager.manager_init {
@@ -389,6 +399,7 @@ impl CycleSupervisor {
         symbol: &str,
         cycle_type: CycleType,
         model: &Option<Arc<TokioMutex<RFInterface>>>,
+        account: &Option<Arc<TokioMutex<DummyAccount>>>,
         counter_tx: &mpsc::Sender<CounterCommand>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match cycle_type {
@@ -408,7 +419,8 @@ impl CycleSupervisor {
                 cycle.run(model, counter_tx).await;
             }
             CycleType::Sandbox => {
-                let mut cycle = SandboxCycle::new(symbol.to_string()).await;
+                let mut cycle =
+                    SandboxCycle::new(symbol.to_string(), account.clone().unwrap()).await;
 
                 let model = model
                     .as_ref()

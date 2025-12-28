@@ -30,11 +30,11 @@ pub struct SandboxCycle {
     pool: PgPool,
     risk_engine: RiskEngine,
     feedback_engine: FeedBackEngine,
-    account: DummyAccount,
+    account: Arc<TokioMutex<DummyAccount>>,
 }
 
 impl SandboxCycle {
-    pub async fn new(symbol: String) -> Self {
+    pub async fn new(symbol: String, account: Arc<TokioMutex<DummyAccount>>) -> Self {
         SandboxCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol.clone(),
@@ -47,7 +47,7 @@ impl SandboxCycle {
                 .expect("Database connection failed"),
             risk_engine: RiskEngine::new(symbol, load_config("config/config.yaml")),
             feedback_engine: FeedBackEngine::new(load_config("config/config.yaml")),
-            account: DummyAccount::with_balance(100.0),
+            account,
         }
     }
 
@@ -153,18 +153,22 @@ impl SandboxCycle {
             match choice {
                 TradingChoice::Buy(amount) => {
                     self.account
+                        .lock()
+                        .await
                         .buy(
                             &self.symbol,
-                            amount * self.account.get_balance(),
+                            amount * self.account.lock().await.get_balance(),
                             &self.client,
                         )
                         .await
                 }
                 TradingChoice::Sell(amount) => {
                     self.account
+                        .lock()
+                        .await
                         .sell(
                             &self.symbol,
-                            amount * self.account.get_token_balance(&self.symbol),
+                            amount * self.account.lock().await.get_token_balance(&self.symbol),
                             &self.client,
                         )
                         .await
@@ -441,7 +445,11 @@ impl SandboxCycle {
         println!(
             "{}DummyAccount total balance = {} USDT",
             self.print_time(),
-            self.account.get_total_value(&self.client).await
+            self.account
+                .lock()
+                .await
+                .get_total_value(&self.client)
+                .await
         )
     }
 }
