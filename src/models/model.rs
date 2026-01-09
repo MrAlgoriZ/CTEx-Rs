@@ -5,8 +5,7 @@ use smartcore::ensemble::random_forest_regressor::{
     RandomForestRegressor, RandomForestRegressorParameters,
 };
 use sqlx::PgPool;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex as StdMutex};
 
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::accuracy;
@@ -242,12 +241,12 @@ impl RFInterface {
     }
 }
 
-pub async fn train_model(pool: &PgPool, model: &Arc<Mutex<RFInterface>>) {
+pub async fn train_model(pool: &PgPool, model: &Arc<StdMutex<RFInterface>>) {
     let data = select_all_candles(pool).await.unwrap();
     let model_clone = Arc::clone(model);
 
     tokio::task::spawn_blocking(move || {
-        let mut model_guard = model_clone.blocking_lock();
+        let mut model_guard = model_clone.lock().unwrap();
         model_guard
             .train(data)
             .expect("The model faced a problem with learning");

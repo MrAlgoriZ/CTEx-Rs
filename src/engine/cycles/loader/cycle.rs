@@ -1,18 +1,16 @@
-use chrono::{Local, Timelike};
 use sqlx::PgPool;
-use std::time::Duration;
-use tokio::{task::spawn_blocking, time::sleep};
+use tokio::task::spawn_blocking;
 
 use crate::data::data_interfaces::ICandle;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::process_target;
-use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::database::db_req::insert_candle;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
+use crate::engine::cycles::cycle_traits::{Cycle, CycleGetters};
 
 pub struct LoaderCycle {
     pub symbol: String,
@@ -23,6 +21,22 @@ pub struct LoaderCycle {
     client: BinanceClient,
     pool: PgPool,
 }
+
+impl CycleGetters for LoaderCycle {
+    fn get_symbol(&self) -> &String {
+        &self.symbol
+    }
+
+    fn get_print_symbol(&self) -> &String {
+        &self.print_symbol
+    }
+
+    fn get_config(&self) -> Config {
+        self.config.clone()
+    }
+}
+
+impl Cycle for LoaderCycle {}
 
 impl LoaderCycle {
     pub async fn new(symbol: String) -> Self {
@@ -38,7 +52,7 @@ impl LoaderCycle {
                 .expect("Database connection failed"),
         }
     }
-
+    
     pub async fn run(&mut self) {
         if !self.client.test_token(&self.symbol).await.is_ok() {
             return;
@@ -91,38 +105,6 @@ impl LoaderCycle {
     }
 
     // --- Методы ---
-    fn print_volatility_status(&self, candles: &[ICandle]) {
-        let volatility: f64 = get_volatility(candles);
-        println!(
-            "{}{}Волатильность на токене {} составляет {:.3}",
-            self.print_time(),
-            Fore::YELLOW.as_str(),
-            self.symbol,
-            volatility
-        );
-    }
-
-    async fn wait_for_next_interval(&self) {
-        let now = Local::now();
-
-        let current_seconds = now.minute() as f64 * 60.0
-            + now.second() as f64
-            + now.nanosecond() as f64 / 1_000_000_000.0;
-
-        let seconds_to_wait = (900.0 - (current_seconds % 900.0)) % 900.0;
-
-        if seconds_to_wait > 0.0 {
-            let duration = Duration::from_secs_f64(seconds_to_wait);
-            sleep(duration).await;
-        }
-
-        sleep(Duration::from_secs(2)).await;
-
-        if self.config.prints.cycle.cycle_start {
-            println!("{}{} Цикл запустился", self.print_time(), self.print_symbol);
-        }
-    }
-
     async fn save_data(
         &self,
         flattened_candles: crate::data::data_interfaces::FlattenedData,
@@ -143,13 +125,5 @@ impl LoaderCycle {
         } else {
             Err(())
         }
-    }
-
-    fn print_time(&self) -> String {
-        format!(
-            "{}[{}] ",
-            Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S")
-        )
     }
 }
