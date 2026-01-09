@@ -28,7 +28,6 @@ pub struct SandboxCycle {
     pool: PgPool,
     risk_engine: RiskEngine,
     feedback_engine: FeedBackEngine,
-    account: Arc<Mutex<DummyAccount>>,
 }
 
 impl CycleGetters for SandboxCycle {
@@ -55,8 +54,7 @@ impl Cycle for SandboxCycle {}
 impl CycleWithModel for SandboxCycle {}
 
 impl SandboxCycle {
-    // TODO Сделать владение аккаунтом в run, а не в new
-    pub async fn new(symbol: String, account: Arc<Mutex<DummyAccount>>) -> Self {
+    pub async fn new(symbol: String) -> Self {
         SandboxCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol.clone(),
@@ -69,7 +67,6 @@ impl SandboxCycle {
                 .expect("Database connection failed"),
             risk_engine: RiskEngine::new(symbol, load_config("config/config.yaml")),
             feedback_engine: FeedBackEngine::new(load_config("config/config.yaml")),
-            account,
         }
     }
 
@@ -77,6 +74,7 @@ impl SandboxCycle {
         &mut self,
         model: &Arc<StdMutex<RFInterface>>,
         counter_tx: &mpsc::Sender<CounterCommand>,
+        account: Arc<Mutex<DummyAccount>>
     ) {
         if !self.client.test_token(&self.symbol).await.is_ok() {
             return;
@@ -173,23 +171,23 @@ impl SandboxCycle {
                 .await;
             match choice {
                 TradingChoice::Buy(amount) => {
-                    self.account
+                    account
                         .lock()
                         .await
                         .buy(
                             &self.symbol,
-                            amount * self.account.lock().await.get_balance(),
+                            amount * account.lock().await.get_balance(),
                             &self.client,
                         )
                         .await
                 }
                 TradingChoice::Sell(amount) => {
-                    self.account
+                    account
                         .lock()
                         .await
                         .sell(
                             &self.symbol,
-                            amount * self.account.lock().await.get_token_balance(&self.symbol),
+                            amount * account.lock().await.get_token_balance(&self.symbol),
                             &self.client,
                         )
                         .await
@@ -197,7 +195,7 @@ impl SandboxCycle {
                 TradingChoice::DoNothing => {}
             }
 
-            self.print_account_balance().await;
+            self.print_account_balance(account.clone()).await;
         }
     }
 
@@ -273,11 +271,11 @@ impl SandboxCycle {
         TradingChoice::DoNothing
     }
 
-    async fn print_account_balance(&self) {
+    async fn print_account_balance(&self, account: Arc<Mutex<DummyAccount>>) {
         println!(
             "{}DummyAccount total balance = {} USDT",
             self.print_time(),
-            self.account
+            account
                 .lock()
                 .await
                 .get_total_value(&self.client)

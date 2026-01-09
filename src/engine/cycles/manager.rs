@@ -420,14 +420,14 @@ impl CycleSupervisor {
             }
             CycleType::Sandbox => {
                 let mut cycle =
-                    SandboxCycle::new(symbol.to_string(), account.clone().unwrap()).await;
+                    SandboxCycle::new(symbol.to_string()).await;
 
                 let model = model
                     .as_ref()
                     .expect("Model should be initialized for Training cycle");
 
                 sleep(Duration::from_secs(10)).await;
-                cycle.run(model, counter_tx).await;
+                cycle.run(model, counter_tx, account.clone().unwrap()).await;
             }
         }
         Ok(())
