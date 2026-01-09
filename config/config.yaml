@@ -5,9 +5,10 @@ model:
   seed: 42
   train_test_split:
     train_ratio: 0.8
+  metric: "MAE"
 
 backend:
-  enabled: true
+  enabled: false
   listener: "0.0.0.0:3000"
   admin_password: "123"
 
@@ -29,7 +30,7 @@ behaviour:
   feedback_engine_capacity: 5
 
 prints:
-  model_evualate: false
+  model_evualate: true
   cycle:
     volatility: true
     cycle_start: false
@@ -50,5 +51,5 @@ token:
   - XRPUSDT
   - SOLUSDT
 
-cycle_type: "sandbox"
+cycle_type: "training"
 mode: "print"

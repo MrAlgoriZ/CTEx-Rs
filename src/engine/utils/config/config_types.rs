@@ -18,6 +18,7 @@ pub struct ModelConfig {
     pub max_depth: u16,
     pub seed: u64,
     pub train_test_split: TTSConfig,
+    pub metric: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -95,6 +96,7 @@ impl Default for Config {
                 max_depth: 5,
                 seed: 42,
                 train_test_split: TTSConfig { train_ratio: 0.8 },
+                metric: "MAE".to_string(),
             },
             backend: BackendConfig {
                 enabled: true,

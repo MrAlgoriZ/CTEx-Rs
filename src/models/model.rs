@@ -8,7 +8,7 @@ use sqlx::PgPool;
 use std::sync::{Arc, Mutex as StdMutex};
 
 use smartcore::linalg::basic::matrix::DenseMatrix;
-use smartcore::metrics::accuracy;
+use smartcore::metrics::{mean_absolute_error, mean_squared_error, r2};
 use smartcore::model_selection::train_test_split;
 use smartcore::preprocessing::numerical::{StandardScaler, StandardScalerParameters};
 
@@ -177,22 +177,47 @@ impl RFInterface {
             .ok_or(anyhow!("Model not trained yet"))?;
 
         let proba = model.predict(x_val)?;
+        let y_float: Vec<f64> = y_val.to_vec();
 
-        let preds: Vec<i32> = proba
-            .iter()
-            .map(|&p| if p >= 0.5 { 1 } else { 0 })
-            .collect();
-        let y_int: Vec<i32> = y_val.iter().map(|&y| y.round() as i32).collect();
-
-        let accuracy = accuracy(&y_int, &preds) * 100.0;
+        let accuracy = threshold_accuracy(
+            &y_float,
+            &proba,
+            self.config.behaviour.success_threshold.default,
+        );
 
         if print_results {
+            let mae = 1.0 - mean_absolute_error(&y_float, &proba);
+            let mse = 1.0 - mean_squared_error(&y_float, &proba);
+            let r2_score = 1.0 - r2(&y_float, &proba);
+        
             println!(
-                "{}[{}] Точность {} составляет {:.3}%",
+                "{}[{}] Ошибка по MAE для {} составляет {:.3}%",
                 Fore::WHITE.as_str(),
                 Local::now().format("%H:%M:%S"),
                 self.name,
-                accuracy
+                mae
+            );
+            println!(
+                "{}[{}] Ошибка по MSE для {} составляет {:.3}%",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                self.name,
+                mse
+            );
+            println!(
+                "{}[{}] Ошибка по R2 для {} составляет {:.3}%",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                self.name,
+                r2_score
+            );
+            println!(
+                "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
+                Fore::WHITE.as_str(),
+                Local::now().format("%H:%M:%S"),
+                self.config.behaviour.success_threshold.default,
+                self.name,
+                accuracy * 100.0
             );
         }
 
@@ -253,4 +278,20 @@ pub async fn train_model(pool: &PgPool, model: &Arc<StdMutex<RFInterface>>) {
     })
     .await
     .unwrap();
+}
+
+fn threshold_accuracy(
+    y_true: &[f64],
+    y_pred: &[f64],
+    threshold: f64,
+) -> f64 {
+    let mut success = 0;
+
+    for (y, p) in y_true.iter().zip(y_pred.iter()) {
+        if (y - p).abs() <= threshold {
+            success += 1;
+        }
+    }
+
+    success as f64 / y_true.len() as f64
 }
