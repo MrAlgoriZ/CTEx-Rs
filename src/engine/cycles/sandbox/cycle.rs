@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
-use tokio::{sync::Mutex as TokioMutex, task::spawn_blocking, time::sleep};
+use tokio::{sync::Mutex, task::spawn_blocking, time::sleep};
 
 use crate::data::data_interfaces::FlattenedData;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
@@ -30,11 +30,11 @@ pub struct SandboxCycle {
     pool: PgPool,
     risk_engine: RiskEngine,
     feedback_engine: FeedBackEngine,
-    account: Arc<TokioMutex<DummyAccount>>,
+    account: Arc<Mutex<DummyAccount>>,
 }
 
 impl SandboxCycle {
-    pub async fn new(symbol: String, account: Arc<TokioMutex<DummyAccount>>) -> Self {
+    pub async fn new(symbol: String, account: Arc<Mutex<DummyAccount>>) -> Self {
         SandboxCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol.clone(),
@@ -53,7 +53,7 @@ impl SandboxCycle {
 
     pub async fn run(
         &mut self,
-        model: &Arc<TokioMutex<RFInterface>>,
+        model: &Arc<Mutex<RFInterface>>,
         counter_tx: &mpsc::Sender<CounterCommand>,
     ) {
         if !self.client.test_token(&self.symbol).await.is_ok() {
@@ -215,10 +215,10 @@ impl SandboxCycle {
     async fn predict(
         &self,
         flattened_candles: FlattenedData,
-        model: &Arc<TokioMutex<RFInterface>>,
+        model: &Arc<Mutex<RFInterface>>,
     ) -> Result<f64, String> {
         if !flattened_candles.is_there_a_target() {
-            let model_clone: Arc<TokioMutex<RFInterface>> = model.clone();
+            let model_clone: Arc<Mutex<RFInterface>> = model.clone();
             let features: Vec<f64> = flattened_candles.features;
             let token: String = flattened_candles.token;
             let pred: f64 = spawn_blocking(move || {
@@ -260,7 +260,7 @@ impl SandboxCycle {
         &self,
         flattened_candles: FlattenedData,
         counter_tx: &mpsc::Sender<CounterCommand>,
-        model: &Arc<TokioMutex<RFInterface>>,
+        model: &Arc<Mutex<RFInterface>>,
         pool: &PgPool,
     ) -> Result<(), ()> {
         if flattened_candles.is_there_a_target() {
@@ -359,7 +359,7 @@ impl SandboxCycle {
         }
     }
 
-    async fn train_model(&self, pool: &PgPool, model: &Arc<TokioMutex<RFInterface>>) {
+    async fn train_model(&self, pool: &PgPool, model: &Arc<Mutex<RFInterface>>) {
         let data = select_all_candles(pool).await.unwrap();
         let model_clone = model.clone();
         spawn_blocking(move || {

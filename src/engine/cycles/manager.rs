@@ -2,7 +2,7 @@ use chrono::Local;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{Mutex as TokioMutex, mpsc, oneshot};
+use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::time::{Duration, sleep};
 
 use crate::CONFIG_PATH;
@@ -200,14 +200,14 @@ impl WorkerHandle {
 
 struct CycleSupervisor {
     workers: HashMap<String, WorkerHandle>,
-    model: Option<Arc<TokioMutex<RFInterface>>>,
+    model: Option<Arc<Mutex<RFInterface>>>,
     counter_handle: mpsc::Sender<CounterCommand>,
     inbox: mpsc::Receiver<SupervisorCommand>,
 }
 
 impl CycleSupervisor {
     fn new(
-        model: Option<Arc<TokioMutex<RFInterface>>>,
+        model: Option<Arc<Mutex<RFInterface>>>,
         counter_handle: mpsc::Sender<CounterCommand>,
     ) -> (Self, mpsc::Sender<SupervisorCommand>) {
         let (tx, rx) = mpsc::channel(50);
@@ -290,7 +290,7 @@ impl CycleSupervisor {
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
         let model = self.model.clone();
-        let account = Some(Arc::new(TokioMutex::new(DummyAccount::with_balance(100.0))));
+        let account = Some(Arc::new(Mutex::new(DummyAccount::with_balance(100.0))));
         let counter_tx = self.counter_handle.clone();
         let symbol_clone = symbol.clone();
 
@@ -348,8 +348,8 @@ impl CycleSupervisor {
     async fn worker_loop(
         symbol: String,
         cycle_type: CycleType,
-        model: Option<Arc<TokioMutex<RFInterface>>>,
-        account: Option<Arc<TokioMutex<DummyAccount>>>,
+        model: Option<Arc<Mutex<RFInterface>>>,
+        account: Option<Arc<Mutex<DummyAccount>>>,
         counter_tx: mpsc::Sender<CounterCommand>,
         mut shutdown_rx: mpsc::Receiver<()>,
     ) {
@@ -398,8 +398,8 @@ impl CycleSupervisor {
     async fn run_cycle_once(
         symbol: &str,
         cycle_type: CycleType,
-        model: &Option<Arc<TokioMutex<RFInterface>>>,
-        account: &Option<Arc<TokioMutex<DummyAccount>>>,
+        model: &Option<Arc<Mutex<RFInterface>>>,
+        account: &Option<Arc<Mutex<DummyAccount>>>,
         counter_tx: &mpsc::Sender<CounterCommand>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match cycle_type {
@@ -481,7 +481,7 @@ impl CycleManager {
             let pool = PgPool::connect(&load_env()[0])
                 .await
                 .map_err(|e| format!("DB connection error: {}", e))?;
-            let model = Arc::new(TokioMutex::new(RFInterface::new()));
+            let model = Arc::new(Mutex::new(RFInterface::new()));
             train_model(&pool, &model).await;
             drop(pool);
 
