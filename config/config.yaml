@@ -30,7 +30,9 @@ behaviour:
   feedback_engine_capacity: 5
 
 prints:
-  model_evualate: true
+  model:
+    evualate: true
+    metrics: false
   cycle:
     volatility: true
     cycle_start: false

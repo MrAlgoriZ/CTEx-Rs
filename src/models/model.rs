@@ -1,6 +1,5 @@
 use anyhow::{Result, anyhow};
 use chrono::Local;
-use smartcore::api::{Transformer, UnsupervisedEstimator};
 use smartcore::ensemble::random_forest_regressor::{
     RandomForestRegressor, RandomForestRegressorParameters,
 };
@@ -10,7 +9,6 @@ use std::sync::{Arc, Mutex as StdMutex};
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::{mean_absolute_error, mean_squared_error, r2};
 use smartcore::model_selection::train_test_split;
-use smartcore::preprocessing::numerical::{StandardScaler, StandardScalerParameters};
 
 use crate::data::data_interfaces::FlattenedData;
 use crate::data::requests::database::db_req::select_all_candles;
@@ -20,7 +18,6 @@ use crate::engine::utils::{colors::Fore, config::load_config::load_config};
 pub struct RFInterface {
     model: Option<RandomForestRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
     name: String,
-    scaler: Option<StandardScaler<f64>>,
     x_train: Option<DenseMatrix<f64>>,
     x_val: Option<DenseMatrix<f64>>,
     y_train: Option<Vec<f64>>,
@@ -35,7 +32,6 @@ impl RFInterface {
         Self {
             model: None,
             name: config.model.name.clone(),
-            scaler: None,
             x_train: None,
             x_val: None,
             y_train: None,
@@ -131,17 +127,12 @@ impl RFInterface {
             Some(self.config.model.seed),
         );
 
-        let scaler = StandardScaler::fit(&x_train, StandardScalerParameters::default())?;
-        let x_train_scaled = scaler.transform(&x_train)?;
-        let x_val_scaled = scaler.transform(&x_val)?;
-
-        self.scaler = Some(scaler);
-        self.x_train = Some(x_train_scaled.clone());
-        self.x_val = Some(x_val_scaled.clone());
+        self.x_train = Some(x_train.clone());
+        self.x_val = Some(x_val.clone());
         self.y_train = Some(y_train.clone());
         self.y_val = Some(y_val.clone());
 
-        Ok((x_train_scaled, x_val_scaled, y_train, y_val))
+        Ok((x_train, x_val, y_train, y_val))
     }
 
     pub fn fit(
@@ -159,7 +150,7 @@ impl RFInterface {
         self.model = Some(RandomForestRegressor::fit(x_train, y_train, params)?);
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
-            self.evaluate(xv, yv, self.config.prints.model_evualate)?;
+            self.evaluate(xv, yv)?;
         }
 
         Ok(())
@@ -169,7 +160,6 @@ impl RFInterface {
         &self,
         x_val: &DenseMatrix<f64>,
         y_val: &Vec<f64>,
-        print_results: bool,
     ) -> Result<f64> {
         let model = self
             .model
@@ -185,32 +175,35 @@ impl RFInterface {
             self.config.behaviour.success_threshold.default,
         );
 
-        if print_results {
-            let mae = 1.0 - mean_absolute_error(&y_float, &proba);
-            let mse = 1.0 - mean_squared_error(&y_float, &proba);
-            let r2_score = 1.0 - r2(&y_float, &proba);
+        if self.config.prints.model.metrics {
+            let mae = mean_absolute_error(&y_float, &proba);
+            let mse = mean_squared_error(&y_float, &proba);
+            let r2_score = r2(&y_float, &proba);
         
             println!(
-                "{}[{}] Ошибка по MAE для {} составляет {:.3}%",
+                "{}[{}] Ошибка по MAE для {}: {:.3} pp",
                 Fore::WHITE.as_str(),
                 Local::now().format("%H:%M:%S"),
                 self.name,
                 mae
             );
             println!(
-                "{}[{}] Ошибка по MSE для {} составляет {:.3}%",
+                "{}[{}] Ошибка по MSE для {}: {:.3} (pp²)",
                 Fore::WHITE.as_str(),
                 Local::now().format("%H:%M:%S"),
                 self.name,
                 mse
             );
             println!(
-                "{}[{}] Ошибка по R2 для {} составляет {:.3}%",
+                "{}[{}] Ошибка по R2 для {}: {:.3}",
                 Fore::WHITE.as_str(),
                 Local::now().format("%H:%M:%S"),
                 self.name,
                 r2_score
             );
+        }
+
+        if self.config.prints.model.evualate {
             println!(
                 "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
                 Fore::WHITE.as_str(),
@@ -233,8 +226,6 @@ impl RFInterface {
             .model
             .as_ref()
             .ok_or(anyhow!("Model not trained yet"))?;
-        let scaler = self.scaler.as_ref().ok_or(anyhow!("Scaler not fitted"))?;
-
         let mut input: Vec<f64> = Vec::with_capacity(token_cols.len() + x.len());
 
         let mut token_vec = vec![0.0; token_cols.len()];
@@ -251,9 +242,7 @@ impl RFInterface {
         input.extend(x);
 
         let input_mat = DenseMatrix::new(1, input.len(), input, false)?;
-        let scaled_input = scaler.transform(&input_mat)?;
-
-        let proba = model.predict(&scaled_input)?;
+        let proba = model.predict(&input_mat)?;
         Ok(proba[0])
     }
 
@@ -285,6 +274,10 @@ fn threshold_accuracy(
     y_pred: &[f64],
     threshold: f64,
 ) -> f64 {
+    if y_true.is_empty() {
+        return 0.0;
+    }
+
     let mut success = 0;
 
     for (y, p) in y_true.iter().zip(y_pred.iter()) {

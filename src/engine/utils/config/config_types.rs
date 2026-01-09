@@ -54,9 +54,15 @@ pub struct TradingModeConfig {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PrintsConfig {
-    pub model_evualate: bool,
+    pub model: ModelPrintsConfig,
     pub cycle: CyclePrintsConfig,
     pub manager: ManagerPrintsConfig,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ModelPrintsConfig {
+    pub evualate: bool,
+    pub metrics: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -104,7 +110,10 @@ impl Default for Config {
                 admin_password: "123".to_string(),
             },
             prints: PrintsConfig {
-                model_evualate: true,
+                model: ModelPrintsConfig {
+                    evualate: true,
+                    metrics: false,
+                },
                 cycle: CyclePrintsConfig {
                     volatility: true,
                     cycle_start: true,
