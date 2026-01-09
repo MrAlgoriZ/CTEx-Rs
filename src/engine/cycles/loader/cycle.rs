@@ -33,7 +33,7 @@ impl LoaderCycle {
             last_candles_target: None,
             config: load_config("config/config.yaml"),
             client: BinanceClient::new().await,
-            pool: PgPool::connect(&load_env()[0])
+            pool: PgPool::connect(&load_env().database_url)
                 .await
                 .expect("Database connection failed"),
         }

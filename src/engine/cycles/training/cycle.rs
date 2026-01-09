@@ -37,7 +37,7 @@ impl TrainingCycle {
             last_candles_target: None,
             client: BinanceClient::new().await,
             config: load_config("config/config.yaml"),
-            pool: PgPool::connect(&load_env()[0])
+            pool: PgPool::connect(&load_env().database_url)
                 .await
                 .expect("Database connection failed"),
         }

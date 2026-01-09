@@ -478,7 +478,7 @@ impl CycleManager {
                 .map_err(|_| "Supervisor недоступен")?;
             let _ = rx.await;
 
-            let pool = PgPool::connect(&load_env()[0])
+            let pool = PgPool::connect(&load_env().database_url)
                 .await
                 .map_err(|e| format!("DB connection error: {}", e))?;
             let model = Arc::new(Mutex::new(RFInterface::new()));
