@@ -6,11 +6,11 @@ use crate::data::process::data_collection::{CollectedData, collect_all, flat_all
 use crate::data::process::target::process_target;
 use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::database::db_req::insert_candle;
+use crate::engine::cycles::cycle_traits::{Cycle, CycleGetters};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
-use crate::engine::cycles::cycle_traits::{Cycle, CycleGetters};
 
 pub struct LoaderCycle {
     pub symbol: String,
@@ -52,7 +52,7 @@ impl LoaderCycle {
                 .expect("Database connection failed"),
         }
     }
-    
+
     pub async fn run(&mut self) {
         if !self.client.test_token(&self.symbol).await.is_ok() {
             return;

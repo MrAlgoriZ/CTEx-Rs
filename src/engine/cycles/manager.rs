@@ -419,8 +419,7 @@ impl CycleSupervisor {
                 cycle.run(model, counter_tx).await;
             }
             CycleType::Sandbox => {
-                let mut cycle =
-                    SandboxCycle::new(symbol.to_string()).await;
+                let mut cycle = SandboxCycle::new(symbol.to_string()).await;
 
                 let model = model
                     .as_ref()

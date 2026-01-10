@@ -156,11 +156,7 @@ impl RFInterface {
         Ok(())
     }
 
-    pub fn evaluate(
-        &self,
-        x_val: &DenseMatrix<f64>,
-        y_val: &Vec<f64>,
-    ) -> Result<f64> {
+    pub fn evaluate(&self, x_val: &DenseMatrix<f64>, y_val: &Vec<f64>) -> Result<f64> {
         let model = self
             .model
             .as_ref()
@@ -179,7 +175,7 @@ impl RFInterface {
             let mae = mean_absolute_error(&y_float, &proba);
             let mse = mean_squared_error(&y_float, &proba);
             let r2_score = r2(&y_float, &proba);
-        
+
             println!(
                 "{}[{}] Ошибка по MAE для {}: {:.3} pp",
                 Fore::WHITE.as_str(),
@@ -269,11 +265,7 @@ pub async fn train_model(pool: &PgPool, model: &Arc<StdMutex<RFInterface>>) {
     .unwrap();
 }
 
-fn threshold_accuracy(
-    y_true: &[f64],
-    y_pred: &[f64],
-    threshold: f64,
-) -> f64 {
+fn threshold_accuracy(y_true: &[f64], y_pred: &[f64], threshold: f64) -> f64 {
     if y_true.is_empty() {
         return 0.0;
     }

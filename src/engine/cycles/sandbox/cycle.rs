@@ -10,13 +10,15 @@ use crate::data::process::data_collection::{CollectedData, collect_all, flat_all
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
+use crate::engine::cycles::cycle_traits::{
+    Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
+};
 use crate::engine::cycles::manager::CounterCommand;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::models::model::RFInterface;
-use crate::engine::cycles::cycle_traits::{Cycle, CycleGetters, CycleWithModel, CycleGettersForCycleWithModel};
 
 pub struct SandboxCycle {
     pub symbol: String,
@@ -74,7 +76,7 @@ impl SandboxCycle {
         &mut self,
         model: &Arc<StdMutex<RFInterface>>,
         counter_tx: &mpsc::Sender<CounterCommand>,
-        account: Arc<Mutex<DummyAccount>>
+        account: Arc<Mutex<DummyAccount>>,
     ) {
         if !self.client.test_token(&self.symbol).await.is_ok() {
             return;
@@ -275,11 +277,7 @@ impl SandboxCycle {
         println!(
             "{}DummyAccount total balance = {} USDT",
             self.print_time(),
-            account
-                .lock()
-                .await
-                .get_total_value(&self.client)
-                .await
+            account.lock().await.get_total_value(&self.client).await
         )
     }
 }

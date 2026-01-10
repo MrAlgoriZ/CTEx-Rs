@@ -1,17 +1,17 @@
+use chrono::{Local, Timelike};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::spawn_blocking;
 use tokio::time::sleep;
-use chrono::{Local, Timelike};
 
+use crate::data::data_interfaces::{FlattenedData, ICandle};
+use crate::data::process::volatility::get_volatility;
+use crate::data::requests::database::db_req::{insert_candle, select_all_candles};
+use crate::engine::cycles::manager::CounterCommand;
 use crate::engine::utils::colors::Fore;
-use crate::data::data_interfaces::{ICandle, FlattenedData};
 use crate::engine::utils::config::config_types::Config;
 use crate::models::model::RFInterface;
-use crate::engine::cycles::manager::CounterCommand;
-use crate::data::requests::database::db_req::{insert_candle, select_all_candles};
-use crate::data::process::volatility::get_volatility;
 
 pub trait CycleGetters {
     fn get_symbol(&self) -> &String;
@@ -52,10 +52,14 @@ pub trait Cycle: CycleGetters {
         sleep(Duration::from_secs(2)).await;
 
         if self.get_config().prints.cycle.cycle_start {
-            println!("{}{} Цикл запустился", self.print_time(), self.get_print_symbol());
+            println!(
+                "{}{} Цикл запустился",
+                self.print_time(),
+                self.get_print_symbol()
+            );
         }
     }
-    
+
     fn print_time(&self) -> String {
         format!(
             "{}[{}] ",
