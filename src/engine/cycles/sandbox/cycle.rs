@@ -10,10 +10,10 @@ use crate::data::process::data_collection::{CollectedData, collect_all, flat_all
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
-use crate::engine::cycles::cycle_traits::{
+use crate::engine::cycles::manager::{CounterCommand, CounterType};
+use crate::engine::cycles::traits::{
     Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
 };
-use crate::engine::cycles::manager::{CounterCommand, CounterType};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
