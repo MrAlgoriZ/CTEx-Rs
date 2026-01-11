@@ -1,8 +1,10 @@
 use crate::{
     CONFIG_PATH,
     backend::structure::{ApiState, ApiStructure},
-    engine::cycles::manager::{CounterCommand, CycleType, SupervisorCommand},
-    engine::utils::config::load_config::load_config,
+    engine::{
+        cycles::manager::{CounterCommand, CounterType, CycleType, SupervisorCommand},
+        utils::config::load_config::load_config,
+    },
 };
 use axum::{
     Json,
@@ -54,6 +56,8 @@ pub struct AddCycleRequest {
 pub struct AccuracyQuery {
     #[serde(default = "default_window")]
     pub window: usize,
+    #[serde(rename = "type")]
+    pub counter_type: String,
 }
 
 fn default_window() -> usize {
@@ -70,6 +74,8 @@ pub struct AccuracyInfo {
     pub symbol: String,
     pub accuracy: f64,
     pub window: usize,
+    #[serde(rename = "type")]
+    pub counter_type: String,
 }
 
 #[derive(Serialize)]
@@ -225,6 +231,7 @@ pub async fn accuracy_total(
         .counter_handle
         .send(CounterCommand::GetTotalShiftedAccuracy {
             window: query.window,
+            counter_type: CounterType::from_str(&query.counter_type.to_lowercase()),
             respond_to: tx,
         })
         .await
@@ -250,6 +257,7 @@ pub async fn accuracy_token(
         .send(CounterCommand::GetShiftedAccuracy {
             symbol: symbol.to_uppercase(),
             window: query.window,
+            counter_type: CounterType::from_str(&query.counter_type.to_lowercase()),
             respond_to: tx,
         })
         .await
@@ -290,6 +298,7 @@ pub async fn accuracy_all_tokens(
             .send(CounterCommand::GetShiftedAccuracy {
                 symbol: symbol.to_uppercase().clone(),
                 window: query.window,
+                counter_type: CounterType::from_str(&query.counter_type.to_lowercase()),
                 respond_to: tx,
             })
             .await;
@@ -299,6 +308,7 @@ pub async fn accuracy_all_tokens(
                 symbol,
                 accuracy,
                 window: query.window,
+                counter_type: query.counter_type.to_lowercase(),
             });
         }
     }

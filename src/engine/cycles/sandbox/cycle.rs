@@ -13,7 +13,7 @@ use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::engine::cycles::cycle_traits::{
     Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
 };
-use crate::engine::cycles::manager::CounterCommand;
+use crate::engine::cycles::manager::{CounterCommand, CounterType};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
@@ -233,6 +233,7 @@ impl SandboxCycle {
         let _ = counter_tx
             .send(CounterCommand::GetAccuracy {
                 symbol: self.symbol.to_uppercase().clone(),
+                counter_type: CounterType::Threshold,
                 respond_to: tx_local,
             })
             .await;
@@ -240,6 +241,7 @@ impl SandboxCycle {
         let (tx_global, rx_global) = oneshot::channel();
         let _ = counter_tx
             .send(CounterCommand::GetTotalAccuracy {
+                counter_type: CounterType::Threshold,
                 respond_to: tx_global,
             })
             .await;
@@ -380,6 +382,7 @@ impl RiskEngine {
         let _ = counter_tx
             .send(CounterCommand::GetAccuracy {
                 symbol: self.symbol.to_uppercase().clone(),
+                counter_type: CounterType::Threshold,
                 respond_to: tx_local,
             })
             .await;
@@ -387,6 +390,7 @@ impl RiskEngine {
         let (tx_global, rx_global) = oneshot::channel();
         let _ = counter_tx
             .send(CounterCommand::GetTotalAccuracy {
+                counter_type: CounterType::Threshold,
                 respond_to: tx_global,
             })
             .await;

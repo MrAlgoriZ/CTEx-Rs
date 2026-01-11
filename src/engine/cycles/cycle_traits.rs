@@ -8,7 +8,7 @@ use tokio::time::sleep;
 use crate::data::data_interfaces::{FlattenedData, ICandle};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::database::db_req::{insert_candle, select_all_candles};
-use crate::engine::cycles::manager::CounterCommand;
+use crate::engine::cycles::manager::{CounterCommand, CounterType};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 use crate::models::model::RFInterface;
@@ -102,12 +102,30 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         let diff: f64 = (prediction - target).abs();
         let success_threshold: f64 = self.get_config().behaviour.success_threshold.default;
 
-        let value = if diff < success_threshold { 1 } else { 0 };
+        let threshold_value: u8 = if diff < success_threshold { 1 } else { 0 };
+        let direction_value: u8 = {
+            let target_direction = target > 0.0;
+            let prediction_direction = prediction > 0.0;
+            if target_direction == prediction_direction {
+                1
+            } else {
+                0
+            }
+        };
 
         let _ = counter_tx
             .send(CounterCommand::Increment {
                 symbol: self.get_symbol().to_uppercase().clone(),
-                value,
+                counter_type: CounterType::Threshold,
+                value: threshold_value,
+            })
+            .await;
+
+        let _ = counter_tx
+            .send(CounterCommand::Increment {
+                symbol: self.get_symbol().to_uppercase().clone(),
+                counter_type: CounterType::Direction,
+                value: direction_value,
             })
             .await;
 
@@ -137,6 +155,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                 .send(CounterCommand::GetShiftedAccuracy {
                     symbol: self.get_symbol().clone(),
                     window: 2,
+                    counter_type: CounterType::Threshold,
                     respond_to: tx,
                 })
                 .await;
@@ -194,6 +213,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             .send(CounterCommand::GetAccuracy {
                 symbol: self.get_symbol().to_uppercase().clone(),
                 respond_to: tx_local,
+                counter_type: CounterType::Threshold,
             })
             .await;
 
@@ -201,6 +221,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         let _ = counter_tx
             .send(CounterCommand::GetTotalAccuracy {
                 respond_to: tx_global,
+                counter_type: CounterType::Threshold,
             })
             .await;
 

@@ -35,25 +35,46 @@ pub enum SupervisorCommand {
 }
 
 #[derive(Debug)]
+pub enum CounterType {
+    Threshold,
+    Direction,
+}
+
+impl CounterType {
+    pub fn from_str(counter_type: &str) -> Self {
+        match counter_type {
+            "threshold" => CounterType::Threshold,
+            "direction" => CounterType::Direction,
+            _ => panic!("Cycle type must be 'training' or 'loader'"),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum CounterCommand {
     Increment {
         symbol: String,
+        counter_type: CounterType,
         value: u8,
     },
     GetAccuracy {
         symbol: String,
+        counter_type: CounterType,
         respond_to: oneshot::Sender<Option<f64>>,
     },
     GetShiftedAccuracy {
         symbol: String,
         window: usize,
+        counter_type: CounterType,
         respond_to: oneshot::Sender<Option<f64>>,
     },
     GetTotalAccuracy {
+        counter_type: CounterType,
         respond_to: oneshot::Sender<f64>,
     },
     GetTotalShiftedAccuracy {
         window: usize,
+        counter_type: CounterType,
         respond_to: oneshot::Sender<Option<f64>>,
     },
 }
@@ -77,7 +98,8 @@ impl CycleType {
 }
 
 struct CounterActor {
-    counters: Counters,
+    threshold_counters: Counters,
+    direction_counters: Counters,
     inbox: mpsc::Receiver<CounterCommand>,
 }
 
@@ -86,7 +108,8 @@ impl CounterActor {
         let (tx, rx) = mpsc::channel(1000);
         (
             Self {
-                counters: Counters::new(capacity),
+                threshold_counters: Counters::new(capacity),
+                direction_counters: Counters::new(capacity),
                 inbox: rx,
             },
             tx,
@@ -109,29 +132,69 @@ impl CounterActor {
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
-                CounterCommand::Increment { symbol, value } => {
-                    self.counters.get_mut(&symbol.to_uppercase()).push(value);
-                }
-                CounterCommand::GetAccuracy { symbol, respond_to } => {
-                    let acc = self
-                        .counters
-                        .get_option(&symbol.to_uppercase())
-                        .map(|c| c.get_accuracy());
-                    let _ = respond_to.send(acc);
-                }
+                CounterCommand::Increment {
+                    symbol,
+                    counter_type,
+                    value,
+                } => match counter_type {
+                    CounterType::Threshold => self
+                        .threshold_counters
+                        .get_mut(&symbol.to_uppercase())
+                        .push(value),
+                    CounterType::Direction => self
+                        .direction_counters
+                        .get_mut(&symbol.to_uppercase())
+                        .push(value),
+                },
+                CounterCommand::GetAccuracy {
+                    symbol,
+                    counter_type,
+                    respond_to,
+                } => match counter_type {
+                    CounterType::Threshold => {
+                        let acc = self
+                            .threshold_counters
+                            .get_option(&symbol.to_uppercase())
+                            .map(|c| c.get_accuracy());
+                        let _ = respond_to.send(acc);
+                    }
+                    CounterType::Direction => {
+                        let acc = self
+                            .direction_counters
+                            .get_option(&symbol.to_uppercase())
+                            .map(|c| c.get_accuracy());
+                        let _ = respond_to.send(acc);
+                    }
+                },
                 CounterCommand::GetShiftedAccuracy {
                     symbol,
                     window,
+                    counter_type,
+                    respond_to,
+                } => match counter_type {
+                    CounterType::Threshold => {
+                        let acc = self
+                            .threshold_counters
+                            .get_option(&symbol.to_uppercase())
+                            .and_then(|c| c.get_shifted_accuracy(window));
+                        let _ = respond_to.send(acc);
+                    }
+                    CounterType::Direction => {
+                        let acc = self
+                            .direction_counters
+                            .get_option(&symbol.to_uppercase())
+                            .and_then(|c| c.get_shifted_accuracy(window));
+                        let _ = respond_to.send(acc);
+                    }
+                },
+                CounterCommand::GetTotalAccuracy {
+                    counter_type,
                     respond_to,
                 } => {
-                    let acc = self
-                        .counters
-                        .get_option(&symbol.to_uppercase())
-                        .and_then(|c| c.get_shifted_accuracy(window));
-                    let _ = respond_to.send(acc);
-                }
-                CounterCommand::GetTotalAccuracy { respond_to } => {
-                    let values = self.counters.symbols.values();
+                    let values = match counter_type {
+                        CounterType::Threshold => self.threshold_counters.symbols.values(),
+                        CounterType::Direction => self.direction_counters.symbols.values(),
+                    };
                     let count = values.len();
 
                     let acc = if count == 0 {
@@ -143,8 +206,15 @@ impl CounterActor {
                     let _ = respond_to.send(acc);
                 }
 
-                CounterCommand::GetTotalShiftedAccuracy { window, respond_to } => {
-                    let values = self.counters.symbols.values();
+                CounterCommand::GetTotalShiftedAccuracy {
+                    window,
+                    counter_type,
+                    respond_to,
+                } => {
+                    let values = match counter_type {
+                        CounterType::Threshold => self.threshold_counters.symbols.values(),
+                        CounterType::Direction => self.direction_counters.symbols.values(),
+                    };
                     let count = values.len();
 
                     let acc = if count == 0 {
