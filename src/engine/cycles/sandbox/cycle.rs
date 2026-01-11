@@ -8,7 +8,6 @@ use tokio::{sync::Mutex, task::spawn_blocking};
 use crate::data::data_interfaces::FlattenedData;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::{process_target, restore_price};
-use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::engine::cycles::manager::{CounterCommand, CounterType};
 use crate::engine::cycles::traits::{
@@ -43,6 +42,10 @@ impl CycleGetters for SandboxCycle {
 
     fn get_config(&self) -> Config {
         self.config.clone()
+    }
+
+    fn get_client(&self) -> &BinanceClient {
+        &self.client
     }
 }
 
@@ -84,16 +87,15 @@ impl SandboxCycle {
 
         let mut target_indicate: Option<bool> = None;
         let mut prediction: Option<f64> = None;
+        let mut volatility: f64 = 0.0;
 
         loop {
-            let candles1d_to_vol = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
-            let volatility: f64 = get_volatility(&candles1d_to_vol);
-
+            self.wait_for_next_interval().await;
+            self.update_volatility(&mut volatility).await;
             if self.config.prints.cycle.volatility && target_indicate == None {
                 self.print_volatility_status(volatility);
             }
 
-            self.wait_for_next_interval().await;
             let candles: CollectedData = collect_all(&self.symbol).await;
             let candles_target: f64 =
                 self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;
@@ -199,16 +201,6 @@ impl SandboxCycle {
 
             self.print_account_balance(account.clone()).await;
         }
-    }
-
-    fn print_volatility_status(&self, volatility: f64) {
-        println!(
-            "{}{}Волатильность на токене {} составляет {:.3}",
-            self.print_time(),
-            Fore::YELLOW.as_str(),
-            self.get_symbol(),
-            volatility
-        );
     }
 
     // --- Методы ---

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 
-use crate::data::data_interfaces::{FlattenedData, ICandle};
+use crate::data::data_interfaces::FlattenedData;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::requests::ccxt::binance::BinanceClient;
@@ -39,6 +39,10 @@ impl CycleGetters for TrainingCycle {
     fn get_config(&self) -> Config {
         self.config.clone()
     }
+
+    fn get_client(&self) -> &BinanceClient {
+        &self.client
+    }
 }
 
 impl CycleGettersForCycleWithModel for TrainingCycle {
@@ -73,17 +77,18 @@ impl TrainingCycle {
         if !self.client.test_token(&self.symbol).await.is_ok() {
             return;
         }
-        if self.config.prints.cycle.volatility {
-            let candles1d_to_vol: Vec<ICandle> =
-                self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
-            self.print_volatility_status(&candles1d_to_vol);
-        }
+        let mut volatility: f64 = 0.0;
 
         let mut target_indicate: Option<bool> = None;
         let mut prediction: Option<f64> = None;
 
         loop {
             self.wait_for_next_interval().await;
+            self.update_volatility(&mut volatility).await;
+            if self.config.prints.cycle.volatility {
+                self.print_volatility_status(volatility);
+            }
+
             let candles: CollectedData = collect_all(&self.symbol).await;
             let candles_target: f64 =
                 self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;

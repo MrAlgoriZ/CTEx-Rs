@@ -7,6 +7,7 @@ use tokio::time::sleep;
 
 use crate::data::data_interfaces::{FlattenedData, ICandle};
 use crate::data::process::volatility::get_volatility;
+use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::database::db_req::{insert_candle, select_all_candles};
 use crate::engine::cycles::manager::{CounterCommand, CounterType};
 use crate::engine::utils::colors::Fore;
@@ -17,6 +18,7 @@ pub trait CycleGetters {
     fn get_symbol(&self) -> &String;
     fn get_print_symbol(&self) -> &String;
     fn get_config(&self) -> Config;
+    fn get_client(&self) -> &BinanceClient;
 }
 
 pub trait CycleGettersForCycleWithModel {
@@ -24,8 +26,7 @@ pub trait CycleGettersForCycleWithModel {
 }
 
 pub trait Cycle: CycleGetters {
-    fn print_volatility_status(&self, candles: &[ICandle]) {
-        let volatility: f64 = get_volatility(candles);
+    fn print_volatility_status(&self, volatility: f64) {
         println!(
             "{}{}Волатильность на токене {} составляет {:.3}",
             self.print_time(),
@@ -33,6 +34,14 @@ pub trait Cycle: CycleGetters {
             self.get_symbol(),
             volatility
         );
+    }
+
+    async fn update_volatility(&self, volatility_obj: &mut f64) {
+        let candles: Vec<ICandle> = self
+            .get_client()
+            .fetch_ohlcv(self.get_symbol(), "1d", 10)
+            .await;
+        *volatility_obj = get_volatility(&candles);
     }
 
     async fn wait_for_next_interval(&self) {
@@ -101,16 +110,11 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
     ) -> Result<(), ()> {
         let diff: f64 = (prediction - target).abs();
         let success_threshold: f64 = self.get_config().behaviour.success_threshold.default;
-
-        let threshold_value: u8 = if diff < success_threshold { 1 } else { 0 };
+        let threshold_value: u8 = (diff < success_threshold).into();
         let direction_value: u8 = {
             let target_direction = target > 0.0;
             let prediction_direction = prediction > 0.0;
-            if target_direction == prediction_direction {
-                1
-            } else {
-                0
-            }
+            (target_direction == prediction_direction).into()
         };
 
         let _ = counter_tx

@@ -4,6 +4,7 @@ use tokio::task::spawn_blocking;
 use crate::data::data_interfaces::ICandle;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::process_target;
+use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::database::db_req::insert_candle;
 use crate::engine::cycles::traits::{Cycle, CycleGetters};
@@ -34,6 +35,10 @@ impl CycleGetters for LoaderCycle {
     fn get_config(&self) -> Config {
         self.config.clone()
     }
+
+    fn get_client(&self) -> &BinanceClient {
+        &self.client
+    }
 }
 
 impl Cycle for LoaderCycle {}
@@ -57,10 +62,14 @@ impl LoaderCycle {
         if !self.client.test_token(&self.symbol).await.is_ok() {
             return;
         }
+
+        let volatility: f64 = {
+            let candles: Vec<ICandle> = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
+            get_volatility(&candles)
+        };
+
         if self.config.prints.cycle.volatility {
-            let candles1d_to_vol: Vec<ICandle> =
-                self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
-            self.print_volatility_status(&candles1d_to_vol);
+            self.print_volatility_status(volatility);
         }
 
         let mut target_indicate: Option<bool> = None;
