@@ -474,12 +474,12 @@ impl CycleSupervisor {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match cycle_type {
             CycleType::Loader => {
-                let mut cycle = LoaderCycle::new(symbol.to_string()).await;
+                let mut cycle = LoaderCycle::init(symbol.to_string()).await;
                 sleep(Duration::from_secs(10)).await;
                 cycle.run().await;
             }
             CycleType::Training => {
-                let mut cycle = TrainingCycle::new(symbol.to_string()).await;
+                let mut cycle = TrainingCycle::init(symbol.to_string()).await;
 
                 let model = model
                     .as_ref()
@@ -489,7 +489,7 @@ impl CycleSupervisor {
                 cycle.run(model, counter_tx).await;
             }
             CycleType::Sandbox => {
-                let mut cycle = SandboxCycle::new(symbol.to_string()).await;
+                let mut cycle = SandboxCycle::init(symbol.to_string()).await;
 
                 let model = model
                     .as_ref()

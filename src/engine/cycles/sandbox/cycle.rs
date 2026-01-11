@@ -21,7 +21,7 @@ use crate::models::model::RFInterface;
 
 pub struct SandboxCycle {
     pub symbol: String,
-    last_grouped_candles: Option<CollectedData>,
+    last_grouped_candles: Option<Arc<CollectedData>>,
     last_candles_target: Option<f64>,
     print_symbol: String,
     client: BinanceClient,
@@ -32,16 +32,16 @@ pub struct SandboxCycle {
 }
 
 impl CycleGetters for SandboxCycle {
-    fn get_symbol(&self) -> &String {
+    fn get_symbol(&self) -> &str {
         &self.symbol
     }
 
-    fn get_print_symbol(&self) -> &String {
+    fn get_print_symbol(&self) -> &str {
         &self.print_symbol
     }
 
-    fn get_config(&self) -> Config {
-        self.config.clone()
+    fn get_config(&self) -> &Config {
+        &self.config
     }
 
     fn get_client(&self) -> &BinanceClient {
@@ -59,20 +59,26 @@ impl Cycle for SandboxCycle {}
 impl CycleWithModel for SandboxCycle {}
 
 impl SandboxCycle {
-    pub async fn new(symbol: String) -> Self {
+    fn new(symbol: String, client: BinanceClient, pool: PgPool) -> Self {
         SandboxCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol.clone(),
             last_grouped_candles: None,
             last_candles_target: None,
-            client: BinanceClient::new().await,
             config: load_config("config/config.yaml"),
-            pool: PgPool::connect(&load_env().database_url)
-                .await
-                .expect("Database connection failed"),
+            client,
+            pool,
             risk_engine: RiskEngine::new(symbol, load_config("config/config.yaml")),
             feedback_engine: FeedBackEngine::new(load_config("config/config.yaml")),
         }
+    }
+
+    pub async fn init(symbol: String) -> Self {
+        let client = BinanceClient::new().await;
+        let pool = PgPool::connect(&load_env().database_url)
+            .await
+            .expect("Database connection failed");
+        Self::new(symbol, client, pool)
     }
 
     pub async fn run(
@@ -96,7 +102,7 @@ impl SandboxCycle {
                 self.print_volatility_status(volatility);
             }
 
-            let candles: CollectedData = collect_all(&self.symbol).await;
+            let candles = Arc::new(collect_all(&self.symbol).await);
             let candles_target: f64 =
                 self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;
 
@@ -127,8 +133,7 @@ impl SandboxCycle {
                 self.feedback_engine.update_success_threshold();
 
                 if !success {
-                    let last_grouped: CollectedData =
-                        self.last_grouped_candles.as_ref().unwrap().clone();
+                    let last_grouped = self.last_grouped_candles.clone().unwrap();
                     self.handle_mistake(
                         spawn_blocking(move || flat_all(last_grouped, target))
                             .await
@@ -152,7 +157,7 @@ impl SandboxCycle {
                 );
             }
 
-            let candles_to_flattened: CollectedData = candles.clone();
+            let candles_to_flattened = candles.clone();
             let flattened_for_pred: FlattenedData =
                 spawn_blocking(move || flat_all(candles_to_flattened, None))
                     .await

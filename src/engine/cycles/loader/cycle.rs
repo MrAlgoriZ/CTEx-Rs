@@ -1,4 +1,5 @@
 use sqlx::PgPool;
+use std::sync::Arc;
 use tokio::task::spawn_blocking;
 
 use crate::data::data_interfaces::ICandle;
@@ -7,6 +8,7 @@ use crate::data::process::target::process_target;
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::database::db_req::insert_candle;
+use crate::engine::cycles::CyclePhase;
 use crate::engine::cycles::traits::{Cycle, CycleGetters};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
@@ -15,7 +17,7 @@ use crate::engine::utils::config::load_env::load_env;
 
 pub struct LoaderCycle {
     pub symbol: String,
-    last_grouped_candles: Option<CollectedData>,
+    last_grouped_candles: Option<Arc<CollectedData>>,
     last_candles_target: Option<f64>,
     config: Config,
     print_symbol: String,
@@ -24,16 +26,16 @@ pub struct LoaderCycle {
 }
 
 impl CycleGetters for LoaderCycle {
-    fn get_symbol(&self) -> &String {
+    fn get_symbol(&self) -> &str {
         &self.symbol
     }
 
-    fn get_print_symbol(&self) -> &String {
+    fn get_print_symbol(&self) -> &str {
         &self.print_symbol
     }
 
-    fn get_config(&self) -> Config {
-        self.config.clone()
+    fn get_config(&self) -> &Config {
+        &self.config
     }
 
     fn get_client(&self) -> &BinanceClient {
@@ -44,18 +46,24 @@ impl CycleGetters for LoaderCycle {
 impl Cycle for LoaderCycle {}
 
 impl LoaderCycle {
-    pub async fn new(symbol: String) -> Self {
+    fn new(symbol: String, client: BinanceClient, pool: PgPool) -> Self {
         LoaderCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol,
             last_grouped_candles: None,
             last_candles_target: None,
             config: load_config("config/config.yaml"),
-            client: BinanceClient::new().await,
-            pool: PgPool::connect(&load_env().database_url)
-                .await
-                .expect("Database connection failed"),
+            client,
+            pool,
         }
+    }
+
+    pub async fn init(symbol: String) -> Self {
+        let client = BinanceClient::new().await;
+        let pool = PgPool::connect(&load_env().database_url)
+            .await
+            .expect("Database connection failed");
+        Self::new(symbol, client, pool)
     }
 
     pub async fn run(&mut self) {
@@ -72,7 +80,7 @@ impl LoaderCycle {
             self.print_volatility_status(volatility);
         }
 
-        let mut target_indicate: Option<bool> = None;
+        let mut phase: CyclePhase = CyclePhase::Warmup;
 
         loop {
             self.wait_for_next_interval().await;
@@ -80,35 +88,37 @@ impl LoaderCycle {
             let candles_target: f64 =
                 self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;
 
-            if target_indicate == Some(true) {
-                let target: Option<f64> =
-                    process_target(self.last_candles_target.unwrap(), candles_target);
+            match phase {
+                CyclePhase::Active => {
+                    let target: Option<f64> =
+                        process_target(self.last_candles_target.unwrap(), candles_target);
 
-                if self.config.prints.cycle.target {
-                    println!(
-                        "{}{} {}Target: {:.5}",
-                        self.print_time(),
-                        self.print_symbol,
-                        Fore::WHITE.as_str(),
-                        target.unwrap(),
-                    );
+                    if self.config.prints.cycle.target {
+                        println!(
+                            "{}{} {}Target: {:.5}",
+                            self.print_time(),
+                            self.print_symbol,
+                            Fore::WHITE.as_str(),
+                            target.unwrap(),
+                        );
+                    }
+
+                    let last_grouped = self.last_grouped_candles.clone().unwrap();
+
+                    self.save_data(
+                        spawn_blocking(move || flat_all(last_grouped, target))
+                            .await
+                            .unwrap(),
+                        &self.pool,
+                    )
+                    .await
+                    .unwrap();
                 }
-
-                let last_grouped: CollectedData =
-                    self.last_grouped_candles.as_ref().unwrap().clone();
-
-                self.save_data(
-                    spawn_blocking(move || flat_all(last_grouped, target))
-                        .await
-                        .unwrap(),
-                    &self.pool,
-                )
-                .await
-                .unwrap();
+                _ => {}
             }
 
-            target_indicate = Some(true);
-            self.last_grouped_candles = Some(candles);
+            phase = CyclePhase::Active;
+            self.last_grouped_candles = Some(Arc::new(candles));
             self.last_candles_target = Some(candles_target);
         }
     }

@@ -15,9 +15,9 @@ use crate::engine::utils::config::config_types::Config;
 use crate::models::model::RFInterface;
 
 pub trait CycleGetters {
-    fn get_symbol(&self) -> &String;
-    fn get_print_symbol(&self) -> &String;
-    fn get_config(&self) -> Config;
+    fn get_symbol(&self) -> &str;
+    fn get_print_symbol(&self) -> &str;
+    fn get_config(&self) -> &Config;
     fn get_client(&self) -> &BinanceClient;
 }
 
@@ -157,7 +157,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             let (tx, rx) = oneshot::channel();
             let _ = counter_tx
                 .send(CounterCommand::GetShiftedAccuracy {
-                    symbol: self.get_symbol().clone(),
+                    symbol: self.get_symbol().to_string(),
                     window: 2,
                     counter_type: CounterType::Threshold,
                     respond_to: tx,

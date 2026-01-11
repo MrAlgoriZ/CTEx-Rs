@@ -4,3 +4,8 @@ pub mod manager;
 pub mod sandbox;
 pub mod training;
 pub mod traits;
+
+pub enum CyclePhase {
+    Warmup,
+    Active,
+}

@@ -5,6 +5,7 @@ use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::time_req::TimeRequest;
 use crate::engine::utils::processor::*;
 
+use std::sync::Arc;
 use tokio::task::spawn_blocking;
 
 const OHLCV_LEN: usize = 10;
@@ -208,7 +209,7 @@ pub async fn collect_all(token: &str) -> CollectedData {
     )
 }
 
-pub fn flat_all(collected_data: CollectedData, target: Option<f64>) -> FlattenedData {
+pub fn flat_all(collected_data: Arc<CollectedData>, target: Option<f64>) -> FlattenedData {
     let mut features = Vec::new();
 
     features.push(collected_data.time.hour_sin);

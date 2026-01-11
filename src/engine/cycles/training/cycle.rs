@@ -7,6 +7,7 @@ use crate::data::data_interfaces::FlattenedData;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::requests::ccxt::binance::BinanceClient;
+use crate::engine::cycles::CyclePhase;
 use crate::engine::cycles::manager::CounterCommand;
 use crate::engine::cycles::traits::{
     Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
@@ -19,7 +20,7 @@ use crate::models::model::RFInterface;
 
 pub struct TrainingCycle {
     pub symbol: String,
-    last_grouped_candles: Option<CollectedData>,
+    last_grouped_candles: Option<Arc<CollectedData>>,
     last_candles_target: Option<f64>,
     print_symbol: String,
     client: BinanceClient,
@@ -28,16 +29,16 @@ pub struct TrainingCycle {
 }
 
 impl CycleGetters for TrainingCycle {
-    fn get_symbol(&self) -> &String {
+    fn get_symbol(&self) -> &str {
         &self.symbol
     }
 
-    fn get_print_symbol(&self) -> &String {
+    fn get_print_symbol(&self) -> &str {
         &self.print_symbol
     }
 
-    fn get_config(&self) -> Config {
-        self.config.clone()
+    fn get_config(&self) -> &Config {
+        &self.config
     }
 
     fn get_client(&self) -> &BinanceClient {
@@ -55,18 +56,24 @@ impl Cycle for TrainingCycle {}
 impl CycleWithModel for TrainingCycle {}
 
 impl TrainingCycle {
-    pub async fn new(symbol: String) -> Self {
+    fn new(symbol: String, client: BinanceClient, pool: PgPool) -> Self {
         TrainingCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol,
             last_grouped_candles: None,
             last_candles_target: None,
-            client: BinanceClient::new().await,
             config: load_config("config/config.yaml"),
-            pool: PgPool::connect(&load_env().database_url)
-                .await
-                .expect("Database connection failed"),
+            client,
+            pool,
         }
+    }
+
+    pub async fn init(symbol: String) -> Self {
+        let client = BinanceClient::new().await;
+        let pool = PgPool::connect(&load_env().database_url)
+            .await
+            .expect("Database connection failed");
+        Self::new(symbol, client, pool)
     }
 
     pub async fn run(
@@ -79,7 +86,7 @@ impl TrainingCycle {
         }
         let mut volatility: f64 = 0.0;
 
-        let mut target_indicate: Option<bool> = None;
+        let mut phase = CyclePhase::Warmup;
         let mut prediction: Option<f64> = None;
 
         loop {
@@ -89,49 +96,51 @@ impl TrainingCycle {
                 self.print_volatility_status(volatility);
             }
 
-            let candles: CollectedData = collect_all(&self.symbol).await;
+            let candles = Arc::new(collect_all(&self.symbol).await);
             let candles_target: f64 =
                 self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;
 
-            if target_indicate == Some(true) {
-                let target: Option<f64> =
-                    process_target(self.last_candles_target.unwrap(), candles_target);
+            match phase {
+                CyclePhase::Active => {
+                    let target: Option<f64> =
+                        process_target(self.last_candles_target.unwrap(), candles_target);
 
-                let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
-                let success: bool = diff < self.config.behaviour.success_threshold.default;
+                    let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
+                    let success: bool = diff < self.config.behaviour.success_threshold.default;
 
-                if self.config.prints.cycle.target {
-                    println!(
-                        "{}{} {}Pred: {:.5} | Target: {:.5} | Diff {:.5}",
-                        self.print_time(),
-                        self.print_symbol,
-                        Fore::WHITE.as_str(),
-                        prediction.unwrap(),
-                        target.unwrap(),
-                        diff
-                    );
+                    if self.config.prints.cycle.target {
+                        println!(
+                            "{}{} {}Pred: {:.5} | Target: {:.5} | Diff {:.5}",
+                            self.print_time(),
+                            self.print_symbol,
+                            Fore::WHITE.as_str(),
+                            prediction.unwrap(),
+                            target.unwrap(),
+                            diff
+                        );
+                    }
+
+                    self.update_counters(prediction.unwrap(), target.unwrap(), counter_tx)
+                        .await
+                        .unwrap();
+
+                    if !success {
+                        let last_grouped = self.last_grouped_candles.clone().unwrap();
+                        self.handle_mistake(
+                            spawn_blocking(move || flat_all(last_grouped, target))
+                                .await
+                                .unwrap(),
+                            counter_tx,
+                            model,
+                        )
+                        .await
+                        .unwrap();
+                    }
                 }
-
-                self.update_counters(prediction.unwrap(), target.unwrap(), counter_tx)
-                    .await
-                    .unwrap();
-
-                if !success {
-                    let last_grouped: CollectedData =
-                        self.last_grouped_candles.as_ref().unwrap().clone();
-                    self.handle_mistake(
-                        spawn_blocking(move || flat_all(last_grouped, target))
-                            .await
-                            .unwrap(),
-                        counter_tx,
-                        model,
-                    )
-                    .await
-                    .unwrap();
-                }
+                _ => {}
             }
 
-            let candles_to_flattened: CollectedData = candles.clone();
+            let candles_to_flattened = candles.clone();
             let flattened_for_pred: FlattenedData =
                 spawn_blocking(move || flat_all(candles_to_flattened, None))
                     .await
@@ -140,7 +149,7 @@ impl TrainingCycle {
             prediction = Some(self.predict(flattened_for_pred, &model).await.unwrap());
             let restored_price: f64 = restore_price(candles_target, prediction.unwrap());
 
-            target_indicate = Some(true);
+            phase = CyclePhase::Active;
             self.log_prediction(prediction.unwrap(), restored_price);
             self.last_grouped_candles = Some(candles);
             self.last_candles_target = Some(candles_target);
