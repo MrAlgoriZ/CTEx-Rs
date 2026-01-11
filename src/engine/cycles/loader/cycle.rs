@@ -1,6 +1,5 @@
 use sqlx::PgPool;
 use std::sync::Arc;
-use tokio::task::spawn_blocking;
 
 use crate::data::data_interfaces::ICandle;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
@@ -105,14 +104,8 @@ impl LoaderCycle {
 
                     let last_grouped = self.last_grouped_candles.clone().unwrap();
 
-                    self.save_data(
-                        spawn_blocking(move || flat_all(last_grouped, target))
-                            .await
-                            .unwrap(),
-                        &self.pool,
-                    )
-                    .await
-                    .unwrap();
+                    let flattenned = flat_all(last_grouped, target);
+                    self.save_data(flattenned, &self.pool).await.unwrap();
                 }
                 _ => {}
             }

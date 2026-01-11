@@ -210,7 +210,7 @@ pub async fn collect_all(token: &str) -> CollectedData {
 }
 
 pub fn flat_all(collected_data: Arc<CollectedData>, target: Option<f64>) -> FlattenedData {
-    let mut features = Vec::new();
+    let mut features = Vec::with_capacity(4 + 50 + 50 + 50 + 6 + 70 + 1);
 
     features.push(collected_data.time.hour_sin);
     features.push(collected_data.time.hour_cos);

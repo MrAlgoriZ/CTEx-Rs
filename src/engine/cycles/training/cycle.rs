@@ -1,7 +1,6 @@
 use sqlx::PgPool;
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::mpsc;
-use tokio::task::spawn_blocking;
 
 use crate::data::data_interfaces::FlattenedData;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
@@ -126,25 +125,17 @@ impl TrainingCycle {
 
                     if !success {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
-                        self.handle_mistake(
-                            spawn_blocking(move || flat_all(last_grouped, target))
-                                .await
-                                .unwrap(),
-                            counter_tx,
-                            model,
-                        )
-                        .await
-                        .unwrap();
+                        let flattened = flat_all(last_grouped, target);
+                        self.handle_mistake(flattened, counter_tx, model)
+                            .await
+                            .unwrap();
                     }
                 }
                 _ => {}
             }
 
             let candles_to_flattened = candles.clone();
-            let flattened_for_pred: FlattenedData =
-                spawn_blocking(move || flat_all(candles_to_flattened, None))
-                    .await
-                    .unwrap();
+            let flattened_for_pred: FlattenedData = flat_all(candles_to_flattened, None);
 
             prediction = Some(self.predict(flattened_for_pred, &model).await.unwrap());
             let restored_price: f64 = restore_price(candles_target, prediction.unwrap());
