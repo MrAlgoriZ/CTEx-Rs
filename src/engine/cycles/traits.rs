@@ -106,10 +106,13 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         &self,
         prediction: f64,
         target: f64,
+        volatility: f64,
         counter_tx: &mpsc::Sender<CounterCommand>,
     ) -> Result<(), ()> {
         let diff: f64 = (prediction - target).abs();
-        let success_threshold: f64 = self.get_config().behaviour.success_threshold.default;
+        let success_threshold: f64 =
+            self.get_config().behaviour.success_threshold.default * 100.0 * volatility;
+        println!("{}", success_threshold);
         let threshold_value: u8 = (diff < success_threshold).into();
         let direction_value: u8 = {
             let target_direction = target > 0.0;
@@ -158,7 +161,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             let _ = counter_tx
                 .send(CounterCommand::GetShiftedAccuracy {
                     symbol: self.get_symbol().to_string(),
-                    window: 2,
+                    window: 3,
                     counter_type: CounterType::Threshold,
                     respond_to: tx,
                 })
@@ -183,13 +186,13 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                 str_prediction = format!(
                     "{}Цена пойдет вверх на {:.5}%",
                     Fore::GREEN.as_str(),
-                    prediction * 100.0
+                    prediction
                 );
             } else {
                 str_prediction = format!(
                     "{}Цена пойдет вниз на {:.5}%",
                     Fore::RED.as_str(),
-                    prediction.abs() * 100.0
+                    prediction.abs()
                 );
             }
 

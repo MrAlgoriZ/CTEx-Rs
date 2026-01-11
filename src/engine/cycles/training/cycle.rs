@@ -105,7 +105,8 @@ impl TrainingCycle {
                         process_target(self.last_candles_target.unwrap(), candles_target);
 
                     let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
-                    let success: bool = diff < self.config.behaviour.success_threshold.default;
+                    let success: bool = diff
+                        < (self.config.behaviour.success_threshold.default * 100.0 * volatility);
 
                     if self.config.prints.cycle.target {
                         println!(
@@ -119,9 +120,14 @@ impl TrainingCycle {
                         );
                     }
 
-                    self.update_counters(prediction.unwrap(), target.unwrap(), counter_tx)
-                        .await
-                        .unwrap();
+                    self.update_counters(
+                        prediction.unwrap(),
+                        target.unwrap(),
+                        volatility,
+                        counter_tx,
+                    )
+                    .await
+                    .unwrap();
 
                     if !success {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();

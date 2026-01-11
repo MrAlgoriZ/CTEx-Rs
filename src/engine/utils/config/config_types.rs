@@ -131,7 +131,7 @@ impl Default for Config {
             behaviour: BehaviourConfig {
                 success_threshold: SuccessThresholdConfig {
                     minimum: 0.2,
-                    default: 1.0,
+                    default: 0.125,
                     maximum: 1.7,
                     ratio: 1.25,
                 },

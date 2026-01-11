@@ -111,7 +111,8 @@ impl SandboxCycle {
                     process_target(self.last_candles_target.unwrap(), candles_target);
 
                 let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
-                let success: bool = diff < self.feedback_engine.success_threshold;
+                let success: bool =
+                    diff < (self.config.behaviour.success_threshold.default * 100.0 * volatility);
 
                 if self.config.prints.cycle.target {
                     println!(
@@ -125,7 +126,7 @@ impl SandboxCycle {
                     );
                 }
 
-                self.update_counters(prediction.unwrap(), target.unwrap(), counter_tx)
+                self.update_counters(prediction.unwrap(), target.unwrap(), volatility, counter_tx)
                     .await
                     .unwrap();
 
