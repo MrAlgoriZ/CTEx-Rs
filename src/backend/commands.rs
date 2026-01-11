@@ -296,7 +296,7 @@ pub async fn accuracy_all_tokens(
         let _ = state
             .counter_handle
             .send(CounterCommand::GetShiftedAccuracy {
-                symbol: symbol.to_uppercase().clone(),
+                symbol: symbol.to_uppercase(),
                 window: query.window,
                 counter_type: CounterType::from_str(&query.counter_type.to_lowercase()),
                 respond_to: tx,

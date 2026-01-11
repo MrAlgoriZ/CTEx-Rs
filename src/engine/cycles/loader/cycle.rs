@@ -58,20 +58,20 @@ impl LoaderCycle {
     }
 
     pub async fn init(symbol: String) -> Self {
-        let client = BinanceClient::new().await;
+        let client = BinanceClient::new();
         let pool = PgPool::connect(&load_env().database_url)
             .await
             .expect("Database connection failed");
         Self::new(symbol, client, pool)
     }
 
-    pub async fn run(&mut self) {
+    pub async fn run(&mut self) -> Result<(), String> {
         if !self.client.test_token(&self.symbol).await.is_ok() {
-            return;
+            return Err("Токена с таким именем не существует!".to_string());
         }
 
         let volatility: f64 = {
-            let candles: Vec<ICandle> = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await;
+            let candles: Vec<ICandle> = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await?;
             get_volatility(&candles)
         };
 
@@ -83,9 +83,9 @@ impl LoaderCycle {
 
         loop {
             self.wait_for_next_interval().await;
-            let candles: CollectedData = collect_all(&self.symbol).await;
+            let candles: CollectedData = collect_all(&self.symbol).await?;
             let candles_target: f64 =
-                self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;
+                self.client.fetch_ohlcv(&self.symbol, "15m", 2).await?[0].close;
 
             match phase {
                 CyclePhase::Active => {

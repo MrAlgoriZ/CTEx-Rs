@@ -36,12 +36,13 @@ pub trait Cycle: CycleGetters {
         );
     }
 
-    async fn update_volatility(&self, volatility_obj: &mut f64) {
+    async fn update_volatility(&self, volatility_obj: &mut f64) -> Result<(), String> {
         let candles: Vec<ICandle> = self
             .get_client()
             .fetch_ohlcv(self.get_symbol(), "1d", 10)
-            .await;
+            .await?;
         *volatility_obj = get_volatility(&candles);
+        Ok(())
     }
 
     async fn wait_for_next_interval(&self) {
@@ -122,7 +123,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
         let _ = counter_tx
             .send(CounterCommand::Increment {
-                symbol: self.get_symbol().to_uppercase().clone(),
+                symbol: self.get_symbol().to_uppercase(),
                 counter_type: CounterType::Threshold,
                 value: threshold_value,
             })
@@ -130,7 +131,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
         let _ = counter_tx
             .send(CounterCommand::Increment {
-                symbol: self.get_symbol().to_uppercase().clone(),
+                symbol: self.get_symbol().to_uppercase(),
                 counter_type: CounterType::Direction,
                 value: direction_value,
             })
@@ -218,7 +219,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         let (tx_local, rx_local) = oneshot::channel();
         let _ = counter_tx
             .send(CounterCommand::GetAccuracy {
-                symbol: self.get_symbol().to_uppercase().clone(),
+                symbol: self.get_symbol().to_uppercase(),
                 respond_to: tx_local,
                 counter_type: CounterType::Threshold,
             })

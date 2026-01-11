@@ -6,7 +6,6 @@ use crate::data::requests::time_req::TimeRequest;
 use crate::engine::utils::processor::*;
 
 use std::sync::Arc;
-use tokio::task::spawn_blocking;
 
 const OHLCV_LEN: usize = 10;
 const OHLCV_FETCH_LEN: usize = 11;
@@ -157,56 +156,52 @@ impl ProcessAll {
         process_ohlcv(&self.ohlcv1d).try_into().unwrap()
     }
 
-    pub async fn ticker(&self) -> ITicker {
+    pub fn ticker(&self) -> ITicker {
         process_ticker(&self.ticker)
     }
 
-    pub async fn day_price(&self) -> IDayPrice {
+    pub fn day_price(&self) -> IDayPrice {
         process_day_price(&self.day_price, self.ohlcv[0].open)
     }
 
-    pub async fn mean_price(&self) -> f64 {
+    pub fn mean_price(&self) -> f64 {
         let percent = DynamicPercent::with_base(self.ohlcv[0].open, 100.0);
         percent.one_value(self.mean_price)
     }
 }
 
-pub async fn collect_all(token: &str) -> CollectedData {
-    let client = BinanceClient::new().await;
+pub async fn collect_all(token: &str) -> Result<CollectedData, String> {
+    let client = BinanceClient::new();
     let ohlcv = client
         .fetch_ohlcv(token, "15m", OHLCV_FETCH_LEN)
-        .await
+        .await?
         .try_into()
         .unwrap();
     let ohlcv1h = client
         .fetch_ohlcv(token, "1h", OHLCV_FETCH_LEN)
-        .await
+        .await?
         .try_into()
         .unwrap();
     let ohlcv1d = client
         .fetch_ohlcv(token, "1d", OHLCV_FETCH_LEN)
-        .await
+        .await?
         .try_into()
         .unwrap();
-    let ticker = client.fetch_ticker(token).await;
-    let day_price = client.fetch_day_price(token).await;
-    let mean_price = client.fetch_average_price(token).await;
+    let ticker = client.fetch_ticker(token).await?;
+    let day_price = client.fetch_day_price(token).await?;
+    let mean_price = client.fetch_average_price(token).await?;
 
-    let process_value = spawn_blocking(move || {
-        ProcessAll::new(ohlcv, ohlcv1h, ohlcv1d, ticker, day_price, mean_price)
-    })
-    .await
-    .unwrap();
+    let process_value = ProcessAll::new(ohlcv, ohlcv1h, ohlcv1d, ticker, day_price, mean_price);
 
-    CollectedData::new(
+    Ok(CollectedData::new(
         token,
         process_value.ohlcv(),
         process_value.ohlcv1h(),
         process_value.ohlcv1d(),
-        process_value.ticker().await,
-        process_value.day_price().await,
-        process_value.mean_price().await,
-    )
+        process_value.ticker(),
+        process_value.day_price(),
+        process_value.mean_price(),
+    ))
 }
 
 pub fn flat_all(collected_data: Arc<CollectedData>, target: Option<f64>) -> FlattenedData {

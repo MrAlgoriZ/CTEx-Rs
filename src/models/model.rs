@@ -255,14 +255,10 @@ pub async fn train_model(pool: &PgPool, model: &Arc<StdMutex<RFInterface>>) {
     let data = select_all_candles(pool).await.unwrap();
     let model_clone = Arc::clone(model);
 
-    tokio::task::spawn_blocking(move || {
-        let mut model_guard = model_clone.lock().unwrap();
-        model_guard
-            .train(data)
-            .expect("The model faced a problem with learning");
-    })
-    .await
-    .unwrap();
+    let mut model_guard = model_clone.lock().unwrap();
+    model_guard
+        .train(data)
+        .expect("The model faced a problem with learning");
 }
 
 fn threshold_accuracy(y_true: &[f64], y_pred: &[f64], threshold: f64) -> f64 {

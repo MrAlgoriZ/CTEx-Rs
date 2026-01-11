@@ -476,7 +476,10 @@ impl CycleSupervisor {
             CycleType::Loader => {
                 let mut cycle = LoaderCycle::init(symbol.to_string()).await;
                 sleep(Duration::from_secs(10)).await;
-                cycle.run().await;
+                match cycle.run().await {
+                    Ok(_) => {}
+                    Err(_) => {}
+                };
             }
             CycleType::Training => {
                 let mut cycle = TrainingCycle::init(symbol.to_string()).await;
@@ -486,7 +489,10 @@ impl CycleSupervisor {
                     .expect("Model should be initialized for Training cycle");
 
                 sleep(Duration::from_secs(10)).await;
-                cycle.run(model, counter_tx).await;
+                match cycle.run(model, counter_tx).await {
+                    Ok(_) => {}
+                    Err(_) => {}
+                };
             }
             CycleType::Sandbox => {
                 let mut cycle = SandboxCycle::init(symbol.to_string()).await;
@@ -496,7 +502,10 @@ impl CycleSupervisor {
                     .expect("Model should be initialized for Training cycle");
 
                 sleep(Duration::from_secs(10)).await;
-                cycle.run(model, counter_tx, account.clone().unwrap()).await;
+                match cycle.run(model, counter_tx, account.clone().unwrap()).await {
+                    Ok(_) => {}
+                    Err(_) => {}
+                };
             }
         }
         Ok(())

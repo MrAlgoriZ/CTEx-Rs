@@ -1,142 +1,166 @@
-use std::sync::Arc;
-use tokio::task;
-
 use binance::api::Binance;
 use binance::market::Market;
+use std::sync::Arc;
 
 use crate::data::data_interfaces::*;
-
-const MINIMAL_VALUE: f64 = f64::MIN;
 
 pub struct BinanceClient {
     market: Arc<Market>,
 }
 
 impl BinanceClient {
-    pub async fn new() -> Self {
-        let market = tokio::task::spawn_blocking(|| Binance::new(None, None))
-            .await
-            .expect("spawn_blocking failed");
+    const MAX_RETRIES: usize = 3;
+    const RETRY_DELAY_SECS: u64 = 1;
+
+    pub fn new() -> Self {
+        let market = Binance::new(None, None);
 
         BinanceClient {
             market: Arc::new(market),
         }
     }
 
-    async fn run_blocking<F, T>(&self, f: F, default: T) -> T
-    where
-        F: FnOnce(&Market) -> Result<T, String> + Send + 'static,
-        T: Send + 'static,
-    {
-        let market = Arc::clone(&self.market);
-        let handle = task::spawn_blocking(move || f(&market));
+    pub async fn fetch_ohlcv(
+        &self,
+        token: &str,
+        timeframe: &str,
+        limit: usize,
+    ) -> Result<Vec<ICandle>, String> {
+        for attempt in 1..=Self::MAX_RETRIES {
+            match self
+                .market
+                .get_klines(token, timeframe, limit as u16, None, None)
+            {
+                Ok(binance::model::KlineSummaries::AllKlineSummaries(klines)) => {
+                    let mut ohlcv_list = Vec::with_capacity(klines.len());
+                    for kline in klines {
+                        let open = kline.open.parse().unwrap_or(f64::MIN);
+                        let high = kline.high.parse().unwrap_or(f64::MIN);
+                        let low = kline.low.parse().unwrap_or(f64::MIN);
+                        let close = kline.close.parse().unwrap_or(f64::MIN);
+                        let volume = kline.volume.parse().unwrap_or(f64::MIN);
 
-        match handle.await {
-            Ok(Ok(result)) => result,
-            Ok(Err(e)) => {
-                eprintln!("BinanceClient error: {}", e);
-                default
-            }
-            Err(join_err) => {
-                eprintln!("JoinError: {}", join_err);
-                default
+                        ohlcv_list.push(ICandle::new(open, high, low, close, volume));
+                    }
+                    return Ok(ohlcv_list);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "fetch_ohlcv attempt {}/{} failed for {}: {:?}",
+                        attempt,
+                        Self::MAX_RETRIES,
+                        token,
+                        e
+                    );
+                    if attempt == Self::MAX_RETRIES {
+                        return Err(format!(
+                            "Failed to fetch OHLCV for {} after {} attempts",
+                            token,
+                            Self::MAX_RETRIES
+                        ));
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(Self::RETRY_DELAY_SECS))
+                        .await;
+                }
             }
         }
+        unreachable!()
     }
 
-    pub async fn fetch_ohlcv(&self, token: &str, timeframe: &str, limit: usize) -> Vec<ICandle> {
-        let token = token.to_string();
-        let timeframe = timeframe.to_string();
-
-        return self
-            .run_blocking(
-                move |market| {
-                    let mut ohlcv_list: Vec<ICandle> = Vec::new();
-
-                    match market.get_klines(&token, &timeframe, limit as u16, None, None) {
-                        Ok(binance::model::KlineSummaries::AllKlineSummaries(klines)) => {
-                            for kline in klines {
-                                let open: f64 = kline.open.parse().unwrap_or(MINIMAL_VALUE);
-                                let high: f64 = kline.high.parse().unwrap_or(MINIMAL_VALUE);
-                                let low: f64 = kline.low.parse().unwrap_or(MINIMAL_VALUE);
-                                let close: f64 = kline.close.parse().unwrap_or(MINIMAL_VALUE);
-                                let volume: f64 = kline.volume.parse().unwrap_or(MINIMAL_VALUE);
-
-                                ohlcv_list.push(ICandle::new(open, high, low, close, volume));
-                            }
-                            Ok(ohlcv_list)
-                        }
-                        Err(e) => Err(format!("Binance error: {:?}", e)),
+    pub async fn fetch_average_price(&self, token: &str) -> Result<f64, String> {
+        for attempt in 1..=Self::MAX_RETRIES {
+            match self.market.get_average_price(token) {
+                Ok(answer) => return Ok(answer.price),
+                Err(e) => {
+                    eprintln!(
+                        "fetch_average_price attempt {}/{} failed for {}: {:?}",
+                        attempt,
+                        Self::MAX_RETRIES,
+                        token,
+                        e
+                    );
+                    if attempt == Self::MAX_RETRIES {
+                        return Err(format!(
+                            "Failed to fetch average price for {} after {} attempts",
+                            token,
+                            Self::MAX_RETRIES
+                        ));
                     }
-                },
-                Vec::new(),
-            )
-            .await;
+                    tokio::time::sleep(std::time::Duration::from_secs(Self::RETRY_DELAY_SECS))
+                        .await;
+                }
+            }
+        }
+        unreachable!()
     }
 
-    pub async fn fetch_average_price(&self, token: &str) -> f64 {
-        let token = token.to_string();
-
-        return self
-            .run_blocking(
-                move |market| match market.get_average_price(&token) {
-                    Ok(answer) => Ok(answer.price),
-                    Err(e) => Err(format!("Error: {:?}", e)),
-                },
-                MINIMAL_VALUE,
-            )
-            .await;
-    }
-
-    pub async fn fetch_ticker(&self, token: &str) -> ITicker {
-        let token = token.to_string();
-
-        return self
-            .run_blocking(
-                move |market| match market.get_book_ticker(&token) {
-                    Ok(answer) => {
-                        let bid = answer.bid_price;
-                        let ask = answer.ask_price;
-                        Ok(ITicker::new(bid, ask))
+    pub async fn fetch_ticker(&self, token: &str) -> Result<ITicker, String> {
+        for attempt in 1..=Self::MAX_RETRIES {
+            match self.market.get_book_ticker(token) {
+                Ok(answer) => return Ok(ITicker::new(answer.bid_price, answer.ask_price)),
+                Err(e) => {
+                    eprintln!(
+                        "fetch_ticker attempt {}/{} failed for {}: {:?}",
+                        attempt,
+                        Self::MAX_RETRIES,
+                        token,
+                        e
+                    );
+                    if attempt == Self::MAX_RETRIES {
+                        return Err(format!(
+                            "Failed to fetch ticker for {} after {} attempts",
+                            token,
+                            Self::MAX_RETRIES
+                        ));
                     }
-                    Err(e) => Err(format!("Error: {:?}", e)),
-                },
-                ITicker::new(MINIMAL_VALUE, MINIMAL_VALUE),
-            )
-            .await;
+                    tokio::time::sleep(std::time::Duration::from_secs(Self::RETRY_DELAY_SECS))
+                        .await;
+                }
+            }
+        }
+        unreachable!()
     }
 
-    pub async fn fetch_day_price(&self, token: &str) -> IDayPrice {
-        let token = token.to_string();
-
-        return self
-            .run_blocking(
-                move |market| match market.get_24h_price_stats(&token) {
-                    Ok(answer) => {
-                        let open = answer.open_price;
-                        let high = answer.high_price;
-                        let low = answer.low_price;
-                        Ok(IDayPrice::new(open, high, low))
+    pub async fn fetch_day_price(&self, token: &str) -> Result<IDayPrice, String> {
+        for attempt in 1..=Self::MAX_RETRIES {
+            match self.market.get_24h_price_stats(token) {
+                Ok(answer) => {
+                    return Ok(IDayPrice::new(
+                        answer.open_price,
+                        answer.high_price,
+                        answer.low_price,
+                    ));
+                }
+                Err(e) => {
+                    eprintln!(
+                        "fetch_day_price attempt {}/{} failed for {}: {:?}",
+                        attempt,
+                        Self::MAX_RETRIES,
+                        token,
+                        e
+                    );
+                    if attempt == Self::MAX_RETRIES {
+                        return Err(format!(
+                            "Failed to fetch day price for {} after {} attempts",
+                            token,
+                            Self::MAX_RETRIES
+                        ));
                     }
-                    Err(e) => Err(format!("Error: {:?}", e)),
-                },
-                IDayPrice::new(MINIMAL_VALUE, MINIMAL_VALUE, MINIMAL_VALUE),
-            )
-            .await;
+                    tokio::time::sleep(std::time::Duration::from_secs(Self::RETRY_DELAY_SECS))
+                        .await;
+                }
+            }
+        }
+        unreachable!()
     }
 
     pub async fn test_token(&self, symbol: &str) -> Result<(), String> {
         let token = symbol.to_string();
 
-        let result = self
-            .run_blocking(
-                move |market| match market.get_book_ticker(&token) {
-                    Ok(_) => Ok(Ok(())),
-                    Err(_) => Err(String::from("Token not found")),
-                },
-                Err(()),
-            )
-            .await;
+        let result = match self.market.get_book_ticker(&token) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(String::from("Token not found")),
+        };
 
         if result.is_ok() {
             return Ok(());

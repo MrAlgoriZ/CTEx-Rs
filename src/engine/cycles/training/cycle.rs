@@ -68,7 +68,7 @@ impl TrainingCycle {
     }
 
     pub async fn init(symbol: String) -> Self {
-        let client = BinanceClient::new().await;
+        let client = BinanceClient::new();
         let pool = PgPool::connect(&load_env().database_url)
             .await
             .expect("Database connection failed");
@@ -79,9 +79,9 @@ impl TrainingCycle {
         &mut self,
         model: &Arc<StdMutex<RFInterface>>,
         counter_tx: &mpsc::Sender<CounterCommand>,
-    ) {
+    ) -> Result<(), String> {
         if !self.client.test_token(&self.symbol).await.is_ok() {
-            return;
+            return Err("Токена с таким именем не существует!".to_string());
         }
         let mut volatility: f64 = 0.0;
 
@@ -90,14 +90,14 @@ impl TrainingCycle {
 
         loop {
             self.wait_for_next_interval().await;
-            self.update_volatility(&mut volatility).await;
+            self.update_volatility(&mut volatility).await?;
             if self.config.prints.cycle.volatility {
                 self.print_volatility_status(volatility);
             }
 
-            let candles = Arc::new(collect_all(&self.symbol).await);
+            let candles = Arc::new(collect_all(&self.symbol).await?);
             let candles_target: f64 =
-                self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;
+                self.client.fetch_ohlcv(&self.symbol, "15m", 2).await?[0].close;
 
             match phase {
                 CyclePhase::Active => {

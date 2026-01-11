@@ -74,7 +74,7 @@ impl SandboxCycle {
     }
 
     pub async fn init(symbol: String) -> Self {
-        let client = BinanceClient::new().await;
+        let client = BinanceClient::new();
         let pool = PgPool::connect(&load_env().database_url)
             .await
             .expect("Database connection failed");
@@ -86,9 +86,9 @@ impl SandboxCycle {
         model: &Arc<StdMutex<RFInterface>>,
         counter_tx: &mpsc::Sender<CounterCommand>,
         account: Arc<Mutex<DummyAccount>>,
-    ) {
+    ) -> Result<(), String> {
         if !self.client.test_token(&self.symbol).await.is_ok() {
-            return;
+            return Err("Токена с таким именем не существует!".to_string());
         }
 
         let mut target_indicate: Option<bool> = None;
@@ -97,14 +97,14 @@ impl SandboxCycle {
 
         loop {
             self.wait_for_next_interval().await;
-            self.update_volatility(&mut volatility).await;
+            self.update_volatility(&mut volatility).await?;
             if self.config.prints.cycle.volatility && target_indicate == None {
                 self.print_volatility_status(volatility);
             }
 
-            let candles = Arc::new(collect_all(&self.symbol).await);
+            let candles = Arc::new(collect_all(&self.symbol).await?);
             let candles_target: f64 =
-                self.client.fetch_ohlcv(&self.symbol, "15m", 2).await[0].close;
+                self.client.fetch_ohlcv(&self.symbol, "15m", 2).await?[0].close;
 
             if target_indicate == Some(true) {
                 let target: Option<f64> =
@@ -181,7 +181,7 @@ impl SandboxCycle {
                             amount * account.lock().await.get_balance(),
                             &self.client,
                         )
-                        .await
+                        .await?
                 }
                 TradingChoice::Sell(amount) => {
                     account
@@ -192,12 +192,12 @@ impl SandboxCycle {
                             amount * account.lock().await.get_token_balance(&self.symbol),
                             &self.client,
                         )
-                        .await
+                        .await?
                 }
                 TradingChoice::DoNothing => {}
             }
 
-            self.print_account_balance(account.clone()).await;
+            self.print_account_balance(account.clone()).await?;
         }
     }
 
@@ -222,7 +222,7 @@ impl SandboxCycle {
         let (tx_local, rx_local) = oneshot::channel();
         let _ = counter_tx
             .send(CounterCommand::GetAccuracy {
-                symbol: self.symbol.to_uppercase().clone(),
+                symbol: self.symbol.to_uppercase(),
                 counter_type: CounterType::Threshold,
                 respond_to: tx_local,
             })
@@ -265,12 +265,13 @@ impl SandboxCycle {
         TradingChoice::DoNothing
     }
 
-    async fn print_account_balance(&self, account: Arc<Mutex<DummyAccount>>) {
+    async fn print_account_balance(&self, account: Arc<Mutex<DummyAccount>>) -> Result<(), String> {
         println!(
             "{}DummyAccount total balance = {} USDT",
             self.print_time(),
-            account.lock().await.get_total_value(&self.client).await
-        )
+            account.lock().await.get_total_value(&self.client).await?
+        );
+        Ok(())
     }
 }
 
@@ -371,7 +372,7 @@ impl RiskEngine {
         let (tx_local, rx_local) = oneshot::channel();
         let _ = counter_tx
             .send(CounterCommand::GetAccuracy {
-                symbol: self.symbol.to_uppercase().clone(),
+                symbol: self.symbol.to_uppercase(),
                 counter_type: CounterType::Threshold,
                 respond_to: tx_local,
             })
@@ -421,48 +422,60 @@ impl DummyAccount {
         }
     }
 
-    pub async fn buy(&mut self, token: &str, amount: f64, client: &BinanceClient) {
+    pub async fn buy(
+        &mut self,
+        token: &str,
+        amount: f64,
+        client: &BinanceClient,
+    ) -> Result<(), String> {
         if amount <= 0.0 {
-            return;
+            return Err("Невозможно купить валюту, если депозит меньше нуля!".to_string());
         }
 
         if self.balance < amount {
-            return;
+            return Err("Недостаточно на балансе!".to_string());
         }
 
-        let ask = client.fetch_ticker(token).await.ask;
+        let ask = client.fetch_ticker(token).await?.ask;
 
         if ask <= 0.0 {
-            return;
+            return Err("Спрос меньше нуля".to_string());
         }
 
         let token_amount = amount / ask;
 
         self.balance -= amount;
         self.add_token_balance(token, token_amount);
+        Ok(())
     }
 
-    pub async fn sell(&mut self, token: &str, amount: f64, client: &BinanceClient) {
+    pub async fn sell(
+        &mut self,
+        token: &str,
+        amount: f64,
+        client: &BinanceClient,
+    ) -> Result<(), String> {
         if amount <= 0.0 {
-            return;
+            return Err("Невозможно продать валюту, если депозит меньше нуля!".to_string());
         }
 
         let current_balance = self.tokens.get(token).copied().unwrap_or(0.0);
 
         if current_balance < amount {
-            return;
+            return Err("Недостаточно на балансе!".to_string());
         }
 
-        let bid = client.fetch_ticker(token).await.bid;
+        let bid = client.fetch_ticker(token).await?.bid;
 
         if bid <= 0.0 {
-            return;
+            return Err("Предложение меньше нуля!".to_string());
         }
 
         let usdt_amount = amount * bid;
 
         self.remove_token_balance(token, amount);
         self.balance += usdt_amount;
+        Ok(())
     }
 
     pub fn add_token_balance(&mut self, token: &str, amount: f64) {
@@ -521,15 +534,15 @@ impl DummyAccount {
     //     Ok(())
     // }
 
-    pub async fn get_total_value(&self, client: &BinanceClient) -> f64 {
+    pub async fn get_total_value(&self, client: &BinanceClient) -> Result<f64, String> {
         let mut total = self.balance;
 
         for (token, amount) in &self.tokens {
-            let bid = client.fetch_ticker(token).await.bid;
+            let bid = client.fetch_ticker(token).await?.bid;
             total += amount * bid;
         }
 
-        total
+        Ok(total)
     }
 
     // pub async fn liquidate_all(&mut self, client: &BinanceClient) {
