@@ -32,10 +32,10 @@ behaviour:
 prints:
   model:
     evualate: true
-    metrics: false
+    metrics: true
   cycle:
     volatility: true
-    cycle_start: false
+    cycle_start: true
     price: false
     target: true
     prediction: true

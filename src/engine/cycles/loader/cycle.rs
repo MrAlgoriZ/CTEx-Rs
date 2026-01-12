@@ -57,8 +57,7 @@ impl LoaderCycle {
         }
     }
 
-    pub async fn init(symbol: String) -> Self {
-        let client = BinanceClient::new();
+    pub async fn init(symbol: String, client: BinanceClient) -> Self {
         let pool = PgPool::connect(&load_env().database_url)
             .await
             .expect("Database connection failed");

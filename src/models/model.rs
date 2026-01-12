@@ -4,7 +4,6 @@ use smartcore::ensemble::random_forest_regressor::{
     RandomForestRegressor, RandomForestRegressorParameters,
 };
 use sqlx::PgPool;
-use std::sync::{Arc, Mutex as StdMutex};
 
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::{mean_absolute_error, mean_squared_error, r2};
@@ -85,7 +84,7 @@ impl RFInterface {
         let mut x_rows: Vec<Vec<f64>> = Vec::with_capacity(n_samples);
         let mut y_target: Vec<f64> = Vec::with_capacity(n_samples);
 
-        for row in &data {
+        for row in data.iter() {
             let mut full_row = vec![0.0; n_tokens + feature_len];
 
             if let Some(&idx) = token_to_idx.get(row.token.as_str()) {
@@ -251,12 +250,9 @@ impl RFInterface {
     }
 }
 
-pub async fn train_model(pool: &PgPool, model: &Arc<StdMutex<RFInterface>>) {
+pub async fn train_model(pool: &PgPool, model: &mut RFInterface) {
     let data = select_all_candles(pool).await.unwrap();
-    let model_clone = Arc::clone(model);
-
-    let mut model_guard = model_clone.lock().unwrap();
-    model_guard
+    model
         .train(data)
         .expect("The model faced a problem with learning");
 }

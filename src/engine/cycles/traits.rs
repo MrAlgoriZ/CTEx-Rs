@@ -1,18 +1,15 @@
 use chrono::{Local, Timelike};
-use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
-use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 
 use crate::data::data_interfaces::{FlattenedData, ICandle};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::database::db_req::{insert_candle, select_all_candles};
-use crate::engine::cycles::manager::{CounterCommand, CounterType};
+use crate::engine::cycles::manager::{CounterCommand, CounterType, ModelCommand};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
-use crate::models::model::RFInterface;
 
 pub trait CycleGetters {
     fn get_symbol(&self) -> &str;
@@ -83,18 +80,21 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
     async fn predict(
         &self,
         flattened_candles: FlattenedData,
-        model: &Arc<StdMutex<RFInterface>>,
+        model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<f64, String> {
         if !flattened_candles.is_there_a_target() {
-            let model_clone: Arc<StdMutex<RFInterface>> = model.clone();
-            let features: Vec<f64> = flattened_candles.features;
-            let token: String = flattened_candles.token;
-            let pred: f64 = spawn_blocking(move || {
-                let model_guard = model_clone.lock().unwrap();
-                model_guard.predict(features, Some(&token)).unwrap_or(0.0)
-            })
-            .await
-            .unwrap();
+            let (tx, rx) = oneshot::channel();
+
+            model_tx
+                .send(ModelCommand::Predict {
+                    flattenned_candles: flattened_candles,
+                    respond_to: tx,
+                })
+                .await
+                .unwrap();
+
+            let pred = rx.await.unwrap();
+
             Ok(pred)
         } else {
             Err(String::from(
@@ -109,7 +109,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         target: f64,
         volatility: f64,
         counter_tx: &mpsc::Sender<CounterCommand>,
-    ) -> Result<(), ()> {
+    ) {
         let diff: f64 = (prediction - target).abs();
         let success_threshold: f64 =
             self.get_config().behaviour.success_threshold.default * 100.0 * volatility;
@@ -136,16 +136,14 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                 value: direction_value,
             })
             .await;
-
-        Ok(())
     }
 
     async fn handle_mistake(
         &self,
         flattened_candles: FlattenedData,
         counter_tx: &mpsc::Sender<CounterCommand>,
-        model: &Arc<StdMutex<RFInterface>>,
-    ) -> Result<(), ()> {
+        model_tx: &mpsc::Sender<ModelCommand>,
+    ) -> Result<(), String> {
         if flattened_candles.is_there_a_target() {
             insert_candle(
                 &self.get_pool(),
@@ -170,13 +168,13 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
             if let Ok(shifted_acc) = rx.await {
                 if shifted_acc.unwrap_or(0.0) == 0.0 {
-                    self.train_model(model).await;
+                    self.train_model(model_tx).await?;
                 }
             }
 
             Ok(())
         } else {
-            Err(())
+            Err("В поданных данных нет target!".to_string())
         }
     }
 
@@ -245,17 +243,20 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         }
     }
 
-    async fn train_model(&self, model: &Arc<StdMutex<RFInterface>>) {
+    async fn train_model(&self, model_tx: &mpsc::Sender<ModelCommand>) -> Result<(), String> {
         let data = select_all_candles(self.get_pool()).await.unwrap();
-        let model_clone = model.clone();
-        spawn_blocking(move || {
-            let mut model_guard = model_clone.lock().unwrap();
-            model_guard
-                .train(data)
-                .expect("The model faced a problem with learning");
-        })
-        .await
-        .unwrap();
+        let (tx, rx) = oneshot::channel();
+
+        model_tx
+            .send(ModelCommand::Train {
+                data,
+                respond_to: tx,
+            })
+            .await
+            .unwrap();
+
+        rx.await.unwrap()?;
+        Ok(())
     }
 }
 

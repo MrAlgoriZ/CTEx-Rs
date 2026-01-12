@@ -171,7 +171,7 @@ impl ProcessAll {
 }
 
 pub async fn collect_all(token: &str) -> Result<CollectedData, String> {
-    let client = BinanceClient::new();
+    let client = BinanceClient::new().await;
     let ohlcv = client
         .fetch_ohlcv(token, "15m", OHLCV_FETCH_LEN)
         .await?

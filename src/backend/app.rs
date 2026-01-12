@@ -43,7 +43,7 @@ impl Api {
         counter_handle: mpsc::Sender<CounterCommand>,
     ) -> Router {
         let structure = ApiStructure::default();
-        let client = Arc::new(BinanceClient::new());
+        let client = Arc::new(BinanceClient::new().await);
         let state = ApiState {
             supervisor_handle,
             counter_handle,

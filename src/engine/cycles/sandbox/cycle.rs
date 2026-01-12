@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
 
@@ -9,7 +9,7 @@ use crate::data::data_interfaces::FlattenedData;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::requests::ccxt::binance::BinanceClient;
-use crate::engine::cycles::manager::{CounterCommand, CounterType};
+use crate::engine::cycles::manager::{CounterCommand, CounterType, ModelCommand};
 use crate::engine::cycles::traits::{
     Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
 };
@@ -17,7 +17,6 @@ use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
-use crate::models::model::RFInterface;
 
 pub struct SandboxCycle {
     pub symbol: String,
@@ -73,8 +72,7 @@ impl SandboxCycle {
         }
     }
 
-    pub async fn init(symbol: String) -> Self {
-        let client = BinanceClient::new();
+    pub async fn init(symbol: String, client: BinanceClient) -> Self {
         let pool = PgPool::connect(&load_env().database_url)
             .await
             .expect("Database connection failed");
@@ -83,7 +81,7 @@ impl SandboxCycle {
 
     pub async fn run(
         &mut self,
-        model: &Arc<StdMutex<RFInterface>>,
+        model: &mpsc::Sender<ModelCommand>,
         counter_tx: &mpsc::Sender<CounterCommand>,
         account: Arc<Mutex<DummyAccount>>,
     ) -> Result<(), String> {
@@ -127,8 +125,7 @@ impl SandboxCycle {
                 }
 
                 self.update_counters(prediction.unwrap(), target.unwrap(), volatility, counter_tx)
-                    .await
-                    .unwrap();
+                    .await;
 
                 self.feedback_engine.update_last_diffs(diff);
                 self.feedback_engine.update_success_threshold();
@@ -136,9 +133,7 @@ impl SandboxCycle {
                 if !success {
                     let last_grouped = self.last_grouped_candles.clone().unwrap();
                     let flattened = flat_all(last_grouped, target);
-                    self.handle_mistake(flattened, counter_tx, model)
-                        .await
-                        .unwrap();
+                    self.handle_mistake(flattened, counter_tx, model).await?;
                 }
 
                 self.risk_engine.update_risk(volatility, counter_tx).await;

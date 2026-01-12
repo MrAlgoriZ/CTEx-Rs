@@ -1,5 +1,5 @@
 use sqlx::PgPool;
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use crate::data::data_interfaces::FlattenedData;
@@ -7,7 +7,7 @@ use crate::data::process::data_collection::{CollectedData, collect_all, flat_all
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::engine::cycles::CyclePhase;
-use crate::engine::cycles::manager::CounterCommand;
+use crate::engine::cycles::manager::{CounterCommand, ModelCommand};
 use crate::engine::cycles::traits::{
     Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
 };
@@ -15,7 +15,6 @@ use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
-use crate::models::model::RFInterface;
 
 pub struct TrainingCycle {
     pub symbol: String,
@@ -67,8 +66,7 @@ impl TrainingCycle {
         }
     }
 
-    pub async fn init(symbol: String) -> Self {
-        let client = BinanceClient::new();
+    pub async fn init(symbol: String, client: BinanceClient) -> Self {
         let pool = PgPool::connect(&load_env().database_url)
             .await
             .expect("Database connection failed");
@@ -77,8 +75,8 @@ impl TrainingCycle {
 
     pub async fn run(
         &mut self,
-        model: &Arc<StdMutex<RFInterface>>,
         counter_tx: &mpsc::Sender<CounterCommand>,
+        model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), String> {
         if !self.client.test_token(&self.symbol).await.is_ok() {
             return Err("Токена с таким именем не существует!".to_string());
@@ -126,15 +124,12 @@ impl TrainingCycle {
                         volatility,
                         counter_tx,
                     )
-                    .await
-                    .unwrap();
+                    .await;
 
                     if !success {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
                         let flattened = flat_all(last_grouped, target);
-                        self.handle_mistake(flattened, counter_tx, model)
-                            .await
-                            .unwrap();
+                        self.handle_mistake(flattened, counter_tx, model_tx).await?;
                     }
                 }
                 _ => {}
@@ -143,7 +138,7 @@ impl TrainingCycle {
             let candles_to_flattened = candles.clone();
             let flattened_for_pred: FlattenedData = flat_all(candles_to_flattened, None);
 
-            prediction = Some(self.predict(flattened_for_pred, &model).await.unwrap());
+            prediction = Some(self.predict(flattened_for_pred, &model_tx).await.unwrap());
             let restored_price: f64 = restore_price(candles_target, prediction.unwrap());
 
             phase = CyclePhase::Active;
