@@ -353,10 +353,6 @@ impl CounterActor {
     }
 }
 
-// ============================================================================
-// MODEL ACTOR
-// ============================================================================
-
 pub enum ModelCommand {
     Predict {
         flattenned_candles: FlattenedData,
@@ -398,7 +394,6 @@ impl ModelActor {
                     let features = flattenned_candles.features;
                     let token = flattenned_candles.token;
 
-                    // Выполняем predict в blocking-потоке
                     let result = tokio::task::spawn_blocking(move || {
                         model.blocking_lock().predict(features, Some(&token))
                     })
@@ -422,7 +417,6 @@ impl ModelActor {
                 ModelCommand::Train { data, respond_to } => {
                     let model = self.model.clone();
 
-                    // Выполняем train в blocking-потоке
                     let result =
                         tokio::task::spawn_blocking(move || model.blocking_lock().train(data))
                             .await;
@@ -442,10 +436,6 @@ impl ModelActor {
     }
 }
 
-// ============================================================================
-// CYCLE TYPES
-// ============================================================================
-
 #[derive(Clone, Copy, Debug)]
 pub enum CycleType {
     Loader,
@@ -464,10 +454,6 @@ impl CycleType {
     }
 }
 
-// ============================================================================
-// WORKER HANDLE
-// ============================================================================
-
 struct WorkerHandle {
     symbol: String,
     task: tokio::task::JoinHandle<()>,
@@ -481,10 +467,6 @@ impl WorkerHandle {
         log_warning(&format!("Worker {} остановлен", self.symbol));
     }
 }
-
-// ============================================================================
-// CYCLE MANAGER (PUBLIC API)
-// ============================================================================
 
 pub struct CycleManager {
     supervisor_tx: mpsc::Sender<SupervisorCommand>,
@@ -542,7 +524,6 @@ impl CycleManager {
     }
 
     async fn initialize_model(&self) -> Result<(), String> {
-        // Останавливаем все worker'ы перед переинициализацией модели
         let (tx, rx) = oneshot::channel();
         self.supervisor_tx
             .send(SupervisorCommand::StopAll { respond_to: tx })
@@ -550,7 +531,6 @@ impl CycleManager {
             .map_err(|_| "Supervisor недоступен")?;
         let _ = rx.await;
 
-        // Подключаемся к БД и обучаем модель
         let pool = PgPool::connect(&load_env().database_url)
             .await
             .map_err(|e| format!("DB connection error: {}", e))?;
@@ -558,11 +538,9 @@ impl CycleManager {
         let mut model = RFInterface::new();
         train_model(&pool, &mut model).await;
 
-        // Создаём ModelActor
         let (model_actor, model_tx) = ModelActor::new(model);
         tokio::spawn(model_actor.run());
 
-        // Передаём модель в Supervisor
         self.supervisor_tx
             .send(SupervisorCommand::SetModel { model_tx })
             .await

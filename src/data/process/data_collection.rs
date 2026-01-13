@@ -5,6 +5,7 @@ use crate::data::requests::ccxt::binance::BinanceClient;
 use crate::data::requests::time_req::TimeRequest;
 use crate::engine::utils::processor::*;
 
+use rayon::prelude::*;
 use std::sync::Arc;
 
 const OHLCV_LEN: usize = 10;
@@ -56,15 +57,13 @@ impl AddFeatures {
         let ohlcv_var_list: [[ICandle; OHLCV_LEN]; 3] = [self.ohlcv, self.ohlcv1h, self.ohlcv1d];
 
         for ohlcv in ohlcv_var_list {
-            for candle in ohlcv.iter() {
-                features.push(body(candle.open, candle.close));
-                features.push(body_strength(
-                    candle.open,
-                    candle.high,
-                    candle.low,
-                    candle.close,
-                ));
-            }
+            let candle_features: Vec<f64> = ohlcv.par_iter().flat_map(|candle| {
+                vec![
+                    body(candle.open, candle.close),
+                    body_strength(candle.open, candle.high, candle.low, candle.close),
+                ]
+            }).collect();
+            features.extend(candle_features);
             features.push(get_volatility(&ohlcv));
         }
 
@@ -172,24 +171,22 @@ impl ProcessAll {
 
 pub async fn collect_all(token: &str) -> Result<CollectedData, String> {
     let client = BinanceClient::new().await;
-    let ohlcv = client
-        .fetch_ohlcv(token, "15m", OHLCV_FETCH_LEN)
-        .await?
-        .try_into()
-        .unwrap();
-    let ohlcv1h = client
-        .fetch_ohlcv(token, "1h", OHLCV_FETCH_LEN)
-        .await?
-        .try_into()
-        .unwrap();
-    let ohlcv1d = client
-        .fetch_ohlcv(token, "1d", OHLCV_FETCH_LEN)
-        .await?
-        .try_into()
-        .unwrap();
-    let ticker = client.fetch_ticker(token).await?;
-    let day_price = client.fetch_day_price(token).await?;
-    let mean_price = client.fetch_average_price(token).await?;
+
+    let (ohlcv_res, ohlcv1h_res, ohlcv1d_res, ticker_res, day_price_res, mean_price_res) = tokio::join!(
+        client.fetch_ohlcv(token, "15m", OHLCV_FETCH_LEN),
+        client.fetch_ohlcv(token, "1h", OHLCV_FETCH_LEN),
+        client.fetch_ohlcv(token, "1d", OHLCV_FETCH_LEN),
+        client.fetch_ticker(token),
+        client.fetch_day_price(token),
+        client.fetch_average_price(token),
+    );
+
+    let ohlcv: [ICandle; OHLCV_FETCH_LEN] = ohlcv_res?.try_into().map_err(|_| "Failed to convert ohlcv")?;
+    let ohlcv1h: [ICandle; OHLCV_FETCH_LEN] = ohlcv1h_res?.try_into().map_err(|_| "Failed to convert ohlcv1h")?;
+    let ohlcv1d: [ICandle; OHLCV_FETCH_LEN] = ohlcv1d_res?.try_into().map_err(|_| "Failed to convert ohlcv1d")?;
+    let ticker = ticker_res?;
+    let day_price = day_price_res?;
+    let mean_price = mean_price_res?;
 
     let process_value = ProcessAll::new(ohlcv, ohlcv1h, ohlcv1d, ticker, day_price, mean_price);
 
@@ -212,29 +209,20 @@ pub fn flat_all(collected_data: Arc<CollectedData>, target: Option<f64>) -> Flat
     features.push(collected_data.time.min_sin);
     features.push(collected_data.time.min_cos);
 
-    for candle in &collected_data.ohlcv {
-        features.push(candle.open);
-        features.push(candle.high);
-        features.push(candle.low);
-        features.push(candle.close);
-        features.push(candle.volume);
-    }
+    let ohlcv_features: Vec<f64> = collected_data.ohlcv.par_iter().flat_map(|candle| {
+        vec![candle.open, candle.high, candle.low, candle.close, candle.volume]
+    }).collect();
+    features.extend(ohlcv_features);
 
-    for candle in &collected_data.ohlcv1h {
-        features.push(candle.open);
-        features.push(candle.high);
-        features.push(candle.low);
-        features.push(candle.close);
-        features.push(candle.volume);
-    }
+    let ohlcv1h_features: Vec<f64> = collected_data.ohlcv1h.par_iter().flat_map(|candle| {
+        vec![candle.open, candle.high, candle.low, candle.close, candle.volume]
+    }).collect();
+    features.extend(ohlcv1h_features);
 
-    for candle in &collected_data.ohlcv1d {
-        features.push(candle.open);
-        features.push(candle.high);
-        features.push(candle.low);
-        features.push(candle.close);
-        features.push(candle.volume);
-    }
+    let ohlcv1d_features: Vec<f64> = collected_data.ohlcv1d.par_iter().flat_map(|candle| {
+        vec![candle.open, candle.high, candle.low, candle.close, candle.volume]
+    }).collect();
+    features.extend(ohlcv1d_features);
 
     features.push(collected_data.ticker.bid);
     features.push(collected_data.ticker.ask);
@@ -245,8 +233,8 @@ pub fn flat_all(collected_data: Arc<CollectedData>, target: Option<f64>) -> Flat
 
     features.extend_from_slice(&collected_data.features);
 
-    if target != None {
-        features.push(target.unwrap());
+    if let Some(t) = target {
+        features.push(t);
         FlattenedData::new(collected_data.token.clone(), features, true)
     } else {
         FlattenedData::new(collected_data.token.clone(), features, false)
