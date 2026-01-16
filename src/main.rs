@@ -28,7 +28,7 @@ async fn main() {
         );
     }
 
-    let mut manager = CycleManager::new().await;
+    let mut manager = CycleManager::new();
 
     manager.run_all(symbols, cycle_types).await.unwrap();
 
