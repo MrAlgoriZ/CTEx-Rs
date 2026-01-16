@@ -2,7 +2,7 @@ use crate::data::data_interfaces::*;
 use crate::data::process::features::*;
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::binance::BinanceClient;
-use crate::data::requests::time_req::TimeRequest;
+use crate::data::requests::time::TimeRequest;
 use crate::engine::utils::processor::*;
 
 use rayon::prelude::*;
@@ -57,12 +57,15 @@ impl AddFeatures {
         let ohlcv_var_list: [[ICandle; OHLCV_LEN]; 3] = [self.ohlcv, self.ohlcv1h, self.ohlcv1d];
 
         for ohlcv in ohlcv_var_list {
-            let candle_features: Vec<f64> = ohlcv.par_iter().flat_map(|candle| {
-                vec![
-                    body(candle.open, candle.close),
-                    body_strength(candle.open, candle.high, candle.low, candle.close),
-                ]
-            }).collect();
+            let candle_features: Vec<f64> = ohlcv
+                .par_iter()
+                .flat_map(|candle| {
+                    vec![
+                        body(candle.open, candle.close),
+                        body_strength(candle.open, candle.high, candle.low, candle.close),
+                    ]
+                })
+                .collect();
             features.extend(candle_features);
             features.push(get_volatility(&ohlcv));
         }
@@ -181,9 +184,15 @@ pub async fn collect_all(token: &str) -> Result<CollectedData, String> {
         client.fetch_average_price(token),
     );
 
-    let ohlcv: [ICandle; OHLCV_FETCH_LEN] = ohlcv_res?.try_into().map_err(|_| "Failed to convert ohlcv")?;
-    let ohlcv1h: [ICandle; OHLCV_FETCH_LEN] = ohlcv1h_res?.try_into().map_err(|_| "Failed to convert ohlcv1h")?;
-    let ohlcv1d: [ICandle; OHLCV_FETCH_LEN] = ohlcv1d_res?.try_into().map_err(|_| "Failed to convert ohlcv1d")?;
+    let ohlcv: [ICandle; OHLCV_FETCH_LEN] = ohlcv_res?
+        .try_into()
+        .map_err(|_| "Failed to convert ohlcv")?;
+    let ohlcv1h: [ICandle; OHLCV_FETCH_LEN] = ohlcv1h_res?
+        .try_into()
+        .map_err(|_| "Failed to convert ohlcv1h")?;
+    let ohlcv1d: [ICandle; OHLCV_FETCH_LEN] = ohlcv1d_res?
+        .try_into()
+        .map_err(|_| "Failed to convert ohlcv1d")?;
     let ticker = ticker_res?;
     let day_price = day_price_res?;
     let mean_price = mean_price_res?;
@@ -209,19 +218,49 @@ pub fn flat_all(collected_data: Arc<CollectedData>, target: Option<f64>) -> Flat
     features.push(collected_data.time.min_sin);
     features.push(collected_data.time.min_cos);
 
-    let ohlcv_features: Vec<f64> = collected_data.ohlcv.par_iter().flat_map(|candle| {
-        vec![candle.open, candle.high, candle.low, candle.close, candle.volume]
-    }).collect();
+    let ohlcv_features: Vec<f64> = collected_data
+        .ohlcv
+        .par_iter()
+        .flat_map(|candle| {
+            vec![
+                candle.open,
+                candle.high,
+                candle.low,
+                candle.close,
+                candle.volume,
+            ]
+        })
+        .collect();
     features.extend(ohlcv_features);
 
-    let ohlcv1h_features: Vec<f64> = collected_data.ohlcv1h.par_iter().flat_map(|candle| {
-        vec![candle.open, candle.high, candle.low, candle.close, candle.volume]
-    }).collect();
+    let ohlcv1h_features: Vec<f64> = collected_data
+        .ohlcv1h
+        .par_iter()
+        .flat_map(|candle| {
+            vec![
+                candle.open,
+                candle.high,
+                candle.low,
+                candle.close,
+                candle.volume,
+            ]
+        })
+        .collect();
     features.extend(ohlcv1h_features);
 
-    let ohlcv1d_features: Vec<f64> = collected_data.ohlcv1d.par_iter().flat_map(|candle| {
-        vec![candle.open, candle.high, candle.low, candle.close, candle.volume]
-    }).collect();
+    let ohlcv1d_features: Vec<f64> = collected_data
+        .ohlcv1d
+        .par_iter()
+        .flat_map(|candle| {
+            vec![
+                candle.open,
+                candle.high,
+                candle.low,
+                candle.close,
+                candle.volume,
+            ]
+        })
+        .collect();
     features.extend(ohlcv1d_features);
 
     features.push(collected_data.ticker.bid);
