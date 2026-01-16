@@ -125,12 +125,12 @@ cargo build --release && ./target/release/CTEx-Rs
     │   │   ├── mod.rs
     │   │   └── traits.rs
     │   ├── mod.rs
-    │   ├── state
+    │   ├── state/
     │   │   ├── counters.rs
     │   │   └── mod.rs
-    │   └── utils
+    │   └── utils/
     │       ├── colors.rs
-    │       ├── config
+    │       ├── config/
     │       │   ├── config_types.rs
     │       │   ├── load_config.rs
     │       │   ├── load_env.rs
@@ -138,7 +138,7 @@ cargo build --release && ./target/release/CTEx-Rs
     │       ├── mod.rs
     │       └── processor.rs
     ├── main.rs
-    └── models
+    └── models/
         ├── model.rs
         └── mod.rs
 ```
