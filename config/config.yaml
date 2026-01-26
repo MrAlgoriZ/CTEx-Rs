@@ -12,6 +12,11 @@ backend:
   listener: "0.0.0.0:3000"
   admin_password: "123"
 
+services:
+  ccxt_python:
+    ip: "127.0.0.1"
+    port: "3737"
+
 behaviour:
   success_threshold:
     minimum: 0.2
