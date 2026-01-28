@@ -5,7 +5,7 @@ use tokio::time::sleep;
 
 use crate::data::data_interfaces::{FlattenedData, ICandle};
 use crate::data::process::volatility::get_volatility;
-use crate::data::requests::ccxt::binance::BinanceClient;
+use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::db_req::{insert_candle, select_all_candles};
 use crate::engine::cycles::manager::{CounterCommand, CounterType, ModelCommand};
 use crate::engine::utils::colors::Fore;
@@ -15,7 +15,7 @@ pub trait CycleGetters {
     fn get_symbol(&self) -> &str;
     fn get_print_symbol(&self) -> &str;
     fn get_config(&self) -> &Config;
-    fn get_client(&self) -> &BinanceClient;
+    fn get_client(&self) -> &CCXTClient;
 }
 
 pub trait CycleGettersForCycleWithModel {
@@ -33,7 +33,7 @@ pub trait Cycle: CycleGetters {
         );
     }
 
-    async fn update_volatility(&self, volatility_obj: &mut f64) -> Result<(), String> {
+    async fn update_volatility(&self, volatility_obj: &mut f64) -> Result<(), anyhow::Error> {
         let candles: Vec<ICandle> = self
             .get_client()
             .fetch_ohlcv(self.get_symbol(), "1d", 10)
@@ -81,7 +81,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         &self,
         flattened_candles: FlattenedData,
         model_tx: &mpsc::Sender<ModelCommand>,
-    ) -> Result<f64, String> {
+    ) -> Result<f64, anyhow::Error> {
         if !flattened_candles.is_there_a_target() {
             let (tx, rx) = oneshot::channel();
 
@@ -97,8 +97,8 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
             Ok(pred)
         } else {
-            Err(String::from(
-                "FlattenedData to prediction should not have the target",
+            Err(anyhow::anyhow!(
+                "FlattenedData to prediction should not have the target"
             ))
         }
     }
@@ -143,7 +143,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         flattened_candles: FlattenedData,
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &mpsc::Sender<ModelCommand>,
-    ) -> Result<(), String> {
+    ) -> Result<(), anyhow::Error> {
         if flattened_candles.is_there_a_target() {
             insert_candle(
                 &self.get_pool(),
@@ -174,7 +174,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
             Ok(())
         } else {
-            Err("В поданных данных нет target!".to_string())
+            Err(anyhow::anyhow!("В поданных данных нет target!"))
         }
     }
 
@@ -243,7 +243,10 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         }
     }
 
-    async fn train_model(&self, model_tx: &mpsc::Sender<ModelCommand>) -> Result<(), String> {
+    async fn train_model(
+        &self,
+        model_tx: &mpsc::Sender<ModelCommand>,
+    ) -> Result<(), anyhow::Error> {
         let data = select_all_candles(self.get_pool()).await.unwrap();
         let (tx, rx) = oneshot::channel();
 

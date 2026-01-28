@@ -5,7 +5,7 @@ use crate::data::data_interfaces::ICandle;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::process_target;
 use crate::data::process::volatility::get_volatility;
-use crate::data::requests::ccxt::binance::BinanceClient;
+use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::db_req::insert_candle;
 use crate::engine::cycles::CyclePhase;
 use crate::engine::cycles::traits::{Cycle, CycleGetters};
@@ -20,7 +20,7 @@ pub struct LoaderCycle {
     last_candles_target: Option<f64>,
     config: Config,
     print_symbol: String,
-    client: BinanceClient,
+    client: CCXTClient,
     pool: PgPool,
 }
 
@@ -37,7 +37,7 @@ impl CycleGetters for LoaderCycle {
         &self.config
     }
 
-    fn get_client(&self) -> &BinanceClient {
+    fn get_client(&self) -> &CCXTClient {
         &self.client
     }
 }
@@ -45,7 +45,7 @@ impl CycleGetters for LoaderCycle {
 impl Cycle for LoaderCycle {}
 
 impl LoaderCycle {
-    fn new(symbol: String, client: BinanceClient, pool: PgPool) -> Self {
+    fn new(symbol: String, client: CCXTClient, pool: PgPool) -> Self {
         LoaderCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol,
@@ -57,16 +57,16 @@ impl LoaderCycle {
         }
     }
 
-    pub async fn init(symbol: String, client: BinanceClient) -> Self {
+    pub async fn init(symbol: String, client: CCXTClient) -> Self {
         let pool = PgPool::connect(&load_env().database_url)
             .await
             .expect("Database connection failed");
         Self::new(symbol, client, pool)
     }
 
-    pub async fn run(&mut self) -> Result<(), String> {
-        if !self.client.test_token(&self.symbol).await.is_ok() {
-            return Err("Токена с таким именем не существует!".to_string());
+    pub async fn run(&mut self) -> Result<(), anyhow::Error> {
+        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+            return Err(anyhow::anyhow!("Токена с таким именем не существует!"));
         }
 
         let volatility: f64 = {

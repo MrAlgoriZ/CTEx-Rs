@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use crate::data::data_interfaces::FlattenedData;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::{process_target, restore_price};
-use crate::data::requests::ccxt::binance::BinanceClient;
+use crate::data::requests::ccxt::client::CCXTClient;
 use crate::engine::cycles::CyclePhase;
 use crate::engine::cycles::manager::{CounterCommand, ModelCommand};
 use crate::engine::cycles::traits::{
@@ -21,7 +21,7 @@ pub struct TrainingCycle {
     last_grouped_candles: Option<Arc<CollectedData>>,
     last_candles_target: Option<f64>,
     print_symbol: String,
-    client: BinanceClient,
+    client: CCXTClient,
     config: Config,
     pool: PgPool,
 }
@@ -39,7 +39,7 @@ impl CycleGetters for TrainingCycle {
         &self.config
     }
 
-    fn get_client(&self) -> &BinanceClient {
+    fn get_client(&self) -> &CCXTClient {
         &self.client
     }
 }
@@ -54,7 +54,7 @@ impl Cycle for TrainingCycle {}
 impl CycleWithModel for TrainingCycle {}
 
 impl TrainingCycle {
-    fn new(symbol: String, client: BinanceClient, pool: PgPool) -> Self {
+    fn new(symbol: String, client: CCXTClient, pool: PgPool) -> Self {
         TrainingCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol,
@@ -66,7 +66,7 @@ impl TrainingCycle {
         }
     }
 
-    pub async fn init(symbol: String, client: BinanceClient) -> Self {
+    pub async fn init(symbol: String, client: CCXTClient) -> Self {
         let pool = PgPool::connect(&load_env().database_url)
             .await
             .expect("Database connection failed");
@@ -77,9 +77,9 @@ impl TrainingCycle {
         &mut self,
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &mpsc::Sender<ModelCommand>,
-    ) -> Result<(), String> {
-        if !self.client.test_token(&self.symbol).await.is_ok() {
-            return Err("Токена с таким именем не существует!".to_string());
+    ) -> Result<(), anyhow::Error> {
+        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+            return Err(anyhow::anyhow!("Токена с таким именем не существует!"));
         }
         let mut volatility: f64 = 0.0;
 

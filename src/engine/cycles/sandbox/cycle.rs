@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::data::data_interfaces::FlattenedData;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::{process_target, restore_price};
-use crate::data::requests::ccxt::binance::BinanceClient;
+use crate::data::requests::ccxt::client::CCXTClient;
 use crate::engine::cycles::manager::{CounterCommand, CounterType, ModelCommand};
 use crate::engine::cycles::traits::{
     Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
@@ -23,7 +23,7 @@ pub struct SandboxCycle {
     last_grouped_candles: Option<Arc<CollectedData>>,
     last_candles_target: Option<f64>,
     print_symbol: String,
-    client: BinanceClient,
+    client: CCXTClient,
     config: Config,
     pool: PgPool,
     risk_engine: RiskEngine,
@@ -43,7 +43,7 @@ impl CycleGetters for SandboxCycle {
         &self.config
     }
 
-    fn get_client(&self) -> &BinanceClient {
+    fn get_client(&self) -> &CCXTClient {
         &self.client
     }
 }
@@ -58,7 +58,7 @@ impl Cycle for SandboxCycle {}
 impl CycleWithModel for SandboxCycle {}
 
 impl SandboxCycle {
-    fn new(symbol: String, client: BinanceClient, pool: PgPool) -> Self {
+    fn new(symbol: String, client: CCXTClient, pool: PgPool) -> Self {
         SandboxCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol.clone(),
@@ -72,7 +72,7 @@ impl SandboxCycle {
         }
     }
 
-    pub async fn init(symbol: String, client: BinanceClient) -> Self {
+    pub async fn init(symbol: String, client: CCXTClient) -> Self {
         let pool = PgPool::connect(&load_env().database_url)
             .await
             .expect("Database connection failed");
@@ -84,9 +84,9 @@ impl SandboxCycle {
         model: &mpsc::Sender<ModelCommand>,
         counter_tx: &mpsc::Sender<CounterCommand>,
         account: Arc<Mutex<DummyAccount>>,
-    ) -> Result<(), String> {
-        if !self.client.test_token(&self.symbol).await.is_ok() {
-            return Err("Токена с таким именем не существует!".to_string());
+    ) -> Result<(), anyhow::Error> {
+        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+            return Err(anyhow::anyhow!("Токена с таким именем не существует!"));
         }
 
         let mut target_indicate: Option<bool> = None;
@@ -260,7 +260,10 @@ impl SandboxCycle {
         TradingChoice::DoNothing
     }
 
-    async fn print_account_balance(&self, account: Arc<Mutex<DummyAccount>>) -> Result<(), String> {
+    async fn print_account_balance(
+        &self,
+        account: Arc<Mutex<DummyAccount>>,
+    ) -> Result<(), anyhow::Error> {
         println!(
             "{}DummyAccount total balance = {} USDT",
             self.print_time(),
@@ -421,20 +424,22 @@ impl DummyAccount {
         &mut self,
         token: &str,
         amount: f64,
-        client: &BinanceClient,
-    ) -> Result<(), String> {
+        client: &CCXTClient,
+    ) -> Result<(), anyhow::Error> {
         if amount <= 0.0 {
-            return Err("Невозможно купить валюту, если депозит меньше нуля!".to_string());
+            return Err(anyhow::anyhow!(
+                "Невозможно купить валюту, если депозит меньше нуля!"
+            ));
         }
 
         if self.balance < amount {
-            return Err("Недостаточно на балансе!".to_string());
+            return Err(anyhow::anyhow!("Недостаточно на балансе!"));
         }
 
         let ask = client.fetch_ticker(token).await?.ask;
 
         if ask <= 0.0 {
-            return Err("Спрос меньше нуля".to_string());
+            return Err(anyhow::anyhow!("Спрос меньше нуля"));
         }
 
         let token_amount = amount / ask;
@@ -448,22 +453,24 @@ impl DummyAccount {
         &mut self,
         token: &str,
         amount: f64,
-        client: &BinanceClient,
-    ) -> Result<(), String> {
+        client: &CCXTClient,
+    ) -> Result<(), anyhow::Error> {
         if amount <= 0.0 {
-            return Err("Невозможно продать валюту, если депозит меньше нуля!".to_string());
+            return Err(anyhow::anyhow!(
+                "Невозможно продать валюту, если депозит меньше нуля!"
+            ));
         }
 
         let current_balance = self.tokens.get(token).copied().unwrap_or(0.0);
 
         if current_balance < amount {
-            return Err("Недостаточно на балансе!".to_string());
+            return Err(anyhow::anyhow!("Недостаточно на балансе!"));
         }
 
         let bid = client.fetch_ticker(token).await?.bid;
 
         if bid <= 0.0 {
-            return Err("Предложение меньше нуля!".to_string());
+            return Err(anyhow::anyhow!("Предложение меньше нуля!"));
         }
 
         let usdt_amount = amount * bid;
@@ -529,7 +536,7 @@ impl DummyAccount {
     //     Ok(())
     // }
 
-    pub async fn get_total_value(&self, client: &BinanceClient) -> Result<f64, String> {
+    pub async fn get_total_value(&self, client: &CCXTClient) -> Result<f64, anyhow::Error> {
         let mut total = self.balance;
 
         for (token, amount) in &self.tokens {

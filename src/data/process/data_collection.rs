@@ -1,7 +1,7 @@
 use crate::data::data_interfaces::*;
 use crate::data::process::features::*;
 use crate::data::process::volatility::get_volatility;
-use crate::data::requests::ccxt::binance::BinanceClient;
+use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::time::TimeRequest;
 use crate::engine::utils::processor::*;
 
@@ -172,8 +172,8 @@ impl ProcessAll {
     }
 }
 
-pub async fn collect_all(token: &str) -> Result<CollectedData, String> {
-    let client = BinanceClient::new().await;
+pub async fn collect_all(token: &str) -> Result<CollectedData, anyhow::Error> {
+    let client = CCXTClient::new("binance");
 
     let (ohlcv_res, ohlcv1h_res, ohlcv1d_res, ticker_res, day_price_res, mean_price_res) = tokio::join!(
         client.fetch_ohlcv(token, "15m", OHLCV_FETCH_LEN),
@@ -186,13 +186,13 @@ pub async fn collect_all(token: &str) -> Result<CollectedData, String> {
 
     let ohlcv: [ICandle; OHLCV_FETCH_LEN] = ohlcv_res?
         .try_into()
-        .map_err(|_| "Failed to convert ohlcv")?;
+        .map_err(|_| anyhow::anyhow!("Failed to convert ohlcv"))?;
     let ohlcv1h: [ICandle; OHLCV_FETCH_LEN] = ohlcv1h_res?
         .try_into()
-        .map_err(|_| "Failed to convert ohlcv1h")?;
+        .map_err(|_| anyhow::anyhow!("Failed to convert ohlcv1h"))?;
     let ohlcv1d: [ICandle; OHLCV_FETCH_LEN] = ohlcv1d_res?
         .try_into()
-        .map_err(|_| "Failed to convert ohlcv1d")?;
+        .map_err(|_| anyhow::anyhow!("Failed to convert ohlcv1d"))?;
     let ticker = ticker_res?;
     let day_price = day_price_res?;
     let mean_price = mean_price_res?;

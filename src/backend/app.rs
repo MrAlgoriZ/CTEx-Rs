@@ -1,4 +1,4 @@
-use crate::data::requests::ccxt::binance::BinanceClient;
+use crate::data::requests::ccxt::client::CCXTClient;
 use crate::{
     CONFIG_PATH,
     backend::{
@@ -43,7 +43,7 @@ impl Api {
         counter_handle: mpsc::Sender<CounterCommand>,
     ) -> Router {
         let structure = ApiStructure::default();
-        let client = Arc::new(BinanceClient::new().await);
+        let client = Arc::new(CCXTClient::new("binance"));
         let state = ApiState {
             supervisor_handle,
             counter_handle,

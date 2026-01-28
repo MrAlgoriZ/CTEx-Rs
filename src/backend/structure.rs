@@ -1,5 +1,5 @@
 use crate::{
-    data::requests::ccxt::binance::BinanceClient,
+    data::requests::ccxt::client::CCXTClient,
     engine::cycles::manager::{CounterCommand, SupervisorCommand},
 };
 use serde::Serialize;
@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 pub struct ApiState {
     pub supervisor_handle: mpsc::Sender<SupervisorCommand>,
     pub counter_handle: mpsc::Sender<CounterCommand>,
-    pub client: Arc<BinanceClient>,
+    pub client: Arc<CCXTClient>,
 }
 
 #[derive(Debug, Serialize)]

@@ -50,13 +50,8 @@ prints:
     additional_manager_prints: true
 
 token:
-  - BTCUSDT
-  - ETHUSDT
-  - BNBUSDT
-  - DOGEUSDT
-  - ADAUSDT
-  - XRPUSDT
-  - SOLUSDT
+  - "BTCUSDT"
+  - "ETHUSDT"
 
-cycle_type: "training"
+cycle_type: "loader"
 mode: "print"

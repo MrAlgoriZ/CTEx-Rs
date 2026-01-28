@@ -7,7 +7,7 @@ use tokio::time::{Duration, sleep};
 
 use crate::CONFIG_PATH;
 use crate::data::data_interfaces::FlattenedData;
-use crate::data::requests::ccxt::binance::BinanceClient;
+use crate::data::requests::ccxt::client::CCXTClient;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::sandbox::cycle::{DummyAccount, SandboxCycle};
 use crate::engine::cycles::training::cycle::TrainingCycle;
@@ -22,11 +22,11 @@ pub enum SupervisorCommand {
     StartCycle {
         symbol: String,
         cycle_type: CycleType,
-        respond_to: oneshot::Sender<Result<(), String>>,
+        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
     },
     StopCycle {
         symbol: String,
-        respond_to: oneshot::Sender<Result<(), String>>,
+        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
     },
     StopAll {
         respond_to: oneshot::Sender<()>,
@@ -100,14 +100,18 @@ impl CycleSupervisor {
         log_warning("Supervisor остановлен");
     }
 
-    async fn start_worker(&mut self, symbol: String, cycle_type: CycleType) -> Result<(), String> {
+    async fn start_worker(
+        &mut self,
+        symbol: String,
+        cycle_type: CycleType,
+    ) -> Result<(), anyhow::Error> {
         if self.workers.contains_key(&symbol) {
-            return Err(format!("Worker {} уже запущен", symbol));
+            return Err(anyhow::anyhow!(format!("Worker {} уже запущен", symbol)));
         }
 
         if matches!(cycle_type, CycleType::Training | CycleType::Sandbox) && self.model_tx.is_none()
         {
-            return Err("Model не инициализирована для цикла".to_string());
+            return Err(anyhow::anyhow!("Model не инициализирована для цикла"));
         }
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
@@ -132,13 +136,13 @@ impl CycleSupervisor {
         Ok(())
     }
 
-    async fn stop_worker(&mut self, symbol: &str) -> Result<(), String> {
+    async fn stop_worker(&mut self, symbol: &str) -> Result<(), anyhow::Error> {
         match self.workers.remove(symbol) {
             Some(handle) => {
                 handle.stop().await;
                 Ok(())
             }
-            None => Err(format!("Worker {} не найден", symbol)),
+            None => Err(anyhow::anyhow!(format!("Worker {} не найден", symbol))),
         }
     }
 
@@ -185,7 +189,7 @@ impl CycleSupervisor {
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &Option<mpsc::Sender<ModelCommand>>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let client = BinanceClient::new().await;
+        let client = CCXTClient::new("binance");
         match cycle_type {
             CycleType::Loader => {
                 let mut cycle = LoaderCycle::init(symbol.to_string(), client).await;
@@ -360,7 +364,7 @@ pub enum ModelCommand {
     },
     Train {
         data: Vec<FlattenedData>,
-        respond_to: oneshot::Sender<Result<(), String>>,
+        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
     },
 }
 
@@ -423,8 +427,8 @@ impl ModelActor {
 
                     let train_result = match result {
                         Ok(Ok(())) => Ok(()),
-                        Ok(Err(e)) => Err(e.to_string()),
-                        Err(e) => Err(format!("Ошибка spawn_blocking: {}", e)),
+                        Ok(Err(e)) => Err(e),
+                        Err(e) => Err(anyhow::anyhow!(format!("Ошибка spawn_blocking: {}", e))),
                     };
 
                     let _ = respond_to.send(train_result);
@@ -497,7 +501,7 @@ impl CycleManager {
         &mut self,
         symbols: Vec<String>,
         cycle_types: HashMap<String, CycleType>,
-    ) -> Result<(), String> {
+    ) -> Result<(), anyhow::Error> {
         let needs_model = symbols.iter().any(|symbol| {
             matches!(
                 cycle_types.get(symbol).unwrap_or(&CycleType::Loader),
@@ -506,7 +510,10 @@ impl CycleManager {
         });
 
         if needs_model {
-            self.initialize_model().await?;
+            match self.initialize_model().await {
+                Ok(()) => (),
+                Err(e) => return Err(anyhow::anyhow!(e)),
+            };
         }
 
         for symbol in &symbols {
@@ -549,7 +556,11 @@ impl CycleManager {
         Ok(())
     }
 
-    pub async fn add_cycle(&self, symbol: String, cycle_type: CycleType) -> Result<(), String> {
+    pub async fn add_cycle(
+        &self,
+        symbol: String,
+        cycle_type: CycleType,
+    ) -> Result<(), anyhow::Error> {
         let (tx, rx) = oneshot::channel();
         self.supervisor_tx
             .send(SupervisorCommand::StartCycle {
@@ -558,10 +569,10 @@ impl CycleManager {
                 respond_to: tx,
             })
             .await
-            .map_err(|_| "Supervisor недоступен".to_string())?;
+            .map_err(|_| anyhow::anyhow!("Supervisor недоступен"))?;
 
         rx.await
-            .map_err(|_| "Нет ответа от Supervisor".to_string())?
+            .map_err(|_| anyhow::anyhow!("Нет ответа от Supervisor"))?
     }
 
     pub fn counter_handle(&self) -> mpsc::Sender<CounterCommand> {

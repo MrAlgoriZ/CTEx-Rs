@@ -129,7 +129,7 @@ pub async fn cycle_add(
         return Ok(Json(ApiResponse::error("Неверный пароль".to_string())));
     }
 
-    if !state.client.test_token(&payload.symbol).await.is_ok() {
+    if !state.client.test_symbol(&payload.symbol).await.is_ok() {
         return Ok(Json(ApiResponse::error(format!(
             "Токена {} не существует",
             payload.symbol
@@ -163,7 +163,7 @@ pub async fn cycle_add(
             "Цикл {} успешно запущен",
             payload.symbol
         )))),
-        Ok(Err(e)) => Ok(Json(ApiResponse::error(e))),
+        Ok(Err(e)) => Ok(Json(ApiResponse::error(e.to_string()))),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
@@ -193,7 +193,7 @@ pub async fn cycle_stop(
             "Цикл {} остановлен",
             symbol
         )))),
-        Ok(Err(e)) => Ok(Json(ApiResponse::error(e))),
+        Ok(Err(e)) => Ok(Json(ApiResponse::error(e.to_string()))),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
