@@ -23,24 +23,22 @@ impl ICandle {
 pub struct ITicker {
     pub bid: f64,
     pub ask: f64,
-}
-
-impl ITicker {
-    pub fn new(bid: f64, ask: f64) -> Self {
-        ITicker { bid, ask }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct IDayPrice {
     pub open: f64,
     pub high: f64,
     pub low: f64,
+    pub average: f64,
 }
 
-impl IDayPrice {
-    pub fn new(open: f64, high: f64, low: f64) -> Self {
-        IDayPrice { open, high, low }
+impl ITicker {
+    pub fn new(bid: f64, ask: f64, open: f64, high: f64, low: f64, average: f64) -> Self {
+        ITicker {
+            bid,
+            ask,
+            open,
+            high,
+            low,
+            average,
+        }
     }
 }
 

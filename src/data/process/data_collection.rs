@@ -18,14 +18,12 @@ pub struct AddFeatures {
     ohlcv1h: [ICandle; OHLCV_LEN],
     ohlcv1d: [ICandle; OHLCV_LEN],
     ticker: ITicker,
-    day_price: IDayPrice,
 }
 
 impl AddFeatures {
     pub fn new(
         ticker: ITicker,
         ohlcv: [ICandle; OHLCV_LEN],
-        day_price: IDayPrice,
         ohlcv1h: [ICandle; OHLCV_LEN],
         ohlcv1d: [ICandle; OHLCV_LEN],
     ) -> Self {
@@ -34,7 +32,6 @@ impl AddFeatures {
             ohlcv1h,
             ohlcv1d,
             ticker,
-            day_price,
         }
     }
 
@@ -51,8 +48,8 @@ impl AddFeatures {
         features.push(bid_ask_ratio(self.ticker.ask, self.ticker.bid));
         features.push(mid_distance_day_highlow(
             mid,
-            self.day_price.high,
-            self.day_price.low,
+            self.ticker.high,
+            self.ticker.low,
         ));
 
         let ohlcv_var_list: [[ICandle; OHLCV_LEN]; 3] = [self.ohlcv, self.ohlcv1h, self.ohlcv1d];
@@ -83,8 +80,6 @@ pub struct CollectedData {
     pub ohlcv1h: [ICandle; OHLCV_LEN],
     pub ohlcv1d: [ICandle; OHLCV_LEN],
     pub ticker: ITicker,
-    pub day_price: IDayPrice,
-    pub mean_price: f64,
     pub features: [f64; FEATURES_LEN],
 }
 
@@ -95,8 +90,6 @@ impl CollectedData {
         ohlcv1h: [ICandle; OHLCV_FETCH_LEN],
         ohlcv1d: [ICandle; OHLCV_FETCH_LEN],
         ticker: ITicker,
-        day_price: IDayPrice,
-        mean_price: f64,
     ) -> Self {
         let ohlcv10 = ohlcv[..OHLCV_LEN].try_into().unwrap();
         let ohlcv1h10 = ohlcv1h[..OHLCV_LEN].try_into().unwrap();
@@ -109,9 +102,7 @@ impl CollectedData {
             ohlcv1h: ohlcv1h10,
             ohlcv1d: ohlcv1d10,
             ticker: ticker.clone(),
-            day_price: day_price.clone(),
-            mean_price,
-            features: AddFeatures::new(ticker, ohlcv10, day_price, ohlcv1h10, ohlcv1d10)
+            features: AddFeatures::new(ticker, ohlcv10, ohlcv1h10, ohlcv1d10)
                 .apply_features()
                 .try_into()
                 .unwrap(),
@@ -124,8 +115,6 @@ struct ProcessAll {
     ohlcv1h: [ICandle; OHLCV_FETCH_LEN],
     ohlcv1d: [ICandle; OHLCV_FETCH_LEN],
     ticker: ITicker,
-    day_price: IDayPrice,
-    mean_price: f64,
 }
 
 impl ProcessAll {
@@ -134,55 +123,46 @@ impl ProcessAll {
         ohlcv1h: [ICandle; OHLCV_FETCH_LEN],
         ohlcv1d: [ICandle; OHLCV_FETCH_LEN],
         ticker: ITicker,
-        day_price: IDayPrice,
-        mean_price: f64,
     ) -> Self {
         ProcessAll {
             ohlcv,
             ohlcv1h,
             ohlcv1d,
             ticker,
-            day_price,
-            mean_price,
         }
     }
 
     pub fn ohlcv(&self) -> [ICandle; OHLCV_FETCH_LEN] {
-        process_ohlcv(&self.ohlcv).try_into().unwrap()
+        process_ohlcv(&self.ohlcv, self.ohlcv[0].open)
+            .try_into()
+            .unwrap()
     }
 
     pub fn ohlcv1h(&self) -> [ICandle; OHLCV_FETCH_LEN] {
-        process_ohlcv(&self.ohlcv1h).try_into().unwrap()
+        process_ohlcv(&self.ohlcv1h, self.ohlcv[0].open)
+            .try_into()
+            .unwrap()
     }
 
     pub fn ohlcv1d(&self) -> [ICandle; OHLCV_FETCH_LEN] {
-        process_ohlcv(&self.ohlcv1d).try_into().unwrap()
+        process_ohlcv(&self.ohlcv1d, self.ohlcv[0].open)
+            .try_into()
+            .unwrap()
     }
 
     pub fn ticker(&self) -> ITicker {
-        process_ticker(&self.ticker)
-    }
-
-    pub fn day_price(&self) -> IDayPrice {
-        process_day_price(&self.day_price, self.ohlcv[0].open)
-    }
-
-    pub fn mean_price(&self) -> f64 {
-        let percent = DynamicPercent::with_base(self.ohlcv[0].open, 100.0);
-        percent.one_value(self.mean_price)
+        process_ticker(&self.ticker, self.ohlcv[0].open)
     }
 }
 
 pub async fn collect_all(token: &str) -> Result<CollectedData, anyhow::Error> {
     let client = CCXTClient::new(&load_config(CONFIG_PATH).main_exchange);
 
-    let (ohlcv_res, ohlcv1h_res, ohlcv1d_res, ticker_res, day_price_res, mean_price_res) = tokio::join!(
+    let (ohlcv_res, ohlcv1h_res, ohlcv1d_res, ticker_res) = tokio::join!(
         client.fetch_ohlcv(token, "15m", OHLCV_FETCH_LEN),
         client.fetch_ohlcv(token, "1h", OHLCV_FETCH_LEN),
         client.fetch_ohlcv(token, "1d", OHLCV_FETCH_LEN),
         client.fetch_ticker(token),
-        client.fetch_day_price(token),
-        client.fetch_average_price(token),
     );
 
     let ohlcv: [ICandle; OHLCV_FETCH_LEN] = ohlcv_res?
@@ -195,10 +175,8 @@ pub async fn collect_all(token: &str) -> Result<CollectedData, anyhow::Error> {
         .try_into()
         .map_err(|_| anyhow::anyhow!("Failed to convert ohlcv1d"))?;
     let ticker = ticker_res?;
-    let day_price = day_price_res?;
-    let mean_price = mean_price_res?;
 
-    let process_value = ProcessAll::new(ohlcv, ohlcv1h, ohlcv1d, ticker, day_price, mean_price);
+    let process_value = ProcessAll::new(ohlcv, ohlcv1h, ohlcv1d, ticker);
 
     Ok(CollectedData::new(
         token,
@@ -206,8 +184,6 @@ pub async fn collect_all(token: &str) -> Result<CollectedData, anyhow::Error> {
         process_value.ohlcv1h(),
         process_value.ohlcv1d(),
         process_value.ticker(),
-        process_value.day_price(),
-        process_value.mean_price(),
     ))
 }
 
@@ -266,10 +242,10 @@ pub fn flat_all(collected_data: Arc<CollectedData>, target: Option<f64>) -> Flat
 
     features.push(collected_data.ticker.bid);
     features.push(collected_data.ticker.ask);
-    features.push(collected_data.day_price.open);
-    features.push(collected_data.day_price.high);
-    features.push(collected_data.day_price.low);
-    features.push(collected_data.mean_price);
+    features.push(collected_data.ticker.open);
+    features.push(collected_data.ticker.high);
+    features.push(collected_data.ticker.low);
+    features.push(collected_data.ticker.average);
 
     features.extend_from_slice(&collected_data.features);
 

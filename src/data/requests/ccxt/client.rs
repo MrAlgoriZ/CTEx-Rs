@@ -161,45 +161,22 @@ impl CCXTClient {
             .unwrap()
             .as_f64()
             .unwrap();
-        let ask = body.data.unwrap().get("ask").unwrap().as_f64().unwrap();
-
-        Ok(ITicker::new(bid, ask))
-    }
-
-    pub async fn fetch_average_price(&self, symbol: &str) -> Result<f64, anyhow::Error> {
-        let payload = serde_json::json!({
-            "exchange_name": &self.exchange_name,
-            "symbol": parse_symbol(symbol)
-        });
-
-        let res = client()
-            .post(format!("{}/exchange/fetch/ticker", BASE_URL))
-            .json(&payload)
-            .send()
-            .await?;
-        let body: ApiResponse<serde_json::Value> = res.json().await?;
-        if !body.success {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
-        }
-        let average_price = body.data.unwrap().get("average").unwrap().as_f64().unwrap();
-        Ok(average_price)
-    }
-
-    pub async fn fetch_day_price(&self, symbol: &str) -> Result<IDayPrice, anyhow::Error> {
-        let payload = serde_json::json!({
-            "exchange_name": &self.exchange_name,
-            "symbol": parse_symbol(symbol)
-        });
-
-        let res = client()
-            .post(format!("{}/exchange/fetch/ticker", BASE_URL))
-            .json(&payload)
-            .send()
-            .await?;
-        let body: ApiResponse<serde_json::Value> = res.json().await?;
-        if !body.success {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
-        }
+        let ask = body
+            .data
+            .clone()
+            .unwrap()
+            .get("ask")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        let average = body
+            .data
+            .clone()
+            .unwrap()
+            .get("average")
+            .unwrap()
+            .as_f64()
+            .unwrap();
         let open = body
             .data
             .clone()
@@ -217,7 +194,8 @@ impl CCXTClient {
             .as_f64()
             .unwrap();
         let low = body.data.unwrap().get("low").unwrap().as_f64().unwrap();
-        Ok(IDayPrice::new(open, high, low))
+
+        Ok(ITicker::new(bid, ask, open, high, low, average))
     }
 
     pub async fn test_symbol(&self, symbol: &str) -> Result<(), anyhow::Error> {

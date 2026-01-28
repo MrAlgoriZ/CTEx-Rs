@@ -1,4 +1,4 @@
-use crate::data::data_interfaces::{ICandle, IDayPrice, ITicker};
+use crate::data::data_interfaces::{ICandle, ITicker};
 
 // TODO Зарефакторить, из-за того, что нормализация невалидная (проверить на логику)
 fn ohlcv_f64(ohlcv: &[ICandle]) -> Vec<[f64; 5]> {
@@ -36,13 +36,7 @@ pub struct DynamicPercent {
 }
 
 impl DynamicPercent {
-    pub fn new(values: Vec<f64>, x: f64) -> Self {
-        let base = values[0];
-
-        DynamicPercent { base, x }
-    }
-
-    pub fn with_base(base: f64, x: f64) -> Self {
+    pub fn new(base: f64, x: f64) -> Self {
         DynamicPercent { base, x }
     }
 
@@ -65,24 +59,22 @@ impl DynamicPercent {
     }
 }
 
-pub fn process_ohlcv(ohlcv: &[ICandle]) -> Vec<ICandle> {
+pub fn process_ohlcv(ohlcv: &[ICandle], base: f64) -> Vec<ICandle> {
     let ohlcv_vec: Vec<ICandle> = ohlcv.to_vec();
 
     let flat: Vec<f64> = flatten_ohlcv(&ohlcv_f64(&ohlcv_vec));
-    let normalized: Vec<f64> = DynamicPercent::new(flat.clone(), 100.0).all_values(flat, true);
+    let normalized: Vec<f64> = DynamicPercent::new(base, 100.0).all_values(flat, true);
     unflatten_ohlcv(&normalized)
 }
 
-pub fn process_ticker(ticker: &ITicker) -> ITicker {
-    let ticker_percent: DynamicPercent = DynamicPercent::with_base(ticker.ask, 100.0);
-    ITicker::new(ticker_percent.one_value(ticker.bid), 100.0)
-}
-
-pub fn process_day_price(day_price: &IDayPrice, base: f64) -> IDayPrice {
-    let day_percent = DynamicPercent::with_base(base, 100.0);
-    IDayPrice::new(
-        day_percent.one_value(day_price.open),
-        day_percent.one_value(day_price.high),
-        day_percent.one_value(day_price.low),
+pub fn process_ticker(ticker: &ITicker, base: f64) -> ITicker {
+    let ticker_percent: DynamicPercent = DynamicPercent::new(base, 100.0);
+    ITicker::new(
+        ticker_percent.one_value(ticker.bid),
+        ticker_percent.one_value(ticker.ask),
+        ticker_percent.one_value(ticker.open),
+        ticker_percent.one_value(ticker.high),
+        ticker_percent.one_value(ticker.low),
+        ticker_percent.one_value(ticker.average),
     )
 }
