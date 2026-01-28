@@ -34,7 +34,7 @@ impl CCXTClient {
         symbol: &str,
         timeframe: &str,
         limit: usize,
-    ) -> Result<Vec<ICandle>, anyhow::Error> {
+    ) -> Result<Vec<Candle>, anyhow::Error> {
         let payload = serde_json::json!({
             "exchange_name": &self.exchange_name,
             "symbol": parse_symbol(symbol),
@@ -70,7 +70,7 @@ impl CCXTClient {
                     return Err(anyhow!("ohlcv item has less than 6 elements"));
                 }
 
-                Ok(ICandle {
+                Ok(Candle {
                     open: arr[1].as_f64().context("open is not a number")?,
                     high: arr[2].as_f64().context("high is not a number")?,
                     low: arr[3].as_f64().context("low is not a number")?,
@@ -138,7 +138,7 @@ impl CCXTClient {
         message: None,
     } */
 
-    pub async fn fetch_ticker(&self, symbol: &str) -> Result<ITicker, anyhow::Error> {
+    pub async fn fetch_ticker(&self, symbol: &str) -> Result<Ticker, anyhow::Error> {
         let payload = serde_json::json!({
             "exchange_name": &self.exchange_name,
             "symbol": parse_symbol(symbol)
@@ -195,7 +195,7 @@ impl CCXTClient {
             .unwrap();
         let low = body.data.unwrap().get("low").unwrap().as_f64().unwrap();
 
-        Ok(ITicker::new(bid, ask, open, high, low, average))
+        Ok(Ticker::new(bid, ask, open, high, low, average))
     }
 
     pub async fn test_symbol(&self, symbol: &str) -> Result<(), anyhow::Error> {

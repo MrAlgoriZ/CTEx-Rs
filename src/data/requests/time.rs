@@ -1,4 +1,4 @@
-use crate::data::data_interfaces::ITime;
+use crate::data::data_interfaces::CircleTime;
 use chrono::{Local, Timelike};
 use std::f64::consts::PI;
 
@@ -16,11 +16,11 @@ impl TimeRequest {
         }
     }
 
-    pub fn get_time(&self) -> ITime {
+    pub fn get_time(&self) -> CircleTime {
         let hour_angle: f64 = 2.0 * PI * (self.now_hour / 24.0);
         let minute_angle: f64 = 2.0 * PI * (self.now_minute / 60.0);
 
-        ITime::new(
+        CircleTime::new(
             hour_angle.sin(),
             hour_angle.cos(),
             minute_angle.sin(),

@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy)]
-pub struct ICandle {
+pub struct Candle {
     pub open: f64,
     pub high: f64,
     pub low: f64,
@@ -7,9 +7,9 @@ pub struct ICandle {
     pub volume: f64,
 }
 
-impl ICandle {
+impl Candle {
     pub fn new(open: f64, high: f64, low: f64, close: f64, volume: f64) -> Self {
-        ICandle {
+        Candle {
             open,
             high,
             low,
@@ -20,7 +20,7 @@ impl ICandle {
 }
 
 #[derive(Debug, Clone)]
-pub struct ITicker {
+pub struct Ticker {
     pub bid: f64,
     pub ask: f64,
     pub open: f64,
@@ -29,9 +29,9 @@ pub struct ITicker {
     pub average: f64,
 }
 
-impl ITicker {
+impl Ticker {
     pub fn new(bid: f64, ask: f64, open: f64, high: f64, low: f64, average: f64) -> Self {
-        ITicker {
+        Ticker {
             bid,
             ask,
             open,
@@ -43,16 +43,16 @@ impl ITicker {
 }
 
 #[derive(Debug, Clone)]
-pub struct ITime {
+pub struct CircleTime {
     pub hour_sin: f64,
     pub hour_cos: f64,
     pub min_sin: f64,
     pub min_cos: f64,
 }
 
-impl ITime {
+impl CircleTime {
     pub fn new(hour_sin: f64, hour_cos: f64, min_sin: f64, min_cos: f64) -> Self {
-        ITime {
+        CircleTime {
             hour_sin,
             hour_cos,
             min_sin,

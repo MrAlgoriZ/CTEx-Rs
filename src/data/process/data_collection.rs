@@ -14,18 +14,18 @@ const OHLCV_FETCH_LEN: usize = 11;
 const FEATURES_LEN: usize = 70;
 
 pub struct AddFeatures {
-    ohlcv: [ICandle; OHLCV_LEN],
-    ohlcv1h: [ICandle; OHLCV_LEN],
-    ohlcv1d: [ICandle; OHLCV_LEN],
-    ticker: ITicker,
+    ohlcv: [Candle; OHLCV_LEN],
+    ohlcv1h: [Candle; OHLCV_LEN],
+    ohlcv1d: [Candle; OHLCV_LEN],
+    ticker: Ticker,
 }
 
 impl AddFeatures {
     pub fn new(
-        ticker: ITicker,
-        ohlcv: [ICandle; OHLCV_LEN],
-        ohlcv1h: [ICandle; OHLCV_LEN],
-        ohlcv1d: [ICandle; OHLCV_LEN],
+        ticker: Ticker,
+        ohlcv: [Candle; OHLCV_LEN],
+        ohlcv1h: [Candle; OHLCV_LEN],
+        ohlcv1d: [Candle; OHLCV_LEN],
     ) -> Self {
         AddFeatures {
             ohlcv,
@@ -52,7 +52,7 @@ impl AddFeatures {
             self.ticker.low,
         ));
 
-        let ohlcv_var_list: [[ICandle; OHLCV_LEN]; 3] = [self.ohlcv, self.ohlcv1h, self.ohlcv1d];
+        let ohlcv_var_list: [[Candle; OHLCV_LEN]; 3] = [self.ohlcv, self.ohlcv1h, self.ohlcv1d];
 
         for ohlcv in ohlcv_var_list {
             let candle_features: Vec<f64> = ohlcv
@@ -75,21 +75,21 @@ impl AddFeatures {
 #[derive(Debug, Clone)]
 pub struct CollectedData {
     pub token: String,
-    pub time: ITime,
-    pub ohlcv: [ICandle; OHLCV_LEN],
-    pub ohlcv1h: [ICandle; OHLCV_LEN],
-    pub ohlcv1d: [ICandle; OHLCV_LEN],
-    pub ticker: ITicker,
+    pub time: CircleTime,
+    pub ohlcv: [Candle; OHLCV_LEN],
+    pub ohlcv1h: [Candle; OHLCV_LEN],
+    pub ohlcv1d: [Candle; OHLCV_LEN],
+    pub ticker: Ticker,
     pub features: [f64; FEATURES_LEN],
 }
 
 impl CollectedData {
     pub fn new(
         token: &str,
-        ohlcv: [ICandle; OHLCV_FETCH_LEN],
-        ohlcv1h: [ICandle; OHLCV_FETCH_LEN],
-        ohlcv1d: [ICandle; OHLCV_FETCH_LEN],
-        ticker: ITicker,
+        ohlcv: [Candle; OHLCV_FETCH_LEN],
+        ohlcv1h: [Candle; OHLCV_FETCH_LEN],
+        ohlcv1d: [Candle; OHLCV_FETCH_LEN],
+        ticker: Ticker,
     ) -> Self {
         let ohlcv10 = ohlcv[..OHLCV_LEN].try_into().unwrap();
         let ohlcv1h10 = ohlcv1h[..OHLCV_LEN].try_into().unwrap();
@@ -111,18 +111,18 @@ impl CollectedData {
 }
 
 struct ProcessAll {
-    ohlcv: [ICandle; OHLCV_FETCH_LEN],
-    ohlcv1h: [ICandle; OHLCV_FETCH_LEN],
-    ohlcv1d: [ICandle; OHLCV_FETCH_LEN],
-    ticker: ITicker,
+    ohlcv: [Candle; OHLCV_FETCH_LEN],
+    ohlcv1h: [Candle; OHLCV_FETCH_LEN],
+    ohlcv1d: [Candle; OHLCV_FETCH_LEN],
+    ticker: Ticker,
 }
 
 impl ProcessAll {
     pub fn new(
-        ohlcv: [ICandle; OHLCV_FETCH_LEN],
-        ohlcv1h: [ICandle; OHLCV_FETCH_LEN],
-        ohlcv1d: [ICandle; OHLCV_FETCH_LEN],
-        ticker: ITicker,
+        ohlcv: [Candle; OHLCV_FETCH_LEN],
+        ohlcv1h: [Candle; OHLCV_FETCH_LEN],
+        ohlcv1d: [Candle; OHLCV_FETCH_LEN],
+        ticker: Ticker,
     ) -> Self {
         ProcessAll {
             ohlcv,
@@ -132,25 +132,25 @@ impl ProcessAll {
         }
     }
 
-    pub fn ohlcv(&self) -> [ICandle; OHLCV_FETCH_LEN] {
+    pub fn ohlcv(&self) -> [Candle; OHLCV_FETCH_LEN] {
         process_ohlcv(&self.ohlcv, self.ohlcv[0].open)
             .try_into()
             .unwrap()
     }
 
-    pub fn ohlcv1h(&self) -> [ICandle; OHLCV_FETCH_LEN] {
+    pub fn ohlcv1h(&self) -> [Candle; OHLCV_FETCH_LEN] {
         process_ohlcv(&self.ohlcv1h, self.ohlcv[0].open)
             .try_into()
             .unwrap()
     }
 
-    pub fn ohlcv1d(&self) -> [ICandle; OHLCV_FETCH_LEN] {
+    pub fn ohlcv1d(&self) -> [Candle; OHLCV_FETCH_LEN] {
         process_ohlcv(&self.ohlcv1d, self.ohlcv[0].open)
             .try_into()
             .unwrap()
     }
 
-    pub fn ticker(&self) -> ITicker {
+    pub fn ticker(&self) -> Ticker {
         process_ticker(&self.ticker, self.ohlcv[0].open)
     }
 }
@@ -165,13 +165,13 @@ pub async fn collect_all(token: &str) -> Result<CollectedData, anyhow::Error> {
         client.fetch_ticker(token),
     );
 
-    let ohlcv: [ICandle; OHLCV_FETCH_LEN] = ohlcv_res?
+    let ohlcv: [Candle; OHLCV_FETCH_LEN] = ohlcv_res?
         .try_into()
         .map_err(|_| anyhow::anyhow!("Failed to convert ohlcv"))?;
-    let ohlcv1h: [ICandle; OHLCV_FETCH_LEN] = ohlcv1h_res?
+    let ohlcv1h: [Candle; OHLCV_FETCH_LEN] = ohlcv1h_res?
         .try_into()
         .map_err(|_| anyhow::anyhow!("Failed to convert ohlcv1h"))?;
-    let ohlcv1d: [ICandle; OHLCV_FETCH_LEN] = ohlcv1d_res?
+    let ohlcv1d: [Candle; OHLCV_FETCH_LEN] = ohlcv1d_res?
         .try_into()
         .map_err(|_| anyhow::anyhow!("Failed to convert ohlcv1d"))?;
     let ticker = ticker_res?;

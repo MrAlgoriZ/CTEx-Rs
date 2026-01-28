@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
 
-use crate::data::data_interfaces::{FlattenedData, ICandle};
+use crate::data::data_interfaces::{Candle, FlattenedData};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::db_req::{insert_candle, select_all_candles};
@@ -34,7 +34,7 @@ pub trait Cycle: CycleGetters {
     }
 
     async fn update_volatility(&self, volatility_obj: &mut f64) -> Result<(), anyhow::Error> {
-        let candles: Vec<ICandle> = self
+        let candles: Vec<Candle> = self
             .get_client()
             .fetch_ohlcv(self.get_symbol(), "1d", 10)
             .await?;

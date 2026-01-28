@@ -1,7 +1,7 @@
-use crate::data::data_interfaces::{ICandle, ITicker};
+use crate::data::data_interfaces::{Candle, Ticker};
 
 // TODO Зарефакторить, из-за того, что нормализация невалидная (проверить на логику)
-fn ohlcv_f64(ohlcv: &[ICandle]) -> Vec<[f64; 5]> {
+fn ohlcv_f64(ohlcv: &[Candle]) -> Vec<[f64; 5]> {
     let mut new_ohlcv: Vec<[f64; 5]> = Vec::with_capacity(ohlcv.len());
 
     for candle in ohlcv {
@@ -23,10 +23,10 @@ fn flatten_ohlcv(values: &Vec<[f64; 5]>) -> Vec<f64> {
         .collect()
 }
 
-fn unflatten_ohlcv(values: &[f64]) -> Vec<ICandle> {
+fn unflatten_ohlcv(values: &[f64]) -> Vec<Candle> {
     values
         .chunks_exact(5)
-        .map(|chunk| ICandle::new(chunk[0], chunk[1], chunk[2], chunk[3], chunk[4]))
+        .map(|chunk| Candle::new(chunk[0], chunk[1], chunk[2], chunk[3], chunk[4]))
         .collect()
 }
 
@@ -59,17 +59,17 @@ impl DynamicPercent {
     }
 }
 
-pub fn process_ohlcv(ohlcv: &[ICandle], base: f64) -> Vec<ICandle> {
-    let ohlcv_vec: Vec<ICandle> = ohlcv.to_vec();
+pub fn process_ohlcv(ohlcv: &[Candle], base: f64) -> Vec<Candle> {
+    let ohlcv_vec: Vec<Candle> = ohlcv.to_vec();
 
     let flat: Vec<f64> = flatten_ohlcv(&ohlcv_f64(&ohlcv_vec));
     let normalized: Vec<f64> = DynamicPercent::new(base, 100.0).all_values(flat, true);
     unflatten_ohlcv(&normalized)
 }
 
-pub fn process_ticker(ticker: &ITicker, base: f64) -> ITicker {
+pub fn process_ticker(ticker: &Ticker, base: f64) -> Ticker {
     let ticker_percent: DynamicPercent = DynamicPercent::new(base, 100.0);
-    ITicker::new(
+    Ticker::new(
         ticker_percent.one_value(ticker.bid),
         ticker_percent.one_value(ticker.ask),
         ticker_percent.one_value(ticker.open),

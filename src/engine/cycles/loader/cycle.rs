@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 use std::sync::Arc;
 
-use crate::data::data_interfaces::ICandle;
+use crate::data::data_interfaces::Candle;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::process_target;
 use crate::data::process::volatility::get_volatility;
@@ -70,7 +70,7 @@ impl LoaderCycle {
         }
 
         let volatility: f64 = {
-            let candles: Vec<ICandle> = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await?;
+            let candles: Vec<Candle> = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await?;
             get_volatility(&candles)
         };
 
