@@ -50,8 +50,9 @@ prints:
     additional_manager_prints: true
 
 token:
-  - "BTCUSDT"
-  - "ETHUSDT"
+  - BTCUSDT
+  - ETHUSDT
 
+main_exchange: "binance"
 cycle_type: "loader"
 mode: "print"

@@ -8,6 +8,7 @@ pub struct Config {
     pub prints: PrintsConfig,
     pub behaviour: BehaviourConfig,
     pub token: Vec<String>,
+    pub main_exchange: String,
     pub cycle_type: String,
     pub mode: String,
 }
@@ -167,6 +168,7 @@ impl Default for Config {
                 feedback_engine_capacity: 5,
             },
             token: vec!["BTCUSDT".to_string()],
+            main_exchange: "binance".to_string(),
             cycle_type: "trading".to_string(),
             mode: "print".to_string(),
         }

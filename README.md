@@ -1,9 +1,12 @@
 # CTEx-Rs - Rust подход проекта 'CTEx-Ai'
 
+![Status](https://img.shields.io/badge/status-active-brightgreen) ![License](https://img.shields.io/badge/license-proprietary-red) ![Language](https://img.shields.io/badge/language-Rust-orange)
+
 Репозиторий представляет из себя реализацию проекта 'CTEx-Ai' на языке Rust. Проект CTEx-Ai это полноценная модульная realtime система для алгоритмического трейдинга на биржах (Binance) с использованием технологий машинного обучения
 
 ## Запуск
 Чтобы запустить бинарный файл, вы должны подготовить окружение:
+  - Установите микросервис с биржами https://github.com/MrAlgoriZ/ccxt-python-service, и запустите его
   - Создайте .env файл, в котором должен быть реализован параметр DATABASE_URL
   - Ваша база данных должна быть подготовлена до запуска приложения. Подробнее о подготовке базе указано ниже в пункте "Подготовка базы данных"
   - Настройка запуска расписывается в файле по пути "config/config.yaml"
@@ -29,6 +32,11 @@
     - accuracy_capacity: сколько максимум успехов/ошибок будет помещаться в счетчиках
     - feedback_engine_capacity: экспериментальная настройка для SandboxCycle, позволяет регулировать объем последних ошибок модели
 
+  - services (настройка сервисов):
+    - ccxt_python (сервис для загрузки бирж https://github.com/MrAlgoriZ/ccxt-python-service)
+      - ip: на каком айпи сервис
+      - port: на каком порте сервис
+
   - backend (настройка бекенда):
     - enabled: включить или отключить бекенд
     - listener: по какому ip и порту работает бекенд
@@ -46,6 +54,7 @@
       ```
     Поддерживаются все токены, которые есть на binance.
     Если вдруг вы захотите использовать токен, который не поддерживается, то ничего не произойдет, токен остановит цикл в самом начале.
+  - main_exchange: какую биржу использовать, писать в lowercase ("binance", "bybit", "mexc", "bitget", "bingx" и тд)
   - cycle type (настройка цикла): какой цикл запустить? (на выбор loader, training, sandbox, в будущем больше вариантов)
   - mode: тип вывода ("log": без цвета, "print": с цветом)
 
@@ -100,7 +109,7 @@ cargo build --release && ./target/release/CTEx-Rs
     │   │   └── volatility.rs
     │   └── requests/
     │       ├── ccxt/
-    │       │   ├── binance.rs
+    │       │   ├── client.rs
     │       │   └── mod.rs
     │       ├── database/
     │       │   ├── db_req.rs
@@ -136,6 +145,7 @@ cargo build --release && ./target/release/CTEx-Rs
     │       │   ├── load_env.rs
     │       │   └── mod.rs
     │       ├── mod.rs
+    │       ├── parse.rs
     │       └── processor.rs
     ├── main.rs
     └── models/

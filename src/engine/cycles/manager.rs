@@ -189,7 +189,7 @@ impl CycleSupervisor {
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &Option<mpsc::Sender<ModelCommand>>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let client = CCXTClient::new("binance");
+        let client = CCXTClient::new(&load_config(CONFIG_PATH).main_exchange);
         match cycle_type {
             CycleType::Loader => {
                 let mut cycle = LoaderCycle::init(symbol.to_string(), client).await;

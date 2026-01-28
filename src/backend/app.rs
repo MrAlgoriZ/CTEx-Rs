@@ -43,7 +43,7 @@ impl Api {
         counter_handle: mpsc::Sender<CounterCommand>,
     ) -> Router {
         let structure = ApiStructure::default();
-        let client = Arc::new(CCXTClient::new("binance"));
+        let client = Arc::new(CCXTClient::new(&load_config(CONFIG_PATH).main_exchange));
         let state = ApiState {
             supervisor_handle,
             counter_handle,
