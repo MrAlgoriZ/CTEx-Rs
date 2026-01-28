@@ -311,6 +311,7 @@
   - Добавлена возможность настраивать в конфиге, какую биржу использовать для запросов
   - Большинство обработок ошибок заменено с String на anyhow::Error
   - Исправлена логика DynamicPercent
-  - Ticker теперь имеет поля, которые ранее имели IDayPrice, average_price (уменьшено кол-во запросов к API)
+  - ITicker теперь имеет поля, которые ранее имели IDayPrice, average_price (уменьшено кол-во запросов к API)
   - Удалены IDayPrice и AveragePrice
+  - ITicker переименован в Ticker, ICandle в Candle и ITime в CircleTime
   - Изменен и украшен README

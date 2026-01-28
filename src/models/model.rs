@@ -40,7 +40,7 @@ impl RFInterface {
         }
     }
 
-    pub fn load_data(&mut self, data: Vec<FlattenedData>) -> Result<(DenseMatrix<f64>, Vec<f64>)> {
+    fn load_data(&mut self, data: Vec<FlattenedData>) -> Result<(DenseMatrix<f64>, Vec<f64>)> {
         let n_samples = data.len();
         if n_samples == 0 {
             return Err(anyhow!("No data provided"));
@@ -112,7 +112,7 @@ impl RFInterface {
         Ok((x, y_target))
     }
 
-    pub fn prepare_data(
+    fn prepare_data(
         &mut self,
         x: DenseMatrix<f64>,
         y_target: Vec<f64>,
@@ -134,7 +134,7 @@ impl RFInterface {
         Ok((x_train, x_val, y_train, y_val))
     }
 
-    pub fn fit(
+    fn fit(
         &mut self,
         x_train: &DenseMatrix<f64>,
         y_train: &Vec<f64>,
@@ -155,7 +155,7 @@ impl RFInterface {
         Ok(())
     }
 
-    pub fn evaluate(&self, x_val: &DenseMatrix<f64>, y_val: &Vec<f64>) -> Result<f64> {
+    fn evaluate(&self, x_val: &DenseMatrix<f64>, y_val: &Vec<f64>) -> Result<f64> {
         let model = self
             .model
             .as_ref()
