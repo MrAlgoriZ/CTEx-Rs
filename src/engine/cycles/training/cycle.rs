@@ -7,7 +7,7 @@ use crate::data::process::data_collection::{CollectedData, collect_all, flat_all
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::engine::cycles::CyclePhase;
-use crate::engine::cycles::manager::{CounterCommand, ModelCommand};
+use crate::engine::cycles::manager::{CounterCommand, CycleError, ModelCommand};
 use crate::engine::cycles::traits::{
     Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
 };
@@ -77,9 +77,9 @@ impl TrainingCycle {
         &mut self,
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &mpsc::Sender<ModelCommand>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), CycleError> {
         if !self.client.test_symbol(&self.symbol).await.is_ok() {
-            return Err(anyhow::anyhow!("Токена с таким именем не существует!"));
+            return Err(CycleError::SymbolDoesNotExist);
         }
         let mut volatility: f64 = 0.0;
 
@@ -150,5 +150,15 @@ impl TrainingCycle {
                 self.print_accuracy(counter_tx).await;
             }
         }
+    }
+
+    // TODO Реализовать
+    pub async fn run_backtest(
+        &mut self,
+        counter_tx: &mpsc::Sender<CounterCommand>,
+        model_tx: &mpsc::Sender<ModelCommand>,
+    ) -> Result<(), CycleError> {
+        println!("Backtest runned!");
+        Ok(())
     }
 }

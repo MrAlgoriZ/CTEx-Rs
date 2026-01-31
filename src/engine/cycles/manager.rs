@@ -13,9 +13,21 @@ use crate::engine::cycles::sandbox::cycle::{DummyAccount, SandboxCycle};
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::colors::Fore;
+use crate::engine::utils::config::config_types::RuntimeType;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::models::model::{RFInterface, train_model};
+
+pub enum CycleError {
+    SymbolDoesNotExist,
+    AnyhowError(anyhow::Error),
+}
+
+impl From<anyhow::Error> for CycleError {
+    fn from(err: anyhow::Error) -> Self {
+        CycleError::AnyhowError(err)
+    }
+}
 
 #[derive(Debug)]
 pub enum SupervisorCommand {
@@ -174,8 +186,16 @@ impl CycleSupervisor {
                             break;
                         }
                         Err(e) => {
-                            log_error(&format!("Worker {} упал: {}, рестарт через 5 сек", symbol, e));
-                            sleep(Duration::from_secs(5)).await;
+                            match e {
+                                CycleError::AnyhowError(err) => {
+                                    log_error(&format!("Worker {} упал: {}, рестарт через 5 сек", symbol, err));
+                                    sleep(Duration::from_secs(5)).await;
+                                }
+                                CycleError::SymbolDoesNotExist => {
+                                    log_error(&format!("Токена {} не существует!", symbol));
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
@@ -188,26 +208,51 @@ impl CycleSupervisor {
         cycle_type: CycleType,
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &Option<mpsc::Sender<ModelCommand>>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let client = CCXTClient::new(&load_config(CONFIG_PATH).main_exchange);
+    ) -> Result<(), CycleError> {
+        let config = load_config(CONFIG_PATH);
+        let client = CCXTClient::new(&config.main_exchange);
+
         match cycle_type {
             CycleType::Loader => {
                 let mut cycle = LoaderCycle::init(symbol.to_string(), client).await;
                 sleep(Duration::from_secs(10)).await;
-                cycle.run().await?;
+
+                match config.runtime.runtime_type {
+                    RuntimeType::Realtime => cycle.run().await?,
+                    RuntimeType::Backtest => cycle.run_backtest().await?,
+                }
             }
             CycleType::Training => {
                 let mut cycle = TrainingCycle::init(symbol.to_string(), client).await;
                 sleep(Duration::from_secs(10)).await;
-                cycle.run(counter_tx, model_tx.as_ref().unwrap()).await?;
+
+                match config.runtime.runtime_type {
+                    RuntimeType::Realtime => {
+                        cycle.run(counter_tx, model_tx.as_ref().unwrap()).await?
+                    }
+                    RuntimeType::Backtest => {
+                        cycle
+                            .run_backtest(counter_tx, model_tx.as_ref().unwrap())
+                            .await?
+                    }
+                }
             }
             CycleType::Sandbox => {
                 let mut cycle = SandboxCycle::init(symbol.to_string(), client).await;
                 let account = Arc::new(Mutex::new(DummyAccount::with_balance(100.0)));
                 sleep(Duration::from_secs(10)).await;
-                cycle
-                    .run(model_tx.as_ref().unwrap(), counter_tx, account)
-                    .await?;
+                match config.runtime.runtime_type {
+                    RuntimeType::Realtime => {
+                        cycle
+                            .run(counter_tx, model_tx.as_ref().unwrap(), account)
+                            .await?
+                    }
+                    RuntimeType::Backtest => {
+                        cycle
+                            .run_backtest(counter_tx, model_tx.as_ref().unwrap(), account)
+                            .await?
+                    }
+                }
             }
         }
         Ok(())

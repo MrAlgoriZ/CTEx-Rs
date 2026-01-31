@@ -9,7 +9,7 @@ use crate::data::data_interfaces::FlattenedData;
 use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::requests::ccxt::client::CCXTClient;
-use crate::engine::cycles::manager::{CounterCommand, CounterType, ModelCommand};
+use crate::engine::cycles::manager::{CounterCommand, CounterType, CycleError, ModelCommand};
 use crate::engine::cycles::traits::{
     Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
 };
@@ -81,12 +81,12 @@ impl SandboxCycle {
 
     pub async fn run(
         &mut self,
-        model: &mpsc::Sender<ModelCommand>,
         counter_tx: &mpsc::Sender<CounterCommand>,
+        model: &mpsc::Sender<ModelCommand>,
         account: Arc<Mutex<DummyAccount>>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), CycleError> {
         if !self.client.test_symbol(&self.symbol).await.is_ok() {
-            return Err(anyhow::anyhow!("Токена с таким именем не существует!"));
+            return Err(CycleError::SymbolDoesNotExist);
         }
 
         let mut target_indicate: Option<bool> = None;
@@ -194,6 +194,17 @@ impl SandboxCycle {
 
             self.print_account_balance(account.clone()).await?;
         }
+    }
+
+    // TODO Реализовать
+    pub async fn run_backtest(
+        &mut self,
+        counter_tx: &mpsc::Sender<CounterCommand>,
+        model_tx: &mpsc::Sender<ModelCommand>,
+        account: Arc<Mutex<DummyAccount>>,
+    ) -> Result<(), CycleError> {
+        println!("Backtest runned!");
+        Ok(())
     }
 
     // --- Методы ---

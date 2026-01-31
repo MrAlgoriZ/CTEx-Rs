@@ -102,11 +102,18 @@ pub struct CyclePrintsConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeType {
+    Realtime,
+    Backtest,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RuntimeConfig {
     #[serde(rename = "type")]
-    pub runtime_type: String,
+    pub runtime_type: RuntimeType,
     pub with_training: bool,
-    pub cycle_type: String
+    pub cycle_type: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -177,7 +184,7 @@ impl Default for Config {
             },
             token: vec!["BTCUSDT".to_string()],
             runtime: RuntimeConfig {
-                runtime_type: "realtime".to_string(),
+                runtime_type: RuntimeType::Realtime,
                 with_training: false,
                 cycle_type: "loader".to_string(),
             },

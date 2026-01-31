@@ -8,6 +8,7 @@ use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::db_req::insert_candle;
 use crate::engine::cycles::CyclePhase;
+use crate::engine::cycles::manager::CycleError;
 use crate::engine::cycles::traits::{Cycle, CycleGetters};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
@@ -64,9 +65,9 @@ impl LoaderCycle {
         Self::new(symbol, client, pool)
     }
 
-    pub async fn run(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn run(&mut self) -> Result<(), CycleError> {
         if !self.client.test_symbol(&self.symbol).await.is_ok() {
-            return Err(anyhow::anyhow!("Токена с таким именем не существует!"));
+            return Err(CycleError::SymbolDoesNotExist);
         }
 
         let volatility: f64 = {
@@ -113,6 +114,15 @@ impl LoaderCycle {
             self.last_grouped_candles = Some(Arc::new(candles));
             self.last_candles_target = Some(candles_target);
         }
+    }
+
+    // TODO Реализовать
+    pub async fn run_backtest(&mut self) -> Result<(), CycleError> {
+        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+            return Ok(()); // Костыль, чтобы цикл не перезапускал в случае плохого токена
+        }
+
+        Ok(())
     }
 
     // --- Методы ---
