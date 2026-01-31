@@ -24,7 +24,7 @@ async fn main() {
     for symbol in symbols.clone().into_iter() {
         cycle_types.insert(
             symbol,
-            CycleType::from_str(&config.cycle_type.to_lowercase()),
+            CycleType::from_str(&config.runtime.cycle_type.to_lowercase()),
         );
     }
 

@@ -7,9 +7,9 @@ pub struct Config {
     pub services: ServicesConfig,
     pub prints: PrintsConfig,
     pub behaviour: BehaviourConfig,
+    pub runtime: RuntimeConfig,
     pub token: Vec<String>,
     pub main_exchange: String,
-    pub cycle_type: String,
     pub mode: String,
 }
 
@@ -102,6 +102,14 @@ pub struct CyclePrintsConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RuntimeConfig {
+    #[serde(rename = "type")]
+    pub runtime_type: String,
+    pub with_training: bool,
+    pub cycle_type: String
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TTSConfig {
     pub train_ratio: f32,
 }
@@ -168,8 +176,12 @@ impl Default for Config {
                 feedback_engine_capacity: 5,
             },
             token: vec!["BTCUSDT".to_string()],
+            runtime: RuntimeConfig {
+                runtime_type: "realtime".to_string(),
+                with_training: false,
+                cycle_type: "loader".to_string(),
+            },
             main_exchange: "binance".to_string(),
-            cycle_type: "trading".to_string(),
             mode: "print".to_string(),
         }
     }

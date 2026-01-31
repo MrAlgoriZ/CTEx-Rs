@@ -53,6 +53,10 @@ token:
   - BTCUSDT
   - ETHUSDT
 
+runtime:
+  type: "backtest"
+  with_training: true
+  cycle_type: "loader"
+
 main_exchange: "binance"
-cycle_type: "loader"
 mode: "print"
