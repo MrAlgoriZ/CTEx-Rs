@@ -15,7 +15,7 @@ use std::collections::HashMap;
 const CONFIG_PATH: &'static str = "config/config.yaml";
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), anyhow::Error> {
     ensure_config_exists(CONFIG_PATH);
     let config = load_config(CONFIG_PATH);
     let symbols = config.token;
@@ -30,13 +30,13 @@ async fn main() {
 
     let mut manager = CycleManager::new();
 
-    manager.run_all(symbols, cycle_types).await.unwrap();
+    manager.run_all(symbols, cycle_types).await?;
 
     let counter_handle = manager.counter_handle();
     let supervisor_handle = manager.supervisor_handle();
 
     if config.backend.enabled {
-        let api = Api::new(supervisor_handle, counter_handle).await;
+        let api = Api::new(supervisor_handle, counter_handle).await?;
         let api_task = tokio::spawn(async move {
             api.run().await;
         });
@@ -51,4 +51,6 @@ async fn main() {
         tokio::signal::ctrl_c().await.unwrap();
         println!("Получен сигнал завершения!");
     }
+
+    Ok(())
 }

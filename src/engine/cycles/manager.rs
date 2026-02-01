@@ -214,7 +214,7 @@ impl CycleSupervisor {
 
         match cycle_type {
             CycleType::Loader => {
-                let mut cycle = LoaderCycle::init(symbol.to_string(), client).await;
+                let mut cycle = LoaderCycle::init(symbol.to_string(), client).await?;
                 sleep(Duration::from_secs(10)).await;
 
                 match config.runtime.runtime_type {
@@ -223,7 +223,7 @@ impl CycleSupervisor {
                 }
             }
             CycleType::Training => {
-                let mut cycle = TrainingCycle::init(symbol.to_string(), client).await;
+                let mut cycle = TrainingCycle::init(symbol.to_string(), client).await?;
                 sleep(Duration::from_secs(10)).await;
 
                 match config.runtime.runtime_type {
@@ -234,7 +234,7 @@ impl CycleSupervisor {
                 }
             }
             CycleType::Sandbox => {
-                let mut cycle = SandboxCycle::init(symbol.to_string(), client).await;
+                let mut cycle = SandboxCycle::init(symbol.to_string(), client).await?;
                 let account = Arc::new(Mutex::new(DummyAccount::with_balance(100.0)));
                 sleep(Duration::from_secs(10)).await;
                 match config.runtime.runtime_type {
@@ -584,7 +584,9 @@ impl CycleManager {
             .map_err(|e| format!("DB connection error: {}", e))?;
 
         let mut model = RFInterface::new();
-        train_model(&pool, &mut model).await;
+        train_model(&pool, &mut model)
+            .await
+            .map_err(|e| format!("Train error: {}", e))?;
 
         let (model_actor, model_tx) = ModelActor::new(model);
         tokio::spawn(model_actor.run());

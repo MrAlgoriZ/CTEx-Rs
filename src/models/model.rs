@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::anyhow;
 use chrono::Local;
 use smartcore::ensemble::random_forest_regressor::{
     RandomForestRegressor, RandomForestRegressorParameters,
@@ -40,7 +40,10 @@ impl RFInterface {
         }
     }
 
-    fn load_data(&mut self, data: Vec<FlattenedData>) -> Result<(DenseMatrix<f64>, Vec<f64>)> {
+    fn load_data(
+        &mut self,
+        data: Vec<FlattenedData>,
+    ) -> Result<(DenseMatrix<f64>, Vec<f64>), anyhow::Error> {
         let n_samples = data.len();
         if n_samples == 0 {
             return Err(anyhow!("No data provided"));
@@ -117,7 +120,7 @@ impl RFInterface {
         x: DenseMatrix<f64>,
         y_target: Vec<f64>,
         train_ratio: f32,
-    ) -> Result<(DenseMatrix<f64>, DenseMatrix<f64>, Vec<f64>, Vec<f64>)> {
+    ) -> Result<(DenseMatrix<f64>, DenseMatrix<f64>, Vec<f64>, Vec<f64>), anyhow::Error> {
         let (x_train, x_val, y_train, y_val) = train_test_split(
             &x,
             &y_target,
@@ -140,7 +143,7 @@ impl RFInterface {
         y_train: &Vec<f64>,
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
-    ) -> Result<()> {
+    ) -> Result<(), anyhow::Error> {
         let params = RandomForestRegressorParameters::default()
             .with_n_trees(self.config.model.n_trees)
             .with_max_depth(self.config.model.max_depth)
@@ -155,7 +158,7 @@ impl RFInterface {
         Ok(())
     }
 
-    fn evaluate(&self, x_val: &DenseMatrix<f64>, y_val: &Vec<f64>) -> Result<f64> {
+    fn evaluate(&self, x_val: &DenseMatrix<f64>, y_val: &Vec<f64>) -> Result<f64, anyhow::Error> {
         let model = self
             .model
             .as_ref()
@@ -212,7 +215,7 @@ impl RFInterface {
         Ok(accuracy)
     }
 
-    pub fn predict(&self, x: Vec<f64>, token_name: Option<&str>) -> Result<f64> {
+    pub fn predict(&self, x: Vec<f64>, token_name: Option<&str>) -> Result<f64, anyhow::Error> {
         let token_cols = self
             .token_columns
             .as_ref()
@@ -241,7 +244,7 @@ impl RFInterface {
         Ok(proba[0])
     }
 
-    pub fn train(&mut self, data: Vec<FlattenedData>) -> Result<()> {
+    pub fn train(&mut self, data: Vec<FlattenedData>) -> Result<(), anyhow::Error> {
         let (x, y_target) = self.load_data(data)?;
         let (x_train, x_val, y_train, y_val) =
             self.prepare_data(x, y_target, self.config.model.train_test_split.train_ratio)?;
@@ -250,11 +253,10 @@ impl RFInterface {
     }
 }
 
-pub async fn train_model(pool: &PgPool, model: &mut RFInterface) {
-    let data = select_all_candles(pool).await.unwrap();
-    model
-        .train(data)
-        .expect("The model faced a problem with learning");
+pub async fn train_model(pool: &PgPool, model: &mut RFInterface) -> Result<(), anyhow::Error> {
+    let data = select_all_candles(pool).await?;
+    model.train(data)?;
+    Ok(())
 }
 
 fn threshold_accuracy(y_true: &[f64], y_pred: &[f64], threshold: f64) -> f64 {
@@ -280,7 +282,7 @@ async fn test_training() -> Result<(), anyhow::Error> {
         .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
     let mut model = RFInterface::new();
 
-    train_model(&pool, &mut model).await;
+    train_model(&pool, &mut model).await?;
 
     Ok(())
 }

@@ -61,11 +61,9 @@ impl LoaderCycle {
         }
     }
 
-    pub async fn init(symbol: String, client: CCXTClient) -> Self {
-        let pool = PgPool::connect(&load_env().database_url)
-            .await
-            .expect("Database connection failed");
-        Self::new(symbol, client, pool)
+    pub async fn init(symbol: String, client: CCXTClient) -> Result<Self, anyhow::Error> {
+        let pool = PgPool::connect(&load_env().database_url).await?;
+        Ok(Self::new(symbol, client, pool))
     }
 
     pub async fn run(&mut self) -> Result<(), CycleError> {
@@ -176,14 +174,7 @@ impl LoaderCycle {
                     let last_grouped = self.last_grouped_candles.clone().unwrap();
 
                     let flattened = flat_all(last_grouped, target);
-                    match self.save_data(flattened, &self.pool).await {
-                        Ok(()) => {}
-                        Err(()) => {
-                            return Err(CycleError::AnyhowError(anyhow::anyhow!(
-                                "Saving the data has been failed!"
-                            )));
-                        }
-                    };
+                    self.save_data(flattened, &self.pool).await?;
                 }
                 _ => {}
             }
@@ -209,14 +200,12 @@ impl LoaderCycle {
         &self,
         flattened_candles: crate::data::data_interfaces::FlattenedData,
         pool: &PgPool,
-    ) -> Result<(), ()> {
+    ) -> Result<(), anyhow::Error> {
         if flattened_candles.is_there_a_target() {
-            insert_candle(pool, &self.symbol, &flattened_candles.features)
-                .await
-                .unwrap();
+            insert_candle(pool, &self.symbol, &flattened_candles.features).await?;
             Ok(())
         } else {
-            Err(())
+            Err(anyhow::anyhow!("Flattened candles must have the target!"))
         }
     }
 }

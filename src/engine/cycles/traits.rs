@@ -44,7 +44,7 @@ pub trait Cycle: CycleGetters {
 
     async fn wait_for_next_interval(&self) -> Result<(), anyhow::Error> {
         let timeframe = Timeframe::from_str(&self.get_config().main_timeframe)
-            .expect("invalid timeframe in config");
+            .expect("Invalid timeframe in config!");
 
         let now = Local::now();
 
@@ -100,10 +100,9 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                     flattenned_candles: flattened_candles,
                     respond_to: tx,
                 })
-                .await
-                .unwrap();
+                .await?;
 
-            let pred = rx.await.unwrap();
+            let pred = rx.await?;
 
             Ok(pred)
         } else {
@@ -160,8 +159,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                 &self.get_symbol(),
                 &flattened_candles.features,
             )
-            .await
-            .unwrap();
+            .await?;
 
             let (tx, rx) = oneshot::channel();
             let _ = counter_tx
@@ -254,7 +252,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         &self,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), anyhow::Error> {
-        let data = select_all_candles(self.get_pool()).await.unwrap();
+        let data = select_all_candles(self.get_pool()).await?;
         let (tx, rx) = oneshot::channel();
 
         model_tx
@@ -262,10 +260,9 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                 data,
                 respond_to: tx,
             })
-            .await
-            .unwrap();
+            .await?;
 
-        rx.await.unwrap()?;
+        rx.await??;
         Ok(())
     }
 }

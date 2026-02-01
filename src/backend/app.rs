@@ -26,16 +26,18 @@ impl Api {
     pub async fn new(
         supervisor_handle: mpsc::Sender<SupervisorCommand>,
         counter_handle: mpsc::Sender<CounterCommand>,
-    ) -> Self {
+    ) -> Result<Self, anyhow::Error> {
         let config = load_config(CONFIG_PATH);
         let listener = tokio::net::TcpListener::bind(&config.backend.listener)
             .await
-            .expect(&format!("Failed to bind to {}", config.backend.listener));
+            .map_err(|_| {
+                anyhow::anyhow!(format!("Failed to bind to {}", config.backend.listener))
+            })?;
 
-        Api {
+        Ok(Api {
             listener,
             app: Self::init_app(supervisor_handle, counter_handle).await,
-        }
+        })
     }
 
     async fn init_app(

@@ -72,11 +72,9 @@ impl SandboxCycle {
         }
     }
 
-    pub async fn init(symbol: String, client: CCXTClient) -> Self {
-        let pool = PgPool::connect(&load_env().database_url)
-            .await
-            .expect("Database connection failed");
-        Self::new(symbol, client, pool)
+    pub async fn init(symbol: String, client: CCXTClient) -> Result<Self, anyhow::Error> {
+        let pool = PgPool::connect(&load_env().database_url).await?;
+        Ok(Self::new(symbol, client, pool))
     }
 
     pub async fn run(

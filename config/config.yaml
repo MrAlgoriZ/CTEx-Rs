@@ -50,11 +50,11 @@ prints:
     additional_manager_prints: true
 
 token:
-  - ETHUSDT
+  - DOGSUSDT
 
 runtime:
   type: "backtest"
-  with_training: false
+  with_training: true
   cycle_type: "training"
 
 main_exchange: "binance"

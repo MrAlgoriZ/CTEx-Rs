@@ -91,13 +91,17 @@ const COLUMNS: &'static [&str] = &[
     "target",
 ];
 
-pub async fn insert_candle(pool: &PgPool, token: &str, values: &[f64]) -> Result<(), String> {
+pub async fn insert_candle(
+    pool: &PgPool,
+    token: &str,
+    values: &[f64],
+) -> Result<(), anyhow::Error> {
     if values.len() != COLUMNS.len() {
-        return Err(format!(
+        return Err(anyhow::anyhow!(format!(
             "Неправильная длина. Ожидалось {}, получено {}",
             COLUMNS.len(),
             values.len()
-        ));
+        )));
     }
 
     let placeholders = (2..=COLUMNS.len() + 1)
@@ -118,7 +122,7 @@ pub async fn insert_candle(pool: &PgPool, token: &str, values: &[f64]) -> Result
 
     q.execute(pool).await.map_err(|e| {
         eprintln!("{}Данные не загрузились в бд: {:?}", Fore::RED.as_str(), e);
-        format!("{e}")
+        anyhow::anyhow!(format!("{e}"))
     })?;
 
     Ok(())

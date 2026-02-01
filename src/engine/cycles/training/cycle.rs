@@ -1,6 +1,7 @@
 use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::data::data_interfaces::FlattenedData;
@@ -72,11 +73,9 @@ impl TrainingCycle {
         }
     }
 
-    pub async fn init(symbol: String, client: CCXTClient) -> Self {
-        let pool = PgPool::connect(&load_env().database_url)
-            .await
-            .expect("Database connection failed");
-        Self::new(symbol, client, pool)
+    pub async fn init(symbol: String, client: CCXTClient) -> Result<Self, anyhow::Error> {
+        let pool = PgPool::connect(&load_env().database_url).await?;
+        Ok(Self::new(symbol, client, pool))
     }
 
     pub async fn run(
@@ -186,10 +185,10 @@ impl TrainingCycle {
 
         let mut phase = CyclePhase::Warmup;
 
-        let mut threshold_counter: SymbolCounters<u8> = SymbolCounters::new(1000);
-        let mut direction_counter: SymbolCounters<u8> = SymbolCounters::new(1000);
-
         let total = (all_candles.len() - 1 - OHLCV_FETCH_LEN) as u64;
+
+        let mut threshold_counter: SymbolCounters<u8> = SymbolCounters::new(total as usize);
+        let mut direction_counter: SymbolCounters<u8> = SymbolCounters::new(total as usize);
 
         let pb = ProgressBar::new(total);
         pb.set_style(
@@ -238,9 +237,7 @@ impl TrainingCycle {
                         let flattened = flat_all(last_grouped, target);
 
                         if flattened.is_there_a_target() {
-                            insert_candle(&self.pool, &self.symbol, &flattened.features)
-                                .await
-                                .map_err(|e| CycleError::AnyhowError(anyhow::anyhow!(e)))?;
+                            insert_candle(&self.pool, &self.symbol, &flattened.features).await?;
                         }
                         let shifted_acc = threshold_counter.get_shifted_accuracy(3);
                         if shifted_acc.unwrap_or(0.0) == 0.0 {
@@ -254,7 +251,7 @@ impl TrainingCycle {
             let candles_to_flattened = candles.clone();
             let flattened_for_pred: FlattenedData = flat_all(candles_to_flattened, None);
 
-            prediction = Some(self.predict(flattened_for_pred, &model_tx).await.unwrap());
+            prediction = Some(self.predict(flattened_for_pred, &model_tx).await?);
 
             phase = CyclePhase::Active;
             self.last_grouped_candles = Some(candles);
@@ -262,8 +259,17 @@ impl TrainingCycle {
             pb.inc(1);
         }
 
+        pb.finish_with_message(format!(
+            "{}{} {}Бектест окончен!",
+            self.print_time(),
+            self.print_symbol,
+            Fore::GREEN.as_str()
+        ));
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
         println!(
-            "{}{} {}Точность по threshold составляет: {}%",
+            "{}{} {}Точность по threshold составляет: {:.3}%",
             self.print_time(),
             self.print_symbol,
             Fore::YELLOW.as_str(),
@@ -271,19 +277,13 @@ impl TrainingCycle {
         );
 
         println!(
-            "{}{} {}Точность по направлению составляет: {}%",
+            "{}{} {}Точность по направлению составляет: {:.3}%",
             self.print_time(),
             self.print_symbol,
             Fore::YELLOW.as_str(),
             direction_counter.get_accuracy()
         );
 
-        pb.finish_with_message(format!(
-            "{}{} {}Бектест окончен!",
-            self.print_time(),
-            self.print_symbol,
-            Fore::GREEN.as_str()
-        ));
         Ok(())
     }
 }
