@@ -1,9 +1,9 @@
-use chrono::{Local, Timelike};
+use chrono::Local;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
 
-use crate::data::data_interfaces::{Candle, FlattenedData};
+use crate::data::data_interfaces::{Candle, FlattenedData, Timeframe};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::db_req::{insert_candle, select_all_candles};
@@ -36,24 +36,32 @@ pub trait Cycle: CycleGetters {
     async fn update_volatility(&self, volatility_obj: &mut f64) -> Result<(), anyhow::Error> {
         let candles: Vec<Candle> = self
             .get_client()
-            .fetch_ohlcv(self.get_symbol(), "1d", 10)
+            .fetch_ohlcv(self.get_symbol(), &self.get_config().main_timeframe, 10)
             .await?;
         *volatility_obj = get_volatility(&candles);
         Ok(())
     }
 
-    async fn wait_for_next_interval(&self) {
+    async fn wait_for_next_interval(&self) -> Result<(), anyhow::Error> {
+        let timeframe = Timeframe::from_str(&self.get_config().main_timeframe)
+            .expect("invalid timeframe in config");
+
         let now = Local::now();
 
-        let current_seconds = now.minute() as f64 * 60.0
-            + now.second() as f64
-            + now.nanosecond() as f64 / 1_000_000_000.0;
+        match timeframe.seconds() {
+            Some(interval) => {
+                let now_ts = now.timestamp();
+                let next_ts = (((now_ts as f64) / interval) + 1.0) * interval;
+                let wait_secs = ((next_ts.round() as i64) - now_ts).max(0) as u64;
 
-        let seconds_to_wait = (900.0 - (current_seconds % 900.0)) % 900.0;
+                if wait_secs > 0 {
+                    sleep(Duration::from_secs(wait_secs)).await;
+                }
+            }
 
-        if seconds_to_wait > 0.0 {
-            let duration = Duration::from_secs_f64(seconds_to_wait);
-            sleep(duration).await;
+            None => {
+                return Err(anyhow::anyhow!("invalid timeframe in config"));
+            }
         }
 
         sleep(Duration::from_secs(2)).await;
@@ -65,6 +73,8 @@ pub trait Cycle: CycleGetters {
                 self.get_print_symbol()
             );
         }
+
+        Ok(())
     }
 
     fn print_time(&self) -> String {
@@ -148,10 +158,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             insert_candle(
                 &self.get_pool(),
                 &self.get_symbol(),
-                &flattened_candles
-                    .features
-                    .try_into()
-                    .expect("flattened candles len parse failed"),
+                &flattened_candles.features,
             )
             .await
             .unwrap();

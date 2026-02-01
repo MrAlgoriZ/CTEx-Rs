@@ -54,9 +54,10 @@ token:
   - ETHUSDT
 
 runtime:
-  type: "backtest"
+  type: "realtime"
   with_training: true
-  cycle_type: "loader"
+  cycle_type: "training"
 
 main_exchange: "binance"
+main_timeframe: "15m"
 mode: "print"

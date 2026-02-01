@@ -10,6 +10,7 @@ pub struct Config {
     pub runtime: RuntimeConfig,
     pub token: Vec<String>,
     pub main_exchange: String,
+    pub main_timeframe: String,
     pub mode: String,
 }
 
@@ -189,6 +190,7 @@ impl Default for Config {
                 cycle_type: "loader".to_string(),
             },
             main_exchange: "binance".to_string(),
+            main_timeframe: "15m".to_string(),
             mode: "print".to_string(),
         }
     }

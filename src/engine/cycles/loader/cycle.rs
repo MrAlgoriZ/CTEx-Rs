@@ -71,7 +71,10 @@ impl LoaderCycle {
         }
 
         let volatility: f64 = {
-            let candles: Vec<Candle> = self.client.fetch_ohlcv(&self.symbol, "1d", 10).await?;
+            let candles: Vec<Candle> = self
+                .client
+                .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 10)
+                .await?;
             get_volatility(&candles)
         };
 
@@ -82,10 +85,14 @@ impl LoaderCycle {
         let mut phase: CyclePhase = CyclePhase::Warmup;
 
         loop {
-            self.wait_for_next_interval().await;
-            let candles: CollectedData = collect_all(&self.symbol).await?;
-            let candles_target: f64 =
-                self.client.fetch_ohlcv(&self.symbol, "15m", 2).await?[0].close;
+            self.wait_for_next_interval().await?;
+            let candles: CollectedData =
+                collect_all(&self.symbol, &self.config.main_timeframe).await?;
+            let candles_target: f64 = self
+                .client
+                .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 2)
+                .await?[0]
+                .close;
 
             match phase {
                 CyclePhase::Active => {
@@ -132,16 +139,9 @@ impl LoaderCycle {
         pool: &PgPool,
     ) -> Result<(), ()> {
         if flattened_candles.is_there_a_target() {
-            insert_candle(
-                pool,
-                &self.symbol,
-                &flattened_candles
-                    .features
-                    .try_into()
-                    .expect("flattened candles len parse failed"),
-            )
-            .await
-            .unwrap();
+            insert_candle(pool, &self.symbol, &flattened_candles.features)
+                .await
+                .unwrap();
             Ok(())
         } else {
             Err(())
