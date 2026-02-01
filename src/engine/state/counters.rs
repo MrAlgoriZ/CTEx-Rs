@@ -7,7 +7,7 @@ pub struct SymbolCounters<T> {
 }
 
 impl<T> SymbolCounters<T> {
-    fn new(capacity: usize) -> Self {
+    pub fn new(capacity: usize) -> Self {
         SymbolCounters {
             data: VecDeque::with_capacity(capacity),
             capacity,

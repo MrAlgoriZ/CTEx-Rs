@@ -9,13 +9,17 @@ use crate::engine::utils::{config::load_config::load_config, processor::*};
 use rayon::prelude::*;
 use std::sync::Arc;
 
-const OHLCV_LEN: usize = 10;
-const OHLCV_FETCH_LEN: usize = 11;
+pub const OHLCV_LEN: usize = 10;
+pub const OHLCV_FETCH_LEN: usize = 11;
 const FEATURES_LEN: usize = 26;
 
 pub struct AddFeatures {
     ohlcv: [Candle; OHLCV_LEN],
     ticker: Ticker,
+}
+
+pub fn mean(iter: Vec<f64>) -> f64 {
+    (iter.iter().sum::<f64>()) / (iter.len() as f64)
 }
 
 impl AddFeatures {
@@ -119,6 +123,24 @@ pub async fn collect_all(token: &str, timeframe: &str) -> Result<CollectedData, 
 
     Ok(CollectedData::new(
         token,
+        process_value.ohlcv(),
+        process_value.ticker(),
+    ))
+}
+
+pub fn collect_from_slice(symbol: &str, candles: &[Candle]) -> Option<CollectedData> {
+    let ticker = Ticker::new(
+        101.0,
+        100.0,
+        candles.last()?.open,
+        candles.last()?.high,
+        candles.last()?.low,
+        mean(candles.par_iter().map(|candle| candle.close).collect()),
+    );
+    let process_value = ProcessAll::new(candles.try_into().unwrap(), ticker);
+
+    Some(CollectedData::new(
+        symbol,
         process_value.ohlcv(),
         process_value.ticker(),
     ))

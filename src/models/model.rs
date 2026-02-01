@@ -272,3 +272,15 @@ fn threshold_accuracy(y_true: &[f64], y_pred: &[f64], threshold: f64) -> f64 {
 
     success as f64 / y_true.len() as f64
 }
+
+#[tokio::test]
+async fn test_training() -> Result<(), anyhow::Error> {
+    let pool = PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
+        .await
+        .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
+    let mut model = RFInterface::new();
+
+    train_model(&pool, &mut model).await;
+
+    Ok(())
+}

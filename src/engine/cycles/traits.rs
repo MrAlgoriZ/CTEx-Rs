@@ -123,7 +123,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         let diff: f64 = (prediction - target).abs();
         let success_threshold: f64 =
             self.get_config().behaviour.success_threshold.default * 100.0 * volatility;
-        println!("{}", success_threshold);
+
         let threshold_value: u8 = (diff < success_threshold).into();
         let direction_value: u8 = {
             let target_direction = target > 0.0;

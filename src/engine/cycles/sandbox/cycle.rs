@@ -199,15 +199,16 @@ impl SandboxCycle {
         }
     }
 
-    // TODO Реализовать
+    // TODO Реализовать после нормальной логики для Sandbox
     pub async fn run_backtest(
         &mut self,
-        counter_tx: &mpsc::Sender<CounterCommand>,
-        model_tx: &mpsc::Sender<ModelCommand>,
-        account: Arc<Mutex<DummyAccount>>,
+        #[allow(unused)] counter_tx: &mpsc::Sender<CounterCommand>,
+        #[allow(unused)] model_tx: &mpsc::Sender<ModelCommand>,
+        #[allow(unused)] account: Arc<Mutex<DummyAccount>>,
     ) -> Result<(), CycleError> {
-        println!("Backtest runned!");
-        Ok(())
+        Err(CycleError::AnyhowError(anyhow::anyhow!(
+            "БЕКТЕСТ ДЛЯ SANDBOX CYCLE НЕ РЕАЛИЗОВАН!"
+        )))
     }
 
     // --- Методы ---

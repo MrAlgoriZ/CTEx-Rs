@@ -2,7 +2,9 @@ use sqlx::PgPool;
 use std::sync::Arc;
 
 use crate::data::data_interfaces::Candle;
-use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
+use crate::data::process::data_collection::{
+    CollectedData, OHLCV_FETCH_LEN, collect_all, collect_from_slice, flat_all,
+};
 use crate::data::process::target::process_target;
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
@@ -123,10 +125,53 @@ impl LoaderCycle {
         }
     }
 
-    // TODO Реализовать
     pub async fn run_backtest(&mut self) -> Result<(), CycleError> {
         if !self.client.test_symbol(&self.symbol).await.is_ok() {
-            return Ok(()); // Костыль, чтобы цикл не перезапускал в случае плохого токена
+            return Err(CycleError::SymbolDoesNotExist);
+        }
+
+        let all_candles: Vec<Candle> = self
+            .client
+            .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 1000)
+            .await?;
+
+        let mut phase = CyclePhase::Warmup;
+
+        for i in OHLCV_FETCH_LEN..all_candles.len() - 1 {
+            let window = &all_candles[i - OHLCV_FETCH_LEN..i];
+            let current_target = all_candles[i - 2].close;
+
+            let candles = match collect_from_slice(&self.symbol, window) {
+                Some(collected) => collected,
+                None => {
+                    return Err(CycleError::AnyhowError(anyhow::anyhow!(
+                        "Collection the data has been failed!"
+                    )));
+                }
+            };
+
+            match phase {
+                CyclePhase::Active => {
+                    let target = process_target(self.last_candles_target.unwrap(), current_target);
+
+                    let last_grouped = self.last_grouped_candles.clone().unwrap();
+
+                    let flattened = flat_all(last_grouped, target);
+                    match self.save_data(flattened, &self.pool).await {
+                        Ok(()) => {}
+                        Err(()) => {
+                            return Err(CycleError::AnyhowError(anyhow::anyhow!(
+                                "Saving the data has been failed!"
+                            )));
+                        }
+                    };
+                }
+                _ => {}
+            }
+
+            phase = CyclePhase::Active;
+            self.last_grouped_candles = Some(Arc::new(candles));
+            self.last_candles_target = Some(current_target);
         }
 
         Ok(())

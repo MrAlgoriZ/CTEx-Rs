@@ -230,11 +230,7 @@ impl CycleSupervisor {
                     RuntimeType::Realtime => {
                         cycle.run(counter_tx, model_tx.as_ref().unwrap()).await?
                     }
-                    RuntimeType::Backtest => {
-                        cycle
-                            .run_backtest(counter_tx, model_tx.as_ref().unwrap())
-                            .await?
-                    }
+                    RuntimeType::Backtest => cycle.run_backtest(model_tx.as_ref().unwrap()).await?,
                 }
             }
             CycleType::Sandbox => {

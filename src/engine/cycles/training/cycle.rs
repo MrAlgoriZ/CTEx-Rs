@@ -1,16 +1,22 @@
+use chrono::Local;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use crate::data::data_interfaces::FlattenedData;
-use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
+use crate::data::process::data_collection::{
+    CollectedData, OHLCV_FETCH_LEN, collect_all, collect_from_slice, flat_all,
+};
 use crate::data::process::target::{process_target, restore_price};
+use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
+use crate::data::requests::database::db_req::insert_candle;
 use crate::engine::cycles::CyclePhase;
 use crate::engine::cycles::manager::{CounterCommand, CycleError, ModelCommand};
 use crate::engine::cycles::traits::{
     Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
 };
+use crate::engine::state::counters::SymbolCounters;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
@@ -155,13 +161,110 @@ impl TrainingCycle {
         }
     }
 
-    // TODO Реализовать
     pub async fn run_backtest(
         &mut self,
-        counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), CycleError> {
-        println!("Backtest runned!");
+        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+            return Err(CycleError::SymbolDoesNotExist);
+        }
+
+        println!("{}Бектест начался!", Fore::YELLOW.as_str());
+        let start = Local::now();
+
+        let mut volatility: f64;
+        let mut prediction: Option<f64> = None;
+
+        let all_candles = self
+            .client
+            .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 1000)
+            .await?;
+
+        let mut phase = CyclePhase::Warmup;
+
+        let mut threshold_counter: SymbolCounters<u8> = SymbolCounters::new(1000);
+        let mut direction_counter: SymbolCounters<u8> = SymbolCounters::new(1000);
+
+        for i in OHLCV_FETCH_LEN..all_candles.len() - 1 {
+            let window = &all_candles[i - OHLCV_FETCH_LEN..i];
+
+            volatility = get_volatility(&window[..10]);
+
+            let candles = match collect_from_slice(&self.symbol, window) {
+                Some(collected) => Arc::new(collected),
+                None => {
+                    return Err(CycleError::AnyhowError(anyhow::anyhow!(
+                        "Collection the data has been failed!"
+                    )));
+                }
+            };
+            let current_target = all_candles[i - 2].close;
+
+            match phase {
+                CyclePhase::Active => {
+                    let target = process_target(self.last_candles_target.unwrap(), current_target);
+
+                    let diff = (prediction.unwrap() - target.unwrap()).abs();
+                    let success: bool = diff
+                        < (self.config.behaviour.success_threshold.default * 100.0 * volatility);
+
+                    let threshold_value: u8 = success.into();
+                    let direction_value: u8 = {
+                        let target_direction = target.unwrap() > 0.0;
+                        let prediction_direction = prediction.unwrap() > 0.0;
+                        (target_direction == prediction_direction).into()
+                    };
+
+                    threshold_counter.push(threshold_value);
+                    direction_counter.push(direction_value);
+
+                    if !success {
+                        let last_grouped = self.last_grouped_candles.clone().unwrap();
+                        let flattened = flat_all(last_grouped, target);
+
+                        if flattened.is_there_a_target() {
+                            insert_candle(&self.pool, &self.symbol, &flattened.features)
+                                .await
+                                .map_err(|e| CycleError::AnyhowError(anyhow::anyhow!(e)))?;
+                        }
+                        let shifted_acc = threshold_counter.get_shifted_accuracy(3);
+                        if shifted_acc.unwrap_or(0.0) == 0.0 {
+                            self.train_model(model_tx).await?;
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            let candles_to_flattened = candles.clone();
+            let flattened_for_pred: FlattenedData = flat_all(candles_to_flattened, None);
+
+            prediction = Some(self.predict(flattened_for_pred, &model_tx).await.unwrap());
+
+            phase = CyclePhase::Active;
+            self.last_grouped_candles = Some(candles);
+            self.last_candles_target = Some(current_target);
+        }
+
+        println!(
+            "Точность по threshold составляет: {}%",
+            threshold_counter.get_accuracy()
+        );
+
+        println!(
+            "Точность по направлению составляет: {}%",
+            direction_counter.get_accuracy()
+        );
+
+        let end = Local::now();
+        let duration = end - start;
+
+        println!(
+            "{}Время бектеста: {} секунд",
+            Fore::BLUE.as_str(),
+            duration.num_seconds()
+        );
+        println!("{}Бектест окончен!", Fore::GREEN.as_str());
         Ok(())
     }
 }
