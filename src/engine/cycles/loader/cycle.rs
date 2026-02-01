@@ -1,3 +1,4 @@
+use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -130,10 +131,28 @@ impl LoaderCycle {
             return Err(CycleError::SymbolDoesNotExist);
         }
 
+        println!(
+            "{}{} {}Бектест начался!",
+            self.print_time(),
+            self.print_symbol,
+            Fore::YELLOW.as_str()
+        );
+
         let all_candles: Vec<Candle> = self
             .client
             .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 1000)
             .await?;
+
+        let total = (all_candles.len() - 1 - OHLCV_FETCH_LEN) as u64;
+
+        let pb = ProgressBar::new(total);
+        pb.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) ETA {eta_precise}"
+            )
+            .unwrap()
+            .progress_chars("> "),
+        );
 
         let mut phase = CyclePhase::Warmup;
 
@@ -172,7 +191,15 @@ impl LoaderCycle {
             phase = CyclePhase::Active;
             self.last_grouped_candles = Some(Arc::new(candles));
             self.last_candles_target = Some(current_target);
+            pb.inc(1);
         }
+
+        pb.finish_with_message(format!(
+            "{}{} {}Бектест окончен!",
+            self.print_time(),
+            self.print_symbol,
+            Fore::GREEN.as_str()
+        ));
 
         Ok(())
     }

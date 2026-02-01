@@ -1,4 +1,4 @@
-use chrono::Local;
+use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -169,8 +169,12 @@ impl TrainingCycle {
             return Err(CycleError::SymbolDoesNotExist);
         }
 
-        println!("{}Бектест начался!", Fore::YELLOW.as_str());
-        let start = Local::now();
+        println!(
+            "{}{} {}Бектест начался!",
+            self.print_time(),
+            self.print_symbol,
+            Fore::YELLOW.as_str()
+        );
 
         let mut volatility: f64;
         let mut prediction: Option<f64> = None;
@@ -184,6 +188,17 @@ impl TrainingCycle {
 
         let mut threshold_counter: SymbolCounters<u8> = SymbolCounters::new(1000);
         let mut direction_counter: SymbolCounters<u8> = SymbolCounters::new(1000);
+
+        let total = (all_candles.len() - 1 - OHLCV_FETCH_LEN) as u64;
+
+        let pb = ProgressBar::new(total);
+        pb.set_style(
+            ProgressStyle::with_template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) ETA {eta_precise}"
+            )
+            .unwrap()
+            .progress_chars("> "),
+        );
 
         for i in OHLCV_FETCH_LEN..all_candles.len() - 1 {
             let window = &all_candles[i - OHLCV_FETCH_LEN..i];
@@ -218,7 +233,7 @@ impl TrainingCycle {
                     threshold_counter.push(threshold_value);
                     direction_counter.push(direction_value);
 
-                    if !success {
+                    if !success && self.config.runtime.with_training {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
                         let flattened = flat_all(last_grouped, target);
 
@@ -244,27 +259,31 @@ impl TrainingCycle {
             phase = CyclePhase::Active;
             self.last_grouped_candles = Some(candles);
             self.last_candles_target = Some(current_target);
+            pb.inc(1);
         }
 
         println!(
-            "Точность по threshold составляет: {}%",
+            "{}{} {}Точность по threshold составляет: {}%",
+            self.print_time(),
+            self.print_symbol,
+            Fore::YELLOW.as_str(),
             threshold_counter.get_accuracy()
         );
 
         println!(
-            "Точность по направлению составляет: {}%",
+            "{}{} {}Точность по направлению составляет: {}%",
+            self.print_time(),
+            self.print_symbol,
+            Fore::YELLOW.as_str(),
             direction_counter.get_accuracy()
         );
 
-        let end = Local::now();
-        let duration = end - start;
-
-        println!(
-            "{}Время бектеста: {} секунд",
-            Fore::BLUE.as_str(),
-            duration.num_seconds()
-        );
-        println!("{}Бектест окончен!", Fore::GREEN.as_str());
+        pb.finish_with_message(format!(
+            "{}{} {}Бектест окончен!",
+            self.print_time(),
+            self.print_symbol,
+            Fore::GREEN.as_str()
+        ));
         Ok(())
     }
 }

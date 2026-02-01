@@ -36,8 +36,8 @@ behaviour:
 
 prints:
   model:
-    evualate: true
-    metrics: true
+    evualate: false
+    metrics: false
   cycle:
     volatility: true
     cycle_start: true
@@ -50,12 +50,11 @@ prints:
     additional_manager_prints: true
 
 token:
-  - BTCUSDT
   - ETHUSDT
 
 runtime:
-  type: "realtime"
-  with_training: true
+  type: "backtest"
+  with_training: false
   cycle_type: "training"
 
 main_exchange: "binance"
