@@ -26,7 +26,13 @@ fn flatten_ohlcv(values: &Vec<[f64; 5]>) -> Vec<f64> {
 fn unflatten_ohlcv(values: &[f64]) -> Vec<Candle> {
     values
         .chunks_exact(5)
-        .map(|chunk| Candle::new(chunk[0], chunk[1], chunk[2], chunk[3], chunk[4]))
+        .map(|chunk| Candle {
+            open: chunk[0],
+            high: chunk[1],
+            low: chunk[2],
+            close: chunk[3],
+            volume: chunk[4],
+        })
         .collect()
 }
 
@@ -69,12 +75,12 @@ pub fn process_ohlcv(ohlcv: &[Candle], base: f64) -> Vec<Candle> {
 
 pub fn process_ticker(ticker: &Ticker, base: f64) -> Ticker {
     let ticker_percent: DynamicPercent = DynamicPercent::new(base, 100.0);
-    Ticker::new(
-        ticker_percent.one_value(ticker.bid),
-        ticker_percent.one_value(ticker.ask),
-        ticker_percent.one_value(ticker.open),
-        ticker_percent.one_value(ticker.high),
-        ticker_percent.one_value(ticker.low),
-        ticker_percent.one_value(ticker.average),
-    )
+    Ticker {
+        bid: ticker_percent.one_value(ticker.bid),
+        ask: ticker_percent.one_value(ticker.ask),
+        open: ticker_percent.one_value(ticker.open),
+        high: ticker_percent.one_value(ticker.high),
+        low: ticker_percent.one_value(ticker.low),
+        average: ticker_percent.one_value(ticker.average),
+    }
 }

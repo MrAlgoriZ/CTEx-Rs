@@ -83,6 +83,61 @@ impl CCXTClient {
         Ok(candles)
     }
 
+    pub async fn fetch_ohlcv_with_timestamp(
+        &self,
+        symbol: &str,
+        timeframe: &str,
+        limit: usize,
+    ) -> Result<Vec<CandleWithTimestamp>, anyhow::Error> {
+        let payload = serde_json::json!({
+            "exchange_name": &self.exchange_name,
+            "symbol": parse_symbol(symbol),
+            "timeframe": timeframe,
+            "limit": limit
+        });
+
+        let res = client()
+            .post(format!("{}/exchange/fetch/ohlcv", BASE_URL))
+            .json(&payload)
+            .send()
+            .await?;
+
+        let body: ApiResponse<serde_json::Value> = res.json().await?;
+        if !body.success {
+            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+        }
+        let raw_ohlcv = match body.data {
+            Some(candles) => candles,
+            None => return Err(anyhow::anyhow!("Data is None!")),
+        };
+
+        use anyhow::{Context, anyhow};
+
+        let candles = raw_ohlcv
+            .as_array()
+            .context("ohlcv is not an array")?
+            .iter()
+            .map(|item| {
+                let arr = item.as_array().context("ohlcv item is not an array")?;
+
+                if arr.len() < 6 {
+                    return Err(anyhow!("ohlcv item has less than 6 elements"));
+                }
+
+                Ok(CandleWithTimestamp {
+                    timestamp: arr[0].as_u64().context("timestamp is nor a number")?,
+                    open: arr[1].as_f64().context("open is not a number")?,
+                    high: arr[2].as_f64().context("high is not a number")?,
+                    low: arr[3].as_f64().context("low is not a number")?,
+                    close: arr[4].as_f64().context("close is not a number")?,
+                    volume: arr[5].as_f64().context("volume is not a number")?,
+                })
+            })
+            .collect::<Result<Vec<_>, anyhow::Error>>()?;
+
+        Ok(candles)
+    }
+
     // ticker response
 
     /* ApiResponse {
@@ -195,7 +250,14 @@ impl CCXTClient {
             .unwrap();
         let low = body.data.unwrap().get("low").unwrap().as_f64().unwrap();
 
-        Ok(Ticker::new(bid, ask, open, high, low, average))
+        Ok(Ticker {
+            bid,
+            ask,
+            open,
+            high,
+            low,
+            average,
+        })
     }
 
     pub async fn test_symbol(&self, symbol: &str) -> Result<(), anyhow::Error> {

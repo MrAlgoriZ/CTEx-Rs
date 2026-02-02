@@ -7,14 +7,24 @@ pub struct Candle {
     pub volume: f64,
 }
 
-impl Candle {
-    pub fn new(open: f64, high: f64, low: f64, close: f64, volume: f64) -> Self {
+#[derive(Debug, Clone, Copy)]
+pub struct CandleWithTimestamp {
+    pub timestamp: u64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
+}
+
+impl CandleWithTimestamp {
+    pub fn to_candle(self) -> Candle {
         Candle {
-            open,
-            high,
-            low,
-            close,
-            volume,
+            open: self.open,
+            high: self.high,
+            low: self.low,
+            close: self.close,
+            volume: self.volume,
         }
     }
 }
@@ -29,36 +39,12 @@ pub struct Ticker {
     pub average: f64,
 }
 
-impl Ticker {
-    pub fn new(bid: f64, ask: f64, open: f64, high: f64, low: f64, average: f64) -> Self {
-        Ticker {
-            bid,
-            ask,
-            open,
-            high,
-            low,
-            average,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct CircleTime {
     pub hour_sin: f64,
     pub hour_cos: f64,
     pub min_sin: f64,
     pub min_cos: f64,
-}
-
-impl CircleTime {
-    pub fn new(hour_sin: f64, hour_cos: f64, min_sin: f64, min_cos: f64) -> Self {
-        CircleTime {
-            hour_sin,
-            hour_cos,
-            min_sin,
-            min_cos,
-        }
-    }
 }
 
 #[derive(Debug)]

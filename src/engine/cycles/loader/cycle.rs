@@ -2,7 +2,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 use std::sync::Arc;
 
-use crate::data::data_interfaces::Candle;
+use crate::data::data_interfaces::{Candle, CandleWithTimestamp};
 use crate::data::process::data_collection::{
     CollectedData, OHLCV_FETCH_LEN, collect_all, collect_from_slice, flat_all,
 };
@@ -136,9 +136,9 @@ impl LoaderCycle {
             Fore::YELLOW.as_str()
         );
 
-        let all_candles: Vec<Candle> = self
+        let all_candles: Vec<CandleWithTimestamp> = self
             .client
-            .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 1000)
+            .fetch_ohlcv_with_timestamp(&self.symbol, &self.config.main_timeframe, 1000)
             .await?;
 
         let total = (all_candles.len() - 1 - OHLCV_FETCH_LEN) as u64;
@@ -146,7 +146,7 @@ impl LoaderCycle {
         let pb = ProgressBar::new(total);
         pb.set_style(
             ProgressStyle::with_template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) ETA {eta_precise}"
+                "[{elapsed_precise}] {spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) ETA {eta_precise}"
             )
             .unwrap()
             .progress_chars("> "),

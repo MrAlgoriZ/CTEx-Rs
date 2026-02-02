@@ -83,6 +83,11 @@ impl CollectedData {
                 .unwrap(),
         }
     }
+
+    pub fn with_time(mut self, time: CircleTime) -> Self {
+        self.time = time;
+        self
+    }
 }
 
 struct ProcessAll {
@@ -128,22 +133,21 @@ pub async fn collect_all(token: &str, timeframe: &str) -> Result<CollectedData, 
     ))
 }
 
-pub fn collect_from_slice(symbol: &str, candles: &[Candle]) -> Option<CollectedData> {
-    let ticker = Ticker::new(
-        101.0,
-        100.0,
-        candles.last()?.open,
-        candles.last()?.high,
-        candles.last()?.low,
-        mean(candles.par_iter().map(|candle| candle.close).collect()),
-    );
-    let process_value = ProcessAll::new(candles.try_into().unwrap(), ticker);
+pub fn collect_from_slice(symbol: &str, candles: &[CandleWithTimestamp]) -> Option<CollectedData> {
+    let ticker = Ticker {
+        bid: 101.0,
+        ask: 100.0,
+        open: candles.last()?.open,
+        high: candles.last()?.high,
+        low: candles.last()?.low,
+        average: mean(candles.par_iter().map(|candle| candle.close).collect()),
+    }; // TODO Удалить зависимость Ticker от day_high, day_lowm day_open
 
-    Some(CollectedData::new(
-        symbol,
-        process_value.ohlcv(),
-        process_value.ticker(),
-    ))
+    let candles_to_process: Vec<Candle> = candles.iter().map(|candle| candle.to_candle()).collect();
+    let process_value = ProcessAll::new(candles_to_process.try_into().unwrap(), ticker);
+    let time = TimeRequest::from_timestamp(candles[(candles.len() - 1) - 1].timestamp).get_time();
+
+    Some(CollectedData::new(symbol, process_value.ohlcv(), process_value.ticker()).with_time(time))
 }
 
 pub fn flat_all(collected_data: Arc<CollectedData>, target: Option<f64>) -> FlattenedData {

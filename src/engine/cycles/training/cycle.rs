@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use crate::data::data_interfaces::FlattenedData;
+use crate::data::data_interfaces::{Candle, FlattenedData};
 use crate::data::process::data_collection::{
     CollectedData, OHLCV_FETCH_LEN, collect_all, collect_from_slice, flat_all,
 };
@@ -180,7 +180,7 @@ impl TrainingCycle {
 
         let all_candles = self
             .client
-            .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 1000)
+            .fetch_ohlcv_with_timestamp(&self.symbol, &self.config.main_timeframe, 1000)
             .await?;
 
         let mut phase = CyclePhase::Warmup;
@@ -193,7 +193,7 @@ impl TrainingCycle {
         let pb = ProgressBar::new(total);
         pb.set_style(
             ProgressStyle::with_template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) ETA {eta_precise}"
+                "[{elapsed_precise}] {spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) ETA {eta_precise}"
             )
             .unwrap()
             .progress_chars("> "),
@@ -202,7 +202,12 @@ impl TrainingCycle {
         for i in OHLCV_FETCH_LEN..all_candles.len() - 1 {
             let window = &all_candles[i - OHLCV_FETCH_LEN..i];
 
-            volatility = get_volatility(&window[..10]);
+            let to_volatility: Vec<Candle> = window[..10]
+                .iter()
+                .map(|candle| candle.to_candle())
+                .collect();
+
+            volatility = get_volatility(&to_volatility);
 
             let candles = match collect_from_slice(&self.symbol, window) {
                 Some(collected) => Arc::new(collected),

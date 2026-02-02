@@ -1,5 +1,5 @@
 use crate::data::data_interfaces::CircleTime;
-use chrono::{Local, Timelike};
+use chrono::{TimeZone, Timelike, Utc};
 use std::f64::consts::PI;
 
 pub struct TimeRequest {
@@ -9,10 +9,19 @@ pub struct TimeRequest {
 
 impl TimeRequest {
     pub fn new() -> Self {
-        let now = Local::now();
+        let now = Utc::now();
         Self {
             now_hour: now.hour() as f64,
             now_minute: now.minute() as f64,
+        }
+    }
+
+    pub fn from_timestamp(timestamp: u64) -> Self {
+        let dt = Utc.timestamp_millis_opt(timestamp as i64).unwrap();
+
+        Self {
+            now_hour: dt.hour() as f64,
+            now_minute: dt.minute() as f64,
         }
     }
 
@@ -20,11 +29,11 @@ impl TimeRequest {
         let hour_angle: f64 = 2.0 * PI * (self.now_hour / 24.0);
         let minute_angle: f64 = 2.0 * PI * (self.now_minute / 60.0);
 
-        CircleTime::new(
-            hour_angle.sin(),
-            hour_angle.cos(),
-            minute_angle.sin(),
-            minute_angle.cos(),
-        )
+        CircleTime {
+            hour_sin: hour_angle.sin(),
+            hour_cos: hour_angle.cos(),
+            min_sin: minute_angle.sin(),
+            min_cos: minute_angle.cos(),
+        }
     }
 }
