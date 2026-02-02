@@ -1,10 +1,9 @@
-use crate::CONFIG_PATH;
 use crate::data::data_interfaces::*;
 use crate::data::process::features::*;
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::time::TimeRequest;
-use crate::engine::utils::{config::load_config::load_config, processor::*};
+use crate::engine::utils::processor::*;
 
 use rayon::prelude::*;
 use std::sync::Arc;
@@ -111,9 +110,11 @@ impl ProcessAll {
     }
 }
 
-pub async fn collect_all(token: &str, timeframe: &str) -> Result<CollectedData, anyhow::Error> {
-    let client = CCXTClient::new(&load_config(CONFIG_PATH).main_exchange);
-
+pub async fn collect_all(
+    token: &str,
+    timeframe: &str,
+    client: &CCXTClient,
+) -> Result<CollectedData, anyhow::Error> {
     let (ohlcv_res, ticker_res) = tokio::join!(
         client.fetch_ohlcv(token, timeframe, OHLCV_FETCH_LEN),
         client.fetch_ticker(token),

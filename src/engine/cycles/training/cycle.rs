@@ -98,7 +98,9 @@ impl TrainingCycle {
                 self.print_volatility_status(volatility);
             }
 
-            let candles = Arc::new(collect_all(&self.symbol, &self.config.main_timeframe).await?);
+            let candles = Arc::new(
+                collect_all(&self.symbol, &self.config.main_timeframe, &self.client).await?,
+            );
             let candles_target: f64 = self
                 .client
                 .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 2)

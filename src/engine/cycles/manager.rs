@@ -1,4 +1,6 @@
+use anyhow::Context;
 use chrono::Local;
+use serde::Deserialize;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -6,7 +8,7 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::time::{Duration, sleep};
 
 use crate::CONFIG_PATH;
-use crate::data::data_interfaces::FlattenedData;
+use crate::data::data_interfaces::{Candle, CandleWithTimestamp, FlattenedData, Ticker};
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::sandbox::cycle::{DummyAccount, SandboxCycle};
@@ -16,6 +18,7 @@ use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::RuntimeType;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
+use crate::engine::utils::parse::parse_symbol;
 use crate::models::model::{RFInterface, train_model};
 
 pub enum CycleError {
@@ -55,11 +58,15 @@ struct CycleSupervisor {
     workers: HashMap<String, WorkerHandle>,
     model_tx: Option<mpsc::Sender<ModelCommand>>,
     counter_tx: mpsc::Sender<CounterCommand>,
+    server_tx: mpsc::Sender<ServersCommand>,
     inbox: mpsc::Receiver<SupervisorCommand>,
 }
 
 impl CycleSupervisor {
-    fn new(counter_tx: mpsc::Sender<CounterCommand>) -> (Self, mpsc::Sender<SupervisorCommand>) {
+    fn new(
+        counter_tx: mpsc::Sender<CounterCommand>,
+        server_tx: mpsc::Sender<ServersCommand>,
+    ) -> (Self, mpsc::Sender<SupervisorCommand>) {
         let (tx, rx) = mpsc::channel(50);
 
         (
@@ -67,6 +74,7 @@ impl CycleSupervisor {
                 workers: HashMap::new(),
                 model_tx: None,
                 counter_tx,
+                server_tx,
                 inbox: rx,
             },
             tx,
@@ -129,10 +137,19 @@ impl CycleSupervisor {
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
         let model_tx = self.model_tx.clone();
         let counter_tx = self.counter_tx.clone();
+        let server_tx = self.server_tx.clone();
         let symbol_clone = symbol.clone();
 
         let task = tokio::spawn(async move {
-            Self::worker_loop(symbol_clone, cycle_type, counter_tx, model_tx, shutdown_rx).await;
+            Self::worker_loop(
+                symbol_clone,
+                cycle_type,
+                counter_tx,
+                server_tx,
+                model_tx,
+                shutdown_rx,
+            )
+            .await;
         });
 
         self.workers.insert(
@@ -169,6 +186,7 @@ impl CycleSupervisor {
         symbol: String,
         cycle_type: CycleType,
         counter_tx: mpsc::Sender<CounterCommand>,
+        server_tx: mpsc::Sender<ServersCommand>,
         model_tx: Option<mpsc::Sender<ModelCommand>>,
         mut shutdown_rx: mpsc::Receiver<()>,
     ) {
@@ -179,7 +197,7 @@ impl CycleSupervisor {
                     break;
                 }
 
-                result = Self::run_cycle_once(&symbol, cycle_type, &counter_tx, &model_tx) => {
+                result = Self::run_cycle_once(&symbol, cycle_type, &counter_tx, &server_tx, &model_tx, ) => {
                     match result {
                         Ok(_) => {
                             log_success(&format!("Worker {} завершился нормально", symbol));
@@ -207,10 +225,11 @@ impl CycleSupervisor {
         symbol: &str,
         cycle_type: CycleType,
         counter_tx: &mpsc::Sender<CounterCommand>,
+        server_tx: &mpsc::Sender<ServersCommand>,
         model_tx: &Option<mpsc::Sender<ModelCommand>>,
     ) -> Result<(), CycleError> {
         let config = load_config(CONFIG_PATH);
-        let client = CCXTClient::new(&config.main_exchange);
+        let client = CCXTClient::new(&config.main_exchange, server_tx.clone());
 
         match cycle_type {
             CycleType::Loader => {
@@ -516,25 +535,33 @@ impl WorkerHandle {
 pub struct CycleManager {
     supervisor_tx: mpsc::Sender<SupervisorCommand>,
     counter_tx: mpsc::Sender<CounterCommand>,
+    servers_tx: mpsc::Sender<ServersCommand>,
     _counter_task: tokio::task::JoinHandle<()>,
     _supervisor_task: tokio::task::JoinHandle<()>,
+    _servers_task: tokio::task::JoinHandle<()>,
 }
 
 impl CycleManager {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         let capacity = load_config(CONFIG_PATH).behaviour.accuracy_capacity;
+
+        let (servers_actor, servers_tx) = ServersActor::new().await;
+        let servers_task = tokio::spawn(servers_actor.run());
 
         let (counter_actor, counter_tx) = CounterActor::new(capacity);
         let counter_task = tokio::spawn(counter_actor.run());
 
-        let (supervisor, supervisor_tx) = CycleSupervisor::new(counter_tx.clone());
+        let (supervisor, supervisor_tx) =
+            CycleSupervisor::new(counter_tx.clone(), servers_tx.clone());
         let supervisor_task = tokio::spawn(supervisor.run());
 
         Self {
             supervisor_tx,
             counter_tx,
+            servers_tx,
             _counter_task: counter_task,
             _supervisor_task: supervisor_task,
+            _servers_task: servers_task,
         }
     }
 
@@ -624,6 +651,461 @@ impl CycleManager {
 
     pub fn supervisor_handle(&self) -> mpsc::Sender<SupervisorCommand> {
         self.supervisor_tx.clone()
+    }
+
+    pub fn servers_handle(&self) -> mpsc::Sender<ServersCommand> {
+        self.servers_tx.clone()
+    }
+}
+
+// TODO!
+// pub struct PredictionsActor {}
+
+#[derive(Debug, Deserialize)]
+pub struct ApiResponse<T> {
+    success: bool,
+    data: Option<T>,
+    message: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ServerState {
+    pub active: bool,
+    pub workload: u8,
+}
+
+pub enum ServersCommand {
+    ListActive {
+        respond_to: oneshot::Sender<Option<Vec<String>>>,
+    },
+    GetPriority {
+        respond_to: oneshot::Sender<Option<String>>,
+    },
+    RemoveWorkload {
+        server: String,
+        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+    },
+    RemoveAllWorkload {
+        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+    },
+    FetchOhlcv {
+        symbol: String,
+        timeframe: String,
+        limit: usize,
+        exchange_name: String,
+        server: String,
+        respond_to: oneshot::Sender<Result<Vec<Candle>, anyhow::Error>>,
+    },
+    FetchOhlcvWithTimestamps {
+        symbol: String,
+        timeframe: String,
+        limit: usize,
+        exchange_name: String,
+        server: String,
+        respond_to: oneshot::Sender<Result<Vec<CandleWithTimestamp>, anyhow::Error>>,
+    },
+    FetchTicker {
+        symbol: String,
+        exchange_name: String,
+        server: String,
+        respond_to: oneshot::Sender<Result<Ticker, anyhow::Error>>,
+    },
+    TestSymbol {
+        symbol: String,
+        exchange_name: String,
+        server: String,
+        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+    }, // ... TODO: update enum, after creating account logic
+}
+
+async fn test_server(server: &str) -> bool {
+    reqwest::Client::new()
+        .get(format!("{}/", server))
+        .send()
+        .await
+        .is_ok()
+}
+
+pub struct ServersActor {
+    servers: HashMap<String, ServerState>,
+    inbox: mpsc::Receiver<ServersCommand>,
+}
+
+impl ServersActor {
+    pub async fn new() -> (Self, mpsc::Sender<ServersCommand>) {
+        let (tx, rx) = mpsc::channel(200);
+
+        let servers_vec = load_config(CONFIG_PATH).servers;
+
+        let mut servers = HashMap::new();
+
+        for server in servers_vec {
+            let active = test_server(&server).await;
+            servers.insert(
+                server,
+                ServerState {
+                    active,
+                    workload: 0,
+                },
+            );
+        }
+
+        if !servers.values().any(|s| s.active) {
+            panic!("Нет ни одного активного сервера");
+        }
+
+        (Self { servers, inbox: rx }, tx)
+    }
+
+    pub async fn run(mut self) {
+        log_info("ServersActor запущен");
+
+        while let Some(cmd) = self.inbox.recv().await {
+            match cmd {
+                ServersCommand::RemoveWorkload { server, respond_to } => {
+                    let result = self.remove_workload(server);
+                    let _ = respond_to.send(result);
+                }
+                ServersCommand::RemoveAllWorkload { respond_to } => {
+                    let result = self.remove_all_workload();
+                    let _ = respond_to.send(result);
+                }
+                ServersCommand::ListActive { respond_to } => {
+                    let result = self.list_active();
+                    let _ = respond_to.send(result);
+                }
+                ServersCommand::GetPriority { respond_to } => {
+                    let result = self.get_priority();
+                    let _ = respond_to.send(result);
+                }
+                ServersCommand::FetchOhlcv {
+                    symbol,
+                    timeframe,
+                    limit,
+                    exchange_name,
+                    server,
+                    respond_to,
+                } => {
+                    let result = self
+                        .fetch_ohlcv(&symbol, &timeframe, limit, &exchange_name, &server)
+                        .await;
+                    let _ = respond_to.send(result);
+                }
+                ServersCommand::FetchOhlcvWithTimestamps {
+                    symbol,
+                    timeframe,
+                    limit,
+                    exchange_name,
+                    server,
+                    respond_to,
+                } => {
+                    let result = self
+                        .fetch_ohlcv_with_timestamps(
+                            &symbol,
+                            &timeframe,
+                            limit,
+                            &exchange_name,
+                            &server,
+                        )
+                        .await;
+                    let _ = respond_to.send(result);
+                }
+                ServersCommand::FetchTicker {
+                    symbol,
+                    exchange_name,
+                    server,
+                    respond_to,
+                } => {
+                    let result = self.fetch_ticker(&symbol, &exchange_name, &server).await;
+                    let _ = respond_to.send(result);
+                }
+                ServersCommand::TestSymbol {
+                    symbol,
+                    exchange_name,
+                    server,
+                    respond_to,
+                } => {
+                    let result = self.test_symbol(&symbol, &exchange_name, &server).await;
+                    let _ = respond_to.send(result);
+                }
+            }
+        }
+    }
+
+    fn add_workload(&mut self, server: String, num: u8) -> Result<(), anyhow::Error> {
+        let state = self
+            .servers
+            .get_mut(&server)
+            .ok_or_else(|| anyhow::anyhow!("Сервер не найден"))?;
+
+        if !state.active {
+            return Err(anyhow::anyhow!("Сервер не активен"));
+        }
+
+        state.workload = state.workload.saturating_add(num);
+        Ok(())
+    }
+
+    fn remove_workload(&mut self, server: String) -> Result<(), anyhow::Error> {
+        let state = self
+            .servers
+            .get_mut(&server)
+            .ok_or_else(|| anyhow::anyhow!("Сервер не найден"))?;
+
+        state.workload = 0;
+        Ok(())
+    }
+
+    fn remove_all_workload(&mut self) -> Result<(), anyhow::Error> {
+        for state in self.servers.values_mut() {
+            state.workload = 0;
+        }
+        Ok(())
+    }
+
+    fn list_active(&self) -> Option<Vec<String>> {
+        let active: Vec<String> = self
+            .servers
+            .iter()
+            .filter(|(_, s)| s.active)
+            .map(|(k, _)| k.clone())
+            .collect();
+
+        if active.is_empty() {
+            None
+        } else {
+            Some(active)
+        }
+    }
+
+    fn get_priority(&self) -> Option<String> {
+        let mut active: Vec<(&String, &ServerState)> =
+            self.servers.iter().filter(|(_, s)| s.active).collect();
+
+        if active.is_empty() {
+            return None;
+        }
+
+        if active.len() == 1 {
+            return Some(active[0].0.clone());
+        }
+
+        active.sort_by_key(|(_, s)| s.workload);
+
+        Some(active[0].0.clone())
+    }
+
+    async fn fetch_ohlcv(
+        &mut self,
+        symbol: &str,
+        timeframe: &str,
+        limit: usize,
+        exchange_name: &str,
+        server: &str,
+    ) -> Result<Vec<Candle>, anyhow::Error> {
+        let payload = serde_json::json!({
+            "exchange_name": exchange_name,
+            "symbol": parse_symbol(symbol),
+            "timeframe": timeframe,
+            "limit": limit
+        });
+
+        let res = reqwest::Client::new()
+            .post(format!("{}/exchange/fetch/ohlcv", server))
+            .json(&payload)
+            .send()
+            .await?;
+
+        let body: ApiResponse<serde_json::Value> = res.json().await?;
+        if !body.success {
+            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+        }
+        let raw_ohlcv = match body.data {
+            Some(candles) => candles,
+            None => return Err(anyhow::anyhow!("Data is None!")),
+        };
+
+        let candles = raw_ohlcv
+            .as_array()
+            .context("ohlcv is not an array")?
+            .iter()
+            .map(|item| {
+                let arr = item.as_array().context("ohlcv item is not an array")?;
+
+                if arr.len() < 6 {
+                    return Err(anyhow::anyhow!("ohlcv item has less than 6 elements"));
+                }
+
+                Ok(Candle {
+                    open: arr[1].as_f64().context("open is not a number")?,
+                    high: arr[2].as_f64().context("high is not a number")?,
+                    low: arr[3].as_f64().context("low is not a number")?,
+                    close: arr[4].as_f64().context("close is not a number")?,
+                    volume: arr[5].as_f64().context("volume is not a number")?,
+                })
+            })
+            .collect::<Result<Vec<_>, anyhow::Error>>()?;
+
+        self.add_workload(server.to_string(), limit as u8)?;
+        Ok(candles)
+    }
+
+    async fn fetch_ohlcv_with_timestamps(
+        &mut self,
+        symbol: &str,
+        timeframe: &str,
+        limit: usize,
+        exchange_name: &str,
+        server: &str,
+    ) -> Result<Vec<CandleWithTimestamp>, anyhow::Error> {
+        let payload = serde_json::json!({
+            "exchange_name": exchange_name,
+            "symbol": parse_symbol(symbol),
+            "timeframe": timeframe,
+            "limit": limit
+        });
+
+        let res = reqwest::Client::new()
+            .post(format!("{}/exchange/fetch/ohlcv", server))
+            .json(&payload)
+            .send()
+            .await?;
+
+        let body: ApiResponse<serde_json::Value> = res.json().await?;
+        if !body.success {
+            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+        }
+        let raw_ohlcv = match body.data {
+            Some(candles) => candles,
+            None => return Err(anyhow::anyhow!("Data is None!")),
+        };
+
+        let candles = raw_ohlcv
+            .as_array()
+            .context("ohlcv is not an array")?
+            .iter()
+            .map(|item| {
+                let arr = item.as_array().context("ohlcv item is not an array")?;
+
+                if arr.len() < 6 {
+                    return Err(anyhow::anyhow!("ohlcv item has less than 6 elements"));
+                }
+
+                Ok(CandleWithTimestamp {
+                    timestamp: arr[0].as_u64().context("timestamp is nor a number")?,
+                    open: arr[1].as_f64().context("open is not a number")?,
+                    high: arr[2].as_f64().context("high is not a number")?,
+                    low: arr[3].as_f64().context("low is not a number")?,
+                    close: arr[4].as_f64().context("close is not a number")?,
+                    volume: arr[5].as_f64().context("volume is not a number")?,
+                })
+            })
+            .collect::<Result<Vec<_>, anyhow::Error>>()?;
+
+        self.add_workload(server.to_string(), limit as u8)?;
+        Ok(candles)
+    }
+
+    async fn fetch_ticker(
+        &mut self,
+        symbol: &str,
+        exchange_name: &str,
+        server: &str,
+    ) -> Result<Ticker, anyhow::Error> {
+        let payload = serde_json::json!({
+            "exchange_name": exchange_name,
+            "symbol": parse_symbol(symbol)
+        });
+
+        let res = reqwest::Client::new()
+            .post(format!("{}/exchange/fetch/ticker", server))
+            .json(&payload)
+            .send()
+            .await?;
+        let body: ApiResponse<serde_json::Value> = res.json().await?;
+        if !body.success {
+            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+        }
+        let bid = body
+            .data
+            .clone()
+            .unwrap()
+            .get("bid")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        let ask = body
+            .data
+            .clone()
+            .unwrap()
+            .get("ask")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        let average = body
+            .data
+            .clone()
+            .unwrap()
+            .get("average")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        let open = body
+            .data
+            .clone()
+            .unwrap()
+            .get("open")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        let high = body
+            .data
+            .clone()
+            .unwrap()
+            .get("high")
+            .unwrap()
+            .as_f64()
+            .unwrap();
+        let low = body.data.unwrap().get("low").unwrap().as_f64().unwrap();
+
+        self.add_workload(server.to_string(), 1)?;
+        Ok(Ticker {
+            bid,
+            ask,
+            open,
+            high,
+            low,
+            average,
+        })
+    }
+
+    async fn test_symbol(
+        &mut self,
+        symbol: &str,
+        exchange_name: &str,
+        server: &str,
+    ) -> Result<(), anyhow::Error> {
+        let payload = serde_json::json!({
+            "exchange_name": exchange_name,
+            "symbol": parse_symbol(symbol)
+        });
+
+        let res = reqwest::Client::new()
+            .post(format!("{}/exchange/fetch/ticker", server))
+            .json(&payload)
+            .send()
+            .await?;
+        self.add_workload(server.to_string(), 1)?;
+        let body: ApiResponse<serde_json::Value> = res.json().await?;
+
+        if !body.success {
+            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+        }
+        if !body.data.clone().is_none() {
+            Ok(())
+        } else {
+            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+        }
     }
 }
 

@@ -88,7 +88,7 @@ impl LoaderCycle {
         loop {
             self.wait_for_next_interval().await?;
             let candles: CollectedData =
-                collect_all(&self.symbol, &self.config.main_timeframe).await?;
+                collect_all(&self.symbol, &self.config.main_timeframe, &self.client).await?;
             let candles_target: f64 = self
                 .client
                 .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 2)

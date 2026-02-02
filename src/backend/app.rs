@@ -1,4 +1,5 @@
 use crate::data::requests::ccxt::client::CCXTClient;
+use crate::engine::cycles::manager::ServersCommand;
 use crate::{
     CONFIG_PATH,
     backend::{
@@ -26,7 +27,9 @@ impl Api {
     pub async fn new(
         supervisor_handle: mpsc::Sender<SupervisorCommand>,
         counter_handle: mpsc::Sender<CounterCommand>,
+        servers_handle: mpsc::Sender<ServersCommand>,
     ) -> Result<Self, anyhow::Error> {
+        let _ = servers_handle; // TODO ОБНОВИТЬ
         let config = load_config(CONFIG_PATH);
         let listener = tokio::net::TcpListener::bind(&config.backend.listener)
             .await
@@ -36,16 +39,20 @@ impl Api {
 
         Ok(Api {
             listener,
-            app: Self::init_app(supervisor_handle, counter_handle).await,
+            app: Self::init_app(supervisor_handle, counter_handle, servers_handle).await,
         })
     }
 
     async fn init_app(
         supervisor_handle: mpsc::Sender<SupervisorCommand>,
         counter_handle: mpsc::Sender<CounterCommand>,
+        servers_handle: mpsc::Sender<ServersCommand>,
     ) -> Router {
         let structure = ApiStructure::default();
-        let client = Arc::new(CCXTClient::new(&load_config(CONFIG_PATH).main_exchange));
+        let client = Arc::new(CCXTClient::new(
+            &load_config(CONFIG_PATH).main_exchange,
+            servers_handle,
+        ));
         let state = ApiState {
             supervisor_handle,
             counter_handle,

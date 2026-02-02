@@ -1,31 +1,20 @@
-use reqwest::Client;
-use serde::Deserialize;
+use anyhow::Context;
+use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 
 use crate::data::data_interfaces::*;
-use crate::engine::utils::parse::parse_symbol;
+use crate::engine::cycles::manager::ServersCommand;
 
-#[derive(Debug, Deserialize)]
-struct ApiResponse<T> {
-    success: bool,
-    data: Option<T>,
-    message: Option<String>,
-}
-
-fn client() -> Client {
-    Client::new()
-}
-
-const BASE_URL: &'static str = "http://127.0.0.1:3737";
-
-// TODO Переписать клиент после изменений в логике
 pub struct CCXTClient {
     pub exchange_name: String,
+    server_tx: mpsc::Sender<ServersCommand>,
 }
 
 impl CCXTClient {
-    pub fn new(exchange_name: &str) -> Self {
+    pub fn new(exchange_name: &str, server_tx: mpsc::Sender<ServersCommand>) -> Self {
         CCXTClient {
             exchange_name: exchange_name.to_string(),
+            server_tx,
         }
     }
 
@@ -35,51 +24,26 @@ impl CCXTClient {
         timeframe: &str,
         limit: usize,
     ) -> Result<Vec<Candle>, anyhow::Error> {
-        let payload = serde_json::json!({
-            "exchange_name": &self.exchange_name,
-            "symbol": parse_symbol(symbol),
-            "timeframe": timeframe,
-            "limit": limit
-        });
-
-        let res = client()
-            .post(format!("{}/exchange/fetch/ohlcv", BASE_URL))
-            .json(&payload)
-            .send()
-            .await?;
-
-        let body: ApiResponse<serde_json::Value> = res.json().await?;
-        if !body.success {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
-        }
-        let raw_ohlcv = match body.data {
-            Some(candles) => candles,
-            None => return Err(anyhow::anyhow!("Data is None!")),
-        };
-
-        use anyhow::{Context, anyhow};
-
-        let candles = raw_ohlcv
-            .as_array()
-            .context("ohlcv is not an array")?
-            .iter()
-            .map(|item| {
-                let arr = item.as_array().context("ohlcv item is not an array")?;
-
-                if arr.len() < 6 {
-                    return Err(anyhow!("ohlcv item has less than 6 elements"));
-                }
-
-                Ok(Candle {
-                    open: arr[1].as_f64().context("open is not a number")?,
-                    high: arr[2].as_f64().context("high is not a number")?,
-                    low: arr[3].as_f64().context("low is not a number")?,
-                    close: arr[4].as_f64().context("close is not a number")?,
-                    volume: arr[5].as_f64().context("volume is not a number")?,
-                })
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .server_tx
+            .clone()
+            .send(ServersCommand::GetPriority { respond_to: tx })
+            .await;
+        let server = rx.await?.context("server is not string!")?;
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .server_tx
+            .send(ServersCommand::FetchOhlcv {
+                symbol: symbol.to_string(),
+                timeframe: timeframe.to_string(),
+                limit,
+                exchange_name: self.exchange_name.clone(),
+                server: server.to_string(),
+                respond_to: tx,
             })
-            .collect::<Result<Vec<_>, anyhow::Error>>()?;
-
+            .await;
+        let candles = rx.await??;
         Ok(candles)
     }
 
@@ -89,52 +53,26 @@ impl CCXTClient {
         timeframe: &str,
         limit: usize,
     ) -> Result<Vec<CandleWithTimestamp>, anyhow::Error> {
-        let payload = serde_json::json!({
-            "exchange_name": &self.exchange_name,
-            "symbol": parse_symbol(symbol),
-            "timeframe": timeframe,
-            "limit": limit
-        });
-
-        let res = client()
-            .post(format!("{}/exchange/fetch/ohlcv", BASE_URL))
-            .json(&payload)
-            .send()
-            .await?;
-
-        let body: ApiResponse<serde_json::Value> = res.json().await?;
-        if !body.success {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
-        }
-        let raw_ohlcv = match body.data {
-            Some(candles) => candles,
-            None => return Err(anyhow::anyhow!("Data is None!")),
-        };
-
-        use anyhow::{Context, anyhow};
-
-        let candles = raw_ohlcv
-            .as_array()
-            .context("ohlcv is not an array")?
-            .iter()
-            .map(|item| {
-                let arr = item.as_array().context("ohlcv item is not an array")?;
-
-                if arr.len() < 6 {
-                    return Err(anyhow!("ohlcv item has less than 6 elements"));
-                }
-
-                Ok(CandleWithTimestamp {
-                    timestamp: arr[0].as_u64().context("timestamp is nor a number")?,
-                    open: arr[1].as_f64().context("open is not a number")?,
-                    high: arr[2].as_f64().context("high is not a number")?,
-                    low: arr[3].as_f64().context("low is not a number")?,
-                    close: arr[4].as_f64().context("close is not a number")?,
-                    volume: arr[5].as_f64().context("volume is not a number")?,
-                })
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .server_tx
+            .clone()
+            .send(ServersCommand::GetPriority { respond_to: tx })
+            .await;
+        let server = rx.await?.context("server is not string!")?;
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .server_tx
+            .send(ServersCommand::FetchOhlcvWithTimestamps {
+                symbol: symbol.to_string(),
+                timeframe: timeframe.to_string(),
+                limit,
+                exchange_name: self.exchange_name.clone(),
+                server: server.to_string(),
+                respond_to: tx,
             })
-            .collect::<Result<Vec<_>, anyhow::Error>>()?;
-
+            .await;
+        let candles = rx.await??;
         Ok(candles)
     }
 
@@ -194,92 +132,46 @@ impl CCXTClient {
     } */
 
     pub async fn fetch_ticker(&self, symbol: &str) -> Result<Ticker, anyhow::Error> {
-        let payload = serde_json::json!({
-            "exchange_name": &self.exchange_name,
-            "symbol": parse_symbol(symbol)
-        });
-
-        let res = client()
-            .post(format!("{}/exchange/fetch/ticker", BASE_URL))
-            .json(&payload)
-            .send()
-            .await?;
-        let body: ApiResponse<serde_json::Value> = res.json().await?;
-        if !body.success {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
-        }
-        let bid = body
-            .data
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .server_tx
             .clone()
-            .unwrap()
-            .get("bid")
-            .unwrap()
-            .as_f64()
-            .unwrap();
-        let ask = body
-            .data
-            .clone()
-            .unwrap()
-            .get("ask")
-            .unwrap()
-            .as_f64()
-            .unwrap();
-        let average = body
-            .data
-            .clone()
-            .unwrap()
-            .get("average")
-            .unwrap()
-            .as_f64()
-            .unwrap();
-        let open = body
-            .data
-            .clone()
-            .unwrap()
-            .get("open")
-            .unwrap()
-            .as_f64()
-            .unwrap();
-        let high = body
-            .data
-            .clone()
-            .unwrap()
-            .get("high")
-            .unwrap()
-            .as_f64()
-            .unwrap();
-        let low = body.data.unwrap().get("low").unwrap().as_f64().unwrap();
-
-        Ok(Ticker {
-            bid,
-            ask,
-            open,
-            high,
-            low,
-            average,
-        })
+            .send(ServersCommand::GetPriority { respond_to: tx })
+            .await;
+        let server = rx.await?.context("server is not string!")?;
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .server_tx
+            .send(ServersCommand::FetchTicker {
+                symbol: symbol.to_string(),
+                exchange_name: self.exchange_name.clone(),
+                server: server.to_string(),
+                respond_to: tx,
+            })
+            .await;
+        let ticker = rx.await??;
+        Ok(ticker)
     }
 
     pub async fn test_symbol(&self, symbol: &str) -> Result<(), anyhow::Error> {
-        let payload = serde_json::json!({
-            "exchange_name": &self.exchange_name,
-            "symbol": parse_symbol(symbol)
-        });
-
-        let res = client()
-            .post(format!("{}/exchange/fetch/ticker", BASE_URL))
-            .json(&payload)
-            .send()
-            .await?;
-        let body: ApiResponse<serde_json::Value> = res.json().await?;
-
-        if !body.success {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
-        }
-        if !body.data.clone().is_none() {
-            Ok(())
-        } else {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
-        }
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .server_tx
+            .clone()
+            .send(ServersCommand::GetPriority { respond_to: tx })
+            .await;
+        let server = rx.await?.context("server is not string!")?;
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .server_tx
+            .send(ServersCommand::TestSymbol {
+                symbol: symbol.to_string(),
+                exchange_name: self.exchange_name.clone(),
+                server: server.to_string(),
+                respond_to: tx,
+            })
+            .await;
+        let tested = rx.await?;
+        tested
     }
 }

@@ -2,13 +2,10 @@ mod backend;
 mod data;
 mod engine;
 mod models;
-use crate::{
-    backend::app::Api,
-    engine::{
-        cycles::manager::{CycleManager, CycleType},
-        utils::config::load_config::{ensure_config_exists, load_config},
-    },
-};
+
+use crate::backend::app::Api;
+use crate::engine::cycles::manager::{CycleManager, CycleType};
+use crate::engine::utils::config::load_config::{ensure_config_exists, load_config};
 
 use std::collections::HashMap;
 
@@ -28,15 +25,16 @@ async fn main() -> Result<(), anyhow::Error> {
         );
     }
 
-    let mut manager = CycleManager::new();
+    let mut manager = CycleManager::new().await;
 
     manager.run_all(symbols, cycle_types).await?;
 
     let counter_handle = manager.counter_handle();
     let supervisor_handle = manager.supervisor_handle();
+    let servers_handle = manager.servers_handle();
 
     if config.backend.enabled {
-        let api = Api::new(supervisor_handle, counter_handle).await?;
+        let api = Api::new(supervisor_handle, counter_handle, servers_handle).await?;
         let api_task = tokio::spawn(async move {
             api.run().await;
         });

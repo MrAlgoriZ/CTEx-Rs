@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
     pub model: ModelConfig,
     pub backend: BackendConfig,
-    pub services: ServicesConfig,
+    pub servers: Vec<String>,
     pub prints: PrintsConfig,
     pub behaviour: BehaviourConfig,
     pub runtime: RuntimeConfig,
@@ -22,17 +22,6 @@ pub struct ModelConfig {
     pub seed: u64,
     pub train_test_split: TTSConfig,
     pub metric: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct ServicesConfig {
-    pub ccxt_python: ServiceConfig,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct ServiceConfig {
-    pub ip: String,
-    pub port: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -138,12 +127,7 @@ impl Default for Config {
                 listener: "0.0.0.0:3000".to_string(),
                 admin_password: "123".to_string(),
             },
-            services: ServicesConfig {
-                ccxt_python: ServiceConfig {
-                    ip: "127.0.0.1".to_string(),
-                    port: "3737".to_string(),
-                },
-            },
+            servers: vec!["127.0.0.1:3737".to_string()],
             prints: PrintsConfig {
                 model: ModelPrintsConfig {
                     evualate: true,
