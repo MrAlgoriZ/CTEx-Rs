@@ -721,7 +721,7 @@ pub enum ServersCommand {
 
 async fn test_server(server: &str) -> bool {
     reqwest::Client::new()
-        .get(format!("{}/", server))
+        .get(format!("http://{}/", server))
         .send()
         .await
         .is_ok()
@@ -898,7 +898,7 @@ impl ServersActor {
         });
 
         let res = reqwest::Client::new()
-            .post(format!("{}/exchange/fetch/ohlcv", server))
+            .post(format!("http://{}/exchange/fetch/ohlcv", server))
             .json(&payload)
             .send()
             .await?;
@@ -953,7 +953,7 @@ impl ServersActor {
         });
 
         let res = reqwest::Client::new()
-            .post(format!("{}/exchange/fetch/ohlcv", server))
+            .post(format!("http://{}/exchange/fetch/ohlcv", server))
             .json(&payload)
             .send()
             .await?;
@@ -1005,7 +1005,7 @@ impl ServersActor {
         });
 
         let res = reqwest::Client::new()
-            .post(format!("{}/exchange/fetch/ticker", server))
+            .post(format!("http://{}/exchange/fetch/ticker", server))
             .json(&payload)
             .send()
             .await?;
@@ -1078,7 +1078,7 @@ impl ServersActor {
         });
 
         let res = reqwest::Client::new()
-            .post(format!("{}/exchange/fetch/ticker", server))
+            .post(format!("http://{}/exchange/fetch/ticker", server))
             .json(&payload)
             .send()
             .await?;
