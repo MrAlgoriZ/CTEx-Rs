@@ -1,5 +1,5 @@
 use anyhow::Context;
-use chrono::Local;
+use chrono::Utc;
 use serde::Deserialize;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -10,6 +10,7 @@ use tokio::time::{Duration, sleep};
 use crate::CONFIG_PATH;
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, FlattenedData, Ticker};
 use crate::data::requests::ccxt::client::CCXTClient;
+use crate::engine::cycles::background::cycle::BackgroundCycle;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::sandbox::cycle::{DummyAccount, SandboxCycle};
 use crate::engine::cycles::training::cycle::TrainingCycle;
@@ -555,6 +556,9 @@ impl CycleManager {
             CycleSupervisor::new(counter_tx.clone(), servers_tx.clone());
         let supervisor_task = tokio::spawn(supervisor.run());
 
+        let background_cycle = BackgroundCycle::new(load_config(CONFIG_PATH), servers_tx.clone());
+        let _ = tokio::spawn(background_cycle.run());
+
         Self {
             supervisor_tx,
             counter_tx,
@@ -675,15 +679,12 @@ pub struct ServerState {
 }
 
 pub enum ServersCommand {
+    #[allow(unused)]
     ListActive {
         respond_to: oneshot::Sender<Option<Vec<String>>>,
     },
     GetPriority {
         respond_to: oneshot::Sender<Option<String>>,
-    },
-    RemoveWorkload {
-        server: String,
-        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
     },
     RemoveAllWorkload {
         respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
@@ -762,10 +763,6 @@ impl ServersActor {
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
-                ServersCommand::RemoveWorkload { server, respond_to } => {
-                    let result = self.remove_workload(server);
-                    let _ = respond_to.send(result);
-                }
                 ServersCommand::RemoveAllWorkload { respond_to } => {
                     let result = self.remove_all_workload();
                     let _ = respond_to.send(result);
@@ -846,16 +843,6 @@ impl ServersActor {
         Ok(())
     }
 
-    fn remove_workload(&mut self, server: String) -> Result<(), anyhow::Error> {
-        let state = self
-            .servers
-            .get_mut(&server)
-            .ok_or_else(|| anyhow::anyhow!("Сервер не найден"))?;
-
-        state.workload = 0;
-        Ok(())
-    }
-
     fn remove_all_workload(&mut self) -> Result<(), anyhow::Error> {
         for state in self.servers.values_mut() {
             state.workload = 0;
@@ -917,6 +904,7 @@ impl ServersActor {
             .await?;
 
         let body: ApiResponse<serde_json::Value> = res.json().await?;
+        self.add_workload(server.to_string(), limit as u8)?;
         if !body.success {
             return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
         }
@@ -946,7 +934,6 @@ impl ServersActor {
             })
             .collect::<Result<Vec<_>, anyhow::Error>>()?;
 
-        self.add_workload(server.to_string(), limit as u8)?;
         Ok(candles)
     }
 
@@ -972,6 +959,7 @@ impl ServersActor {
             .await?;
 
         let body: ApiResponse<serde_json::Value> = res.json().await?;
+        self.add_workload(server.to_string(), limit as u8)?;
         if !body.success {
             return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
         }
@@ -1002,7 +990,6 @@ impl ServersActor {
             })
             .collect::<Result<Vec<_>, anyhow::Error>>()?;
 
-        self.add_workload(server.to_string(), limit as u8)?;
         Ok(candles)
     }
 
@@ -1023,6 +1010,7 @@ impl ServersActor {
             .send()
             .await?;
         let body: ApiResponse<serde_json::Value> = res.json().await?;
+        self.add_workload(server.to_string(), 1)?;
         if !body.success {
             return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
         }
@@ -1068,7 +1056,6 @@ impl ServersActor {
             .unwrap();
         let low = body.data.unwrap().get("low").unwrap().as_f64().unwrap();
 
-        self.add_workload(server.to_string(), 1)?;
         Ok(Ticker {
             bid,
             ask,
@@ -1149,7 +1136,7 @@ fn log_info(msg: &str) {
         println!(
             "{}[{}] {}{}",
             Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S"),
+            Utc::now().format("%H:%M:%S"),
             Fore::CYAN.as_str(),
             msg
         );
@@ -1161,7 +1148,7 @@ fn log_success(msg: &str) {
         println!(
             "{}[{}] {}{}",
             Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S"),
+            Utc::now().format("%H:%M:%S"),
             Fore::GREEN.as_str(),
             msg
         );
@@ -1173,7 +1160,7 @@ fn log_warning(msg: &str) {
         println!(
             "{}[{}] {}{}",
             Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S"),
+            Utc::now().format("%H:%M:%S"),
             Fore::YELLOW.as_str(),
             msg
         );

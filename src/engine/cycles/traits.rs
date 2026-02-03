@@ -1,4 +1,4 @@
-use chrono::Local;
+use chrono::Utc;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
@@ -36,17 +36,21 @@ pub trait Cycle: CycleGetters {
     async fn update_volatility(&self, volatility_obj: &mut f64) -> Result<(), anyhow::Error> {
         let candles: Vec<Candle> = self
             .get_client()
-            .fetch_ohlcv(self.get_symbol(), &self.get_config().main_timeframe, 10)
+            .fetch_ohlcv(
+                self.get_symbol(),
+                &self.get_config().timeframes.main_timeframe,
+                10,
+            )
             .await?;
         *volatility_obj = get_volatility(&candles);
         Ok(())
     }
 
     async fn wait_for_next_interval(&self) -> Result<(), anyhow::Error> {
-        let timeframe = Timeframe::from_str(&self.get_config().main_timeframe)
+        let timeframe = Timeframe::from_str(&self.get_config().timeframes.main_timeframe)
             .expect("Invalid timeframe in config!");
 
-        let now = Local::now();
+        let now = Utc::now();
 
         match timeframe.seconds() {
             Some(interval) => {
@@ -81,7 +85,7 @@ pub trait Cycle: CycleGetters {
         format!(
             "{}[{}] ",
             Fore::WHITE.as_str(),
-            Local::now().format("%H:%M:%S")
+            Utc::now().format("%H:%M:%S")
         )
     }
 }

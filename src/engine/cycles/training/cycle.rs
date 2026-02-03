@@ -99,11 +99,16 @@ impl TrainingCycle {
             }
 
             let candles = Arc::new(
-                collect_all(&self.symbol, &self.config.main_timeframe, &self.client).await?,
+                collect_all(
+                    &self.symbol,
+                    &self.config.timeframes.main_timeframe,
+                    &self.client,
+                )
+                .await?,
             );
             let candles_target: f64 = self
                 .client
-                .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 2)
+                .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
                 .await?[0]
                 .close;
 
@@ -182,7 +187,7 @@ impl TrainingCycle {
 
         let all_candles = self
             .client
-            .fetch_ohlcv_with_timestamp(&self.symbol, &self.config.main_timeframe, 1000)
+            .fetch_ohlcv_with_timestamp(&self.symbol, &self.config.timeframes.main_timeframe, 1000)
             .await?;
 
         let mut phase = CyclePhase::Warmup;

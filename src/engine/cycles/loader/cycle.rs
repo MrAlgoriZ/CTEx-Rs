@@ -74,7 +74,7 @@ impl LoaderCycle {
         let volatility: f64 = {
             let candles: Vec<Candle> = self
                 .client
-                .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 10)
+                .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 10)
                 .await?;
             get_volatility(&candles)
         };
@@ -87,11 +87,15 @@ impl LoaderCycle {
 
         loop {
             self.wait_for_next_interval().await?;
-            let candles: CollectedData =
-                collect_all(&self.symbol, &self.config.main_timeframe, &self.client).await?;
+            let candles: CollectedData = collect_all(
+                &self.symbol,
+                &self.config.timeframes.main_timeframe,
+                &self.client,
+            )
+            .await?;
             let candles_target: f64 = self
                 .client
-                .fetch_ohlcv(&self.symbol, &self.config.main_timeframe, 2)
+                .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
                 .await?[0]
                 .close;
 
@@ -138,7 +142,7 @@ impl LoaderCycle {
 
         let all_candles: Vec<CandleWithTimestamp> = self
             .client
-            .fetch_ohlcv_with_timestamp(&self.symbol, &self.config.main_timeframe, 1000)
+            .fetch_ohlcv_with_timestamp(&self.symbol, &self.config.timeframes.main_timeframe, 1000)
             .await?;
 
         let total = (all_candles.len() - 1 - OHLCV_FETCH_LEN) as u64;

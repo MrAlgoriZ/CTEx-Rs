@@ -10,7 +10,7 @@ pub struct Config {
     pub runtime: RuntimeConfig,
     pub token: Vec<String>,
     pub main_exchange: String,
-    pub main_timeframe: String,
+    pub timeframes: TimeframesConfig,
     pub mode: String,
 }
 
@@ -111,6 +111,14 @@ pub struct TTSConfig {
     pub train_ratio: f32,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TimeframesConfig {
+    #[serde(rename = "main")]
+    pub main_timeframe: String,
+    #[serde(rename = "background")]
+    pub background_timeframe: String,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -174,7 +182,10 @@ impl Default for Config {
                 cycle_type: "loader".to_string(),
             },
             main_exchange: "binance".to_string(),
-            main_timeframe: "15m".to_string(),
+            timeframes: TimeframesConfig {
+                main_timeframe: "15m".to_string(),
+                background_timeframe: "1m".to_string(),
+            },
             mode: "print".to_string(),
         }
     }

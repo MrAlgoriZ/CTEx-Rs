@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use chrono::Local;
+use chrono::Utc;
 use smartcore::ensemble::random_forest_regressor::{
     RandomForestRegressor, RandomForestRegressorParameters,
 };
@@ -181,21 +181,21 @@ impl RFInterface {
             println!(
                 "{}[{}] Ошибка по MAE для {}: {:.3} pp",
                 Fore::WHITE.as_str(),
-                Local::now().format("%H:%M:%S"),
+                Utc::now().format("%H:%M:%S"),
                 self.name,
                 mae
             );
             println!(
                 "{}[{}] Ошибка по MSE для {}: {:.3} (pp²)",
                 Fore::WHITE.as_str(),
-                Local::now().format("%H:%M:%S"),
+                Utc::now().format("%H:%M:%S"),
                 self.name,
                 mse
             );
             println!(
                 "{}[{}] Ошибка по R2 для {}: {:.3}",
                 Fore::WHITE.as_str(),
-                Local::now().format("%H:%M:%S"),
+                Utc::now().format("%H:%M:%S"),
                 self.name,
                 r2_score
             );
@@ -205,7 +205,7 @@ impl RFInterface {
             println!(
                 "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
                 Fore::WHITE.as_str(),
-                Local::now().format("%H:%M:%S"),
+                Utc::now().format("%H:%M:%S"),
                 self.config.behaviour.success_threshold.default,
                 self.name,
                 accuracy * 100.0

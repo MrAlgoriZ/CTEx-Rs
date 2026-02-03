@@ -56,5 +56,8 @@ runtime:
   cycle_type: "training"
 
 main_exchange: "binance"
-main_timeframe: "15m"
+
+timeframes:
+  main: "15m"
+  background: "1m"
 mode: "print"
