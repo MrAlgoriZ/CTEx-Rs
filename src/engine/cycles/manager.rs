@@ -716,6 +716,9 @@ pub enum ServersCommand {
         exchange_name: String,
         server: String,
         respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+    },
+    UpdateActive {
+        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
     }, // ... TODO: update enum, after creating account logic
 }
 
@@ -769,6 +772,10 @@ impl ServersActor {
                 }
                 ServersCommand::ListActive { respond_to } => {
                     let result = self.list_active();
+                    let _ = respond_to.send(result);
+                }
+                ServersCommand::UpdateActive { respond_to } => {
+                    let result = self.update_active().await;
                     let _ = respond_to.send(result);
                 }
                 ServersCommand::GetPriority { respond_to } => {
@@ -863,6 +870,14 @@ impl ServersActor {
         } else {
             Some(active)
         }
+    }
+
+    async fn update_active(&mut self) -> Result<(), anyhow::Error> {
+        for (server, state) in self.servers.iter_mut() {
+            let is_active = test_server(server).await;
+            state.active = is_active;
+        }
+        Ok(())
     }
 
     fn get_priority(&self) -> Option<String> {

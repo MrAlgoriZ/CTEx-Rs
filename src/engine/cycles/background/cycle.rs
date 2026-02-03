@@ -35,6 +35,15 @@ impl BackgroundCycle {
                 .await;
 
             rx.await??;
+
+            let (tx, rx) = oneshot::channel();
+
+            let _ = self
+                .servers_tx
+                .send(ServersCommand::UpdateActive { respond_to: tx })
+                .await;
+
+            rx.await??;
         }
     }
 

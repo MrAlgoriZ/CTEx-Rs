@@ -48,7 +48,7 @@ prints:
     additional_manager_prints: true
 
 token:
-  - TRXUSDT
+  - TONUSDT
 
 runtime:
   type: "backtest"
