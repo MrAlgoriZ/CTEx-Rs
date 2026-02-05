@@ -220,11 +220,12 @@ impl RFInterface {
         let proba = model.predict(x_val)?;
         let y_float: Vec<f64> = y_val.to_vec();
 
-        let accuracy = threshold_accuracy(
+        let thr_accuracy = threshold_accuracy(
             &y_float,
             &proba,
             self.config.behaviour.success_threshold.default,
         );
+        let dir_accuracy = direction_accuracy(&y_float, &proba);
 
         if self.config.prints.model.metrics {
             let mae = mean_absolute_error(&y_float, &proba);
@@ -261,11 +262,18 @@ impl RFInterface {
                 Utc::now().format("%H:%M:%S"),
                 self.config.behaviour.success_threshold.default,
                 self.name,
-                accuracy * 100.0
+                thr_accuracy * 100.0
+            );
+            println!(
+                "{}[{}] Точность по направлению для {} составляет {:.3}%",
+                Fore::WHITE.as_str(),
+                Utc::now().format("%H:%M:%S"),
+                self.name,
+                dir_accuracy * 100.0
             );
         }
 
-        Ok(accuracy)
+        Ok(thr_accuracy)
     }
 
     pub fn predict(&self, x: Vec<f64>, symbol_name: Option<&str>) -> Result<f64, anyhow::Error> {
@@ -321,6 +329,22 @@ fn threshold_accuracy(y_true: &[f64], y_pred: &[f64], threshold: f64) -> f64 {
 
     for (y, p) in y_true.iter().zip(y_pred.iter()) {
         if (y - p).abs() <= threshold {
+            success += 1;
+        }
+    }
+
+    success as f64 / y_true.len() as f64
+}
+
+fn direction_accuracy(y_true: &[f64], y_pred: &[f64]) -> f64 {
+    if y_true.is_empty() {
+        return 0.0;
+    }
+
+    let mut success = 0;
+
+    for (y, p) in y_true.iter().zip(y_pred.iter()) {
+        if (y > &0.0 && p > &0.0) || (y < &0.0 && p < &0.0) || (y == &0.0 && p == &0.0) {
             success += 1;
         }
     }

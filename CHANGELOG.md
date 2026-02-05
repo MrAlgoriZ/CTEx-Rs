@@ -344,3 +344,4 @@
   - Полностью изменен датасет и сбор данных для него
   - В загрузке данных у модели теперь фильтруются NaN значения
   - collect_all теперь метод CCXTClient, collect_from_slice теперь CollectedData::from_slice(), flat_all теперь FlattenedData::from_collected()
+  - В валидацию добавлена точность по направлению

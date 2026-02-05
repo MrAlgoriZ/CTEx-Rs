@@ -18,7 +18,7 @@ servers:
 behaviour:
   success_threshold:
     minimum: 0.2
-    default: 1.0
+    default: 0.3
     maximum: 1.7
     ratio: 1.25
   risk_threshold:
@@ -34,8 +34,8 @@ behaviour:
 
 prints:
   model:
-    evualate: false
-    metrics: false
+    evualate: true
+    metrics: true
   cycle:
     volatility: true
     cycle_start: true
@@ -48,7 +48,7 @@ prints:
     additional_manager_prints: true
 
 symbols:
-  - XRPUSDT
+  - ETHUSDT
 
 runtime:
   type: "backtest"
