@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::data::data_interfaces::FlattenedData;
-use crate::data::process::data_collection::{CollectedData, collect_all, flat_all};
+use crate::data::process::data_collection::CollectedData;
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::engine::cycles::manager::{CounterCommand, CounterType, CycleError, ModelCommand};
@@ -99,12 +99,9 @@ impl SandboxCycle {
             }
 
             let candles = Arc::new(
-                collect_all(
-                    &self.symbol,
-                    &self.config.timeframes.main_timeframe,
-                    &self.client,
-                )
-                .await?,
+                self.client
+                    .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
+                    .await?,
             );
             let candles_target: f64 = self
                 .client
@@ -140,7 +137,7 @@ impl SandboxCycle {
 
                 if !success {
                     let last_grouped = self.last_grouped_candles.clone().unwrap();
-                    let flattened = flat_all(last_grouped, target);
+                    let flattened = FlattenedData::from_collected(last_grouped, target);
                     self.handle_mistake(flattened, counter_tx, model).await?;
                 }
 
@@ -157,7 +154,7 @@ impl SandboxCycle {
             }
 
             let candles_to_flattened = candles.clone();
-            let flattened_for_pred: FlattenedData = flat_all(candles_to_flattened, None);
+            let flattened_for_pred = FlattenedData::from_collected(candles_to_flattened, None);
 
             prediction = Some(self.predict(flattened_for_pred, &model).await.unwrap());
             let restored_price: f64 = restore_price(candles_target, prediction.unwrap());

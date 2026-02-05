@@ -3,6 +3,7 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
 use crate::data::data_interfaces::*;
+use crate::data::process::data_collection::{CollectedData, OHLCV_FETCH_LEN};
 use crate::engine::cycles::manager::ServersCommand;
 
 pub struct CCXTClient {
@@ -173,5 +174,21 @@ impl CCXTClient {
             .await;
         let tested = rx.await?;
         tested
+    }
+
+    pub async fn collect_all(
+        &self,
+        symbol: &str,
+        timeframe: &str,
+    ) -> Result<CollectedData, anyhow::Error> {
+        let (ohlcv_res, ticker_res) = tokio::join!(
+            self.fetch_ohlcv(symbol, timeframe, OHLCV_FETCH_LEN),
+            self.fetch_ticker(symbol),
+        );
+
+        let ohlcv = ohlcv_res?;
+        let ticker = ticker_res?;
+
+        Ok(CollectedData::new(symbol, ohlcv, ticker, timeframe, false))
     }
 }

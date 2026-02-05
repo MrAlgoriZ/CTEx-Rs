@@ -2,10 +2,8 @@ use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 use std::sync::Arc;
 
-use crate::data::data_interfaces::{Candle, CandleWithTimestamp};
-use crate::data::process::data_collection::{
-    CollectedData, OHLCV_FETCH_LEN, collect_all, collect_from_slice, flat_all,
-};
+use crate::data::data_interfaces::{Candle, CandleWithTimestamp, FlattenedData};
+use crate::data::process::data_collection::{CollectedData, OHLCV_FETCH_LEN};
 use crate::data::process::target::process_target;
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
@@ -87,12 +85,10 @@ impl LoaderCycle {
 
         loop {
             self.wait_for_next_interval().await?;
-            let candles: CollectedData = collect_all(
-                &self.symbol,
-                &self.config.timeframes.main_timeframe,
-                &self.client,
-            )
-            .await?;
+            let candles: CollectedData = self
+                .client
+                .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
+                .await?;
             let candles_target: f64 = self
                 .client
                 .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
@@ -116,7 +112,7 @@ impl LoaderCycle {
 
                     let last_grouped = self.last_grouped_candles.clone().unwrap();
 
-                    let flattenned = flat_all(last_grouped, target);
+                    let flattenned = FlattenedData::from_collected(last_grouped, target);
                     self.save_data(flattenned, &self.pool).await.unwrap();
                 }
                 _ => {}
@@ -162,7 +158,7 @@ impl LoaderCycle {
             let window = &all_candles[i - OHLCV_FETCH_LEN..i];
             let current_target = all_candles[i - 2].close;
 
-            let candles = match collect_from_slice(
+            let candles = match CollectedData::from_slice(
                 &self.symbol,
                 &self.config.timeframes.main_timeframe,
                 window,
@@ -181,7 +177,7 @@ impl LoaderCycle {
 
                     let last_grouped = self.last_grouped_candles.clone().unwrap();
 
-                    let flattened = flat_all(last_grouped, target);
+                    let flattened = FlattenedData::from_collected(last_grouped, target);
                     self.save_data(flattened, &self.pool).await?;
                 }
                 _ => {}

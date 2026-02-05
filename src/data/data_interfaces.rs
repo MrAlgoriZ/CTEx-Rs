@@ -1,3 +1,6 @@
+use crate::data::process::data_collection::{CollectedData, FEATURES_LEN};
+use std::sync::Arc;
+
 #[derive(Debug, Clone, Copy)]
 pub struct Candle {
     pub open: f64,
@@ -60,6 +63,25 @@ impl FlattenedData {
     }
     pub fn is_there_a_target(&self) -> bool {
         self.with_target
+    }
+
+    pub fn from_collected(collected_data: Arc<CollectedData>, target: Option<f64>) -> Self {
+        let mut features = Vec::with_capacity(1 + 4 + FEATURES_LEN + 1);
+
+        features.push(collected_data.timeframe);
+        features.push(collected_data.time.hour_sin);
+        features.push(collected_data.time.hour_cos);
+        features.push(collected_data.time.min_sin);
+        features.push(collected_data.time.min_cos);
+
+        features.extend_from_slice(&collected_data.features);
+
+        if let Some(t) = target {
+            features.push(t);
+            Self::new(collected_data.symbol.clone(), features, true)
+        } else {
+            Self::new(collected_data.symbol.clone(), features, false)
+        }
     }
 }
 

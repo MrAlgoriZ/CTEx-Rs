@@ -48,7 +48,7 @@ prints:
     additional_manager_prints: true
 
 symbols:
-  - SOLUSDT
+  - XRPUSDT
 
 runtime:
   type: "backtest"

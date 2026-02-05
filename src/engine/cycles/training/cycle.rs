@@ -5,9 +5,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::data::data_interfaces::{Candle, FlattenedData};
-use crate::data::process::data_collection::{
-    CollectedData, OHLCV_FETCH_LEN, collect_all, collect_from_slice, flat_all,
-};
+use crate::data::process::data_collection::{CollectedData, OHLCV_FETCH_LEN};
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
@@ -99,12 +97,9 @@ impl TrainingCycle {
             }
 
             let candles = Arc::new(
-                collect_all(
-                    &self.symbol,
-                    &self.config.timeframes.main_timeframe,
-                    &self.client,
-                )
-                .await?,
+                self.client
+                    .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
+                    .await?,
             );
             let candles_target: f64 = self
                 .client
@@ -143,7 +138,7 @@ impl TrainingCycle {
 
                     if !success {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
-                        let flattened = flat_all(last_grouped, target);
+                        let flattened = FlattenedData::from_collected(last_grouped, target);
                         self.handle_mistake(flattened, counter_tx, model_tx).await?;
                     }
                 }
@@ -151,7 +146,7 @@ impl TrainingCycle {
             }
 
             let candles_to_flattened = candles.clone();
-            let flattened_for_pred: FlattenedData = flat_all(candles_to_flattened, None);
+            let flattened_for_pred = FlattenedData::from_collected(candles_to_flattened, None);
 
             prediction = Some(self.predict(flattened_for_pred, &model_tx).await.unwrap());
             let restored_price: f64 = restore_price(candles_target, prediction.unwrap());
@@ -216,7 +211,7 @@ impl TrainingCycle {
 
             volatility = get_volatility(&to_volatility);
 
-            let candles = match collect_from_slice(
+            let candles = match CollectedData::from_slice(
                 &self.symbol,
                 &self.config.timeframes.main_timeframe,
                 window,
@@ -250,7 +245,7 @@ impl TrainingCycle {
 
                     if !success && self.config.runtime.with_training {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
-                        let flattened = flat_all(last_grouped, target);
+                        let flattened = FlattenedData::from_collected(last_grouped, target);
 
                         if flattened.is_there_a_target() {
                             insert_candle(&self.pool, &self.symbol, &flattened.features).await?;
@@ -265,7 +260,7 @@ impl TrainingCycle {
             }
 
             let candles_to_flattened = candles.clone();
-            let flattened_for_pred: FlattenedData = flat_all(candles_to_flattened, None);
+            let flattened_for_pred = FlattenedData::from_collected(candles_to_flattened, None);
 
             prediction = Some(self.predict(flattened_for_pred, &model_tx).await?);
 

@@ -1,12 +1,10 @@
 use crate::data::data_interfaces::*;
 use crate::data::process::features::*;
-use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::time::TimeRequest;
-use std::sync::Arc;
 
 pub const OHLCV_LEN: usize = 50;
 pub const OHLCV_FETCH_LEN: usize = 51;
-const FEATURES_LEN: usize = 24;
+pub const FEATURES_LEN: usize = 24;
 
 pub struct AddFeatures {
     ohlcv: [Candle; OHLCV_LEN],
@@ -140,52 +138,18 @@ impl CollectedData {
         self.time = time;
         self
     }
-}
 
-pub async fn collect_all(
-    symbol: &str,
-    timeframe: &str,
-    client: &CCXTClient,
-) -> Result<CollectedData, anyhow::Error> {
-    let (ohlcv_res, ticker_res) = tokio::join!(
-        client.fetch_ohlcv(symbol, timeframe, OHLCV_FETCH_LEN),
-        client.fetch_ticker(symbol),
-    );
+    pub fn from_slice(
+        symbol: &str,
+        timeframe: &str,
+        candles: &[CandleWithTimestamp],
+    ) -> Option<Self> {
+        let ticker = Ticker { bid: 0.0, ask: 0.0 };
 
-    let ohlcv = ohlcv_res?;
-    let ticker = ticker_res?;
+        let ohlcv: Vec<Candle> = candles.iter().map(|candle| candle.to_candle()).collect();
+        let time =
+            TimeRequest::from_timestamp(candles[(candles.len() - 1) - 1].timestamp).get_time();
 
-    Ok(CollectedData::new(symbol, ohlcv, ticker, timeframe, false))
-}
-
-pub fn collect_from_slice(
-    symbol: &str,
-    timeframe: &str,
-    candles: &[CandleWithTimestamp],
-) -> Option<CollectedData> {
-    let ticker = Ticker { bid: 0.0, ask: 0.0 };
-
-    let ohlcv: Vec<Candle> = candles.iter().map(|candle| candle.to_candle()).collect();
-    let time = TimeRequest::from_timestamp(candles[(candles.len() - 1) - 1].timestamp).get_time();
-
-    Some(CollectedData::new(symbol, ohlcv, ticker, timeframe, true).with_time(time))
-}
-
-pub fn flat_all(collected_data: Arc<CollectedData>, target: Option<f64>) -> FlattenedData {
-    let mut features = Vec::with_capacity(1 + 4 + FEATURES_LEN + 1);
-
-    features.push(collected_data.timeframe);
-    features.push(collected_data.time.hour_sin);
-    features.push(collected_data.time.hour_cos);
-    features.push(collected_data.time.min_sin);
-    features.push(collected_data.time.min_cos);
-
-    features.extend_from_slice(&collected_data.features);
-
-    if let Some(t) = target {
-        features.push(t);
-        FlattenedData::new(collected_data.symbol.clone(), features, true)
-    } else {
-        FlattenedData::new(collected_data.symbol.clone(), features, false)
+        Some(Self::new(symbol, ohlcv, ticker, timeframe, true).with_time(time))
     }
 }
