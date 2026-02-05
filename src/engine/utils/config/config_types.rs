@@ -30,6 +30,7 @@ pub struct BehaviourConfig {
     pub risk_threshold: RiskThresholdConfig,
     pub trading_mode_value: TradingModeConfig,
     pub accuracy_capacity: usize,
+    pub predictions_capacity: usize,
     pub feedback_engine_capacity: usize,
 }
 
@@ -173,6 +174,7 @@ impl Default for Config {
                     maximum: 1.0,
                 },
                 accuracy_capacity: 192,
+                predictions_capacity: 96,
                 feedback_engine_capacity: 5,
             },
             symbols: vec!["BTCUSDT".to_string()],

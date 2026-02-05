@@ -30,6 +30,7 @@ behaviour:
     default: 0.0
     maximum: 1.0
   accuracy_capacity: 192
+  predictions_capacity: 96
   feedback_engine_capacity: 5
 
 prints:

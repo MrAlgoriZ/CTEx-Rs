@@ -1,5 +1,5 @@
 use anyhow::Context;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -14,7 +14,7 @@ use crate::engine::cycles::background::cycle::BackgroundCycle;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::sandbox::cycle::{DummyAccount, SandboxCycle};
 use crate::engine::cycles::training::cycle::TrainingCycle;
-use crate::engine::state::counters::Counters;
+use crate::engine::state::counters::{Counters, SymbolCounters};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::RuntimeType;
 use crate::engine::utils::config::load_config::load_config;
@@ -459,19 +459,12 @@ impl ModelActor {
                     let features = flattenned_candles.features;
                     let symbol = flattenned_candles.symbol;
 
-                    let result = tokio::task::spawn_blocking(move || {
-                        model.blocking_lock().predict(features, Some(&symbol))
-                    })
-                    .await;
+                    let result = model.lock().await.predict(features, Some(&symbol)).await;
 
                     let prediction = match result {
-                        Ok(Ok(pred)) => pred,
-                        Ok(Err(e)) => {
-                            log_error(&format!("Ошибка предсказания: {}", e));
-                            0.0
-                        }
+                        Ok(pred) => pred,
                         Err(e) => {
-                            log_error(&format!("Ошибка spawn_blocking: {}", e));
+                            log_error(&format!("Ошибка предсказания: {}", e));
                             0.0
                         }
                     };
@@ -536,36 +529,43 @@ impl WorkerHandle {
 pub struct CycleManager {
     supervisor_tx: mpsc::Sender<SupervisorCommand>,
     counter_tx: mpsc::Sender<CounterCommand>,
-    servers_tx: mpsc::Sender<ServersCommand>,
+    prediction_tx: mpsc::Sender<PredictionCommand>,
     _counter_task: tokio::task::JoinHandle<()>,
     _supervisor_task: tokio::task::JoinHandle<()>,
     _servers_task: tokio::task::JoinHandle<()>,
+    _prediction_task: tokio::task::JoinHandle<()>,
 }
 
 impl CycleManager {
     pub async fn new() -> Self {
-        let capacity = load_config(CONFIG_PATH).behaviour.accuracy_capacity;
+        let config = load_config(CONFIG_PATH).behaviour;
+        let counter_capacity = config.accuracy_capacity;
+        let prediction_capacity = config.predictions_capacity;
 
         let (servers_actor, servers_tx) = ServersActor::new().await;
         let servers_task = tokio::spawn(servers_actor.run());
 
-        let (counter_actor, counter_tx) = CounterActor::new(capacity);
+        let (counter_actor, counter_tx) = CounterActor::new(counter_capacity);
         let counter_task = tokio::spawn(counter_actor.run());
+
+        let (prediction_actor, prediction_tx) = PredictionsActor::new(prediction_capacity);
+        let prediction_task = tokio::spawn(prediction_actor.run());
 
         let (supervisor, supervisor_tx) =
             CycleSupervisor::new(counter_tx.clone(), servers_tx.clone());
         let supervisor_task = tokio::spawn(supervisor.run());
 
-        let background_cycle = BackgroundCycle::new(load_config(CONFIG_PATH), servers_tx.clone());
+        let background_cycle = BackgroundCycle::new(load_config(CONFIG_PATH), servers_tx);
         let _ = tokio::spawn(background_cycle.run());
 
         Self {
             supervisor_tx,
             counter_tx,
-            servers_tx,
+            prediction_tx,
             _counter_task: counter_task,
             _supervisor_task: supervisor_task,
             _servers_task: servers_task,
+            _prediction_task: prediction_task,
         }
     }
 
@@ -614,7 +614,7 @@ impl CycleManager {
             .await
             .map_err(|e| format!("DB connection error: {}", e))?;
 
-        let mut model = XGBoost::new();
+        let mut model = XGBoost::new(Some(self.prediction_tx.clone()));
         train_model(&pool, &mut model)
             .await
             .map_err(|e| format!("Train error: {}", e))?;
@@ -657,13 +657,95 @@ impl CycleManager {
         self.supervisor_tx.clone()
     }
 
-    pub fn servers_handle(&self) -> mpsc::Sender<ServersCommand> {
-        self.servers_tx.clone()
+    pub fn prediction_handle(&self) -> mpsc::Sender<PredictionCommand> {
+        self.prediction_tx.clone()
     }
 }
 
-// TODO!
-// pub struct PredictionsActor {}
+#[derive(Clone)]
+pub struct Prediction {
+    pub prediction: f64,
+    pub when: DateTime<Utc>,
+}
+
+pub enum PredictionCommand {
+    AddPrediction {
+        symbol: String,
+        prediction: f64,
+        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+    },
+    ListPredictions {
+        respond_to: oneshot::Sender<Option<HashMap<String, SymbolCounters<Prediction>>>>,
+    },
+    GetLastPrediction {
+        symbol: String,
+        respond_to: oneshot::Sender<Option<Prediction>>,
+    },
+    GetPredictions {
+        symbol: String,
+        respond_to: oneshot::Sender<Option<SymbolCounters<Prediction>>>,
+    },
+}
+
+pub struct PredictionsActor {
+    capacity: usize,
+    predictions: HashMap<String, SymbolCounters<Prediction>>,
+    inbox: mpsc::Receiver<PredictionCommand>,
+}
+
+impl PredictionsActor {
+    pub fn new(capacity: usize) -> (Self, mpsc::Sender<PredictionCommand>) {
+        let (tx, rx) = mpsc::channel(300);
+
+        (
+            Self {
+                capacity,
+                predictions: HashMap::new(),
+                inbox: rx,
+            },
+            tx,
+        )
+    }
+
+    pub async fn run(mut self) {
+        log_info("PredictionsActor запущен");
+
+        while let Some(cmd) = self.inbox.recv().await {
+            match cmd {
+                PredictionCommand::AddPrediction {
+                    symbol,
+                    prediction,
+                    respond_to,
+                } => {
+                    let pred_counter = self
+                        .predictions
+                        .entry(symbol)
+                        .or_insert_with(|| SymbolCounters::new(self.capacity));
+                    pred_counter.push(Prediction {
+                        prediction,
+                        when: Utc::now(),
+                    });
+                    let _ = respond_to.send(Ok(()));
+                }
+                PredictionCommand::GetLastPrediction { symbol, respond_to } => {
+                    let pred_counter = self.predictions.get(&symbol);
+                    if let Some(counter) = pred_counter {
+                        let _ = respond_to.send(counter.data.back().cloned());
+                    } else {
+                        let _ = respond_to.send(None);
+                    }
+                }
+                PredictionCommand::GetPredictions { symbol, respond_to } => {
+                    let pred_counter = self.predictions.get(&symbol);
+                    let _ = respond_to.send(pred_counter.cloned());
+                }
+                PredictionCommand::ListPredictions { respond_to } => {
+                    let _ = respond_to.send(Some(self.predictions.clone()));
+                }
+            }
+        }
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub struct ApiResponse<T> {

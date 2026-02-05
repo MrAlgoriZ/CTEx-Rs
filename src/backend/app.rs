@@ -1,21 +1,12 @@
-use crate::data::requests::ccxt::client::CCXTClient;
-use crate::engine::cycles::manager::ServersCommand;
-use crate::{
-    CONFIG_PATH,
-    backend::{
-        commands,
-        structure::{ApiState, ApiStructure},
-    },
-    engine::{
-        cycles::manager::{CounterCommand, SupervisorCommand},
-        utils::config::load_config::load_config,
-    },
-};
-use axum::{
-    Router,
-    routing::{delete, get, post},
-};
-use std::sync::Arc;
+use crate::CONFIG_PATH;
+use crate::backend::commands;
+use crate::backend::structure::{ApiState, ApiStructure};
+use crate::engine::cycles::manager::PredictionCommand;
+use crate::engine::cycles::manager::{CounterCommand, SupervisorCommand};
+use crate::engine::utils::config::load_config::load_config;
+
+use axum::Router;
+use axum::routing::{delete, get, post};
 use tokio::sync::mpsc;
 
 pub struct Api {
@@ -27,9 +18,8 @@ impl Api {
     pub async fn new(
         supervisor_handle: mpsc::Sender<SupervisorCommand>,
         counter_handle: mpsc::Sender<CounterCommand>,
-        servers_handle: mpsc::Sender<ServersCommand>,
+        prediction_handle: mpsc::Sender<PredictionCommand>,
     ) -> Result<Self, anyhow::Error> {
-        let _ = servers_handle; // TODO ОБНОВИТЬ
         let config = load_config(CONFIG_PATH);
         let listener = tokio::net::TcpListener::bind(&config.backend.listener)
             .await
@@ -39,24 +29,20 @@ impl Api {
 
         Ok(Api {
             listener,
-            app: Self::init_app(supervisor_handle, counter_handle, servers_handle).await,
+            app: Self::init_app(supervisor_handle, counter_handle, prediction_handle),
         })
     }
 
-    async fn init_app(
+    fn init_app(
         supervisor_handle: mpsc::Sender<SupervisorCommand>,
         counter_handle: mpsc::Sender<CounterCommand>,
-        servers_handle: mpsc::Sender<ServersCommand>,
+        prediction_handle: mpsc::Sender<PredictionCommand>,
     ) -> Router {
         let structure = ApiStructure::default();
-        let client = Arc::new(CCXTClient::new(
-            &load_config(CONFIG_PATH).main_exchange,
-            servers_handle,
-        ));
         let state = ApiState {
             supervisor_handle,
             counter_handle,
-            client,
+            prediction_handle,
         };
 
         Router::new()

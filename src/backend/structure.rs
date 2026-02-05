@@ -1,16 +1,14 @@
-use crate::{
-    data::requests::ccxt::client::CCXTClient,
-    engine::cycles::manager::{CounterCommand, SupervisorCommand},
-};
+use crate::engine::cycles::manager::{CounterCommand, PredictionCommand, SupervisorCommand};
 use serde::Serialize;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 
 #[derive(Clone)]
 pub struct ApiState {
     pub supervisor_handle: mpsc::Sender<SupervisorCommand>,
     pub counter_handle: mpsc::Sender<CounterCommand>,
-    pub client: Arc<CCXTClient>,
+    // TODO Улучшить бекенд
+    #[allow(unused)]
+    pub prediction_handle: mpsc::Sender<PredictionCommand>,
 }
 
 #[derive(Debug, Serialize)]

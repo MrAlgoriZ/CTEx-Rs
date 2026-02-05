@@ -7,9 +7,11 @@ use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::{mean_absolute_error, mean_squared_error, r2};
 use smartcore::model_selection::train_test_split;
 use std::collections::HashMap;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::data::data_interfaces::FlattenedData;
 use crate::data::requests::database::db_req::select_all_candles;
+use crate::engine::cycles::manager::PredictionCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::{colors::Fore, config::load_config::load_config};
 
@@ -22,10 +24,11 @@ pub struct XGBoost {
     y_val: Option<Vec<f64>>,
     symbol_columns: Option<Vec<String>>,
     config: Config,
+    prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
 }
 
 impl XGBoost {
-    pub fn new() -> Self {
+    pub fn new(prediction_tx: Option<mpsc::Sender<PredictionCommand>>) -> Self {
         let config = load_config("config/config.yaml");
         Self {
             model: None,
@@ -36,6 +39,7 @@ impl XGBoost {
             y_val: None,
             symbol_columns: None,
             config,
+            prediction_tx,
         }
     }
 
@@ -209,7 +213,11 @@ impl XGBoost {
         Ok(())
     }
 
-    fn evaluate(&self, x_val: &DenseMatrix<f64>, y_val: &Vec<f64>) -> Result<f64, anyhow::Error> {
+    fn evaluate(
+        &self,
+        x_val: &DenseMatrix<f64>,
+        y_val: &Vec<f64>,
+    ) -> Result<AccuracyModel, anyhow::Error> {
         let model = self
             .model
             .as_ref()
@@ -224,12 +232,11 @@ impl XGBoost {
             self.config.behaviour.success_threshold.default,
         );
         let dir_accuracy = direction_accuracy(&y_float, &proba);
+        let mae = mean_absolute_error(&y_float, &proba);
+        let mse = mean_squared_error(&y_float, &proba);
+        let r2_score = r2(&y_float, &proba);
 
         if self.config.prints.model.metrics {
-            let mae = mean_absolute_error(&y_float, &proba);
-            let mse = mean_squared_error(&y_float, &proba);
-            let r2_score = r2(&y_float, &proba);
-
             println!(
                 "{}[{}] Ошибка по MAE для {}: {:.3} pp",
                 Fore::WHITE.as_str(),
@@ -271,10 +278,20 @@ impl XGBoost {
             );
         }
 
-        Ok(thr_accuracy)
+        Ok(AccuracyModel {
+            mae,
+            mse,
+            r2: r2_score,
+            thr_acc: thr_accuracy,
+            dir_acc: dir_accuracy,
+        })
     }
 
-    pub fn predict(&self, x: Vec<f64>, symbol_name: Option<&str>) -> Result<f64, anyhow::Error> {
+    pub async fn predict(
+        &self,
+        x: Vec<f64>,
+        symbol_name: Option<&str>,
+    ) -> Result<f64, anyhow::Error> {
         let symbol_cols = self
             .symbol_columns
             .as_ref()
@@ -286,10 +303,10 @@ impl XGBoost {
         let mut input: Vec<f64> = Vec::with_capacity(symbol_cols.len() + x.len());
 
         let mut symbol_vec = vec![0.0; symbol_cols.len()];
-        if let Some(tn) = symbol_name {
+        if let Some(sn) = symbol_name {
             if let Some(idx) = symbol_cols
                 .iter()
-                .position(|col| col == &format!("symbol_name_{}", tn))
+                .position(|col| col == &format!("symbol_name_{}", sn))
             {
                 symbol_vec[idx] = 1.0;
             }
@@ -300,6 +317,20 @@ impl XGBoost {
 
         let input_mat = DenseMatrix::new(1, input.len(), input, false)?;
         let proba = model.predict(&input_mat)?;
+
+        if let Some(sn) = symbol_name
+            && let Some(ptx) = self.prediction_tx.clone()
+        {
+            let (tx, rx) = oneshot::channel();
+
+            let _ = ptx.send(PredictionCommand::AddPrediction {
+                symbol: sn.to_string(),
+                prediction: proba[0],
+                respond_to: tx,
+            });
+            rx.await??;
+        }
+
         Ok(proba[0])
     }
 
@@ -350,12 +381,26 @@ fn direction_accuracy(y_true: &[f64], y_pred: &[f64]) -> f64 {
     success as f64 / y_true.len() as f64
 }
 
+#[derive(Debug)]
+pub struct AccuracyModel {
+    #[allow(unused)]
+    mae: f64,
+    #[allow(unused)]
+    mse: f64,
+    #[allow(unused)]
+    r2: f64,
+    #[allow(unused)]
+    thr_acc: f64,
+    #[allow(unused)]
+    dir_acc: f64,
+}
+
 #[tokio::test]
 async fn test_training() -> Result<(), anyhow::Error> {
     let pool = PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
         .await
         .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
-    let mut model = XGBoost::new();
+    let mut model = XGBoost::new(None);
 
     train_model(&pool, &mut model).await?;
 

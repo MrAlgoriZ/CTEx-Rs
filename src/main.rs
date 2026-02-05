@@ -31,10 +31,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let counter_handle = manager.counter_handle();
     let supervisor_handle = manager.supervisor_handle();
-    let servers_handle = manager.servers_handle();
+    let prediction_handle = manager.prediction_handle();
 
     if config.backend.enabled {
-        let api = Api::new(supervisor_handle, counter_handle, servers_handle).await?;
+        let api = Api::new(supervisor_handle, counter_handle, prediction_handle).await?;
         let api_task = tokio::spawn(async move {
             api.run().await;
         });
