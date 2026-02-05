@@ -20,7 +20,7 @@ use crate::engine::utils::config::config_types::RuntimeType;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::engine::utils::parse::parse_symbol;
-use crate::models::model::{RFInterface, train_model};
+use crate::models::model::{XGBoost, train_model};
 
 pub enum CycleError {
     SymbolDoesNotExist,
@@ -430,12 +430,12 @@ pub enum ModelCommand {
 }
 
 struct ModelActor {
-    model: Arc<Mutex<RFInterface>>,
+    model: Arc<Mutex<XGBoost>>,
     inbox: mpsc::Receiver<ModelCommand>,
 }
 
 impl ModelActor {
-    fn new(model: RFInterface) -> (Self, mpsc::Sender<ModelCommand>) {
+    fn new(model: XGBoost) -> (Self, mpsc::Sender<ModelCommand>) {
         let (tx, rx) = mpsc::channel(100);
         (
             Self {
@@ -614,7 +614,7 @@ impl CycleManager {
             .await
             .map_err(|e| format!("DB connection error: {}", e))?;
 
-        let mut model = RFInterface::new();
+        let mut model = XGBoost::new();
         train_model(&pool, &mut model)
             .await
             .map_err(|e| format!("Train error: {}", e))?;

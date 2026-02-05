@@ -1,5 +1,5 @@
 model:
-  name: "RF"
+  name: "XGBoost"
   n_trees: 100
   max_depth: 5
   seed: 42
@@ -48,7 +48,7 @@ prints:
     additional_manager_prints: true
 
 symbols:
-  - ETHUSDT
+  - SOLUSDT
 
 runtime:
   type: "backtest"

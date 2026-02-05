@@ -1,8 +1,6 @@
 use anyhow::anyhow;
 use chrono::Utc;
-use smartcore::ensemble::random_forest_regressor::{
-    RandomForestRegressor, RandomForestRegressorParameters,
-};
+use smartcore::xgboost::{XGRegressor, XGRegressorParameters};
 use sqlx::PgPool;
 
 use smartcore::linalg::basic::matrix::DenseMatrix;
@@ -15,8 +13,8 @@ use crate::data::requests::database::db_req::select_all_candles;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::{colors::Fore, config::load_config::load_config};
 
-pub struct RFInterface {
-    model: Option<RandomForestRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
+pub struct XGBoost {
+    model: Option<XGRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
     name: String,
     x_train: Option<DenseMatrix<f64>>,
     x_val: Option<DenseMatrix<f64>>,
@@ -26,7 +24,7 @@ pub struct RFInterface {
     config: Config,
 }
 
-impl RFInterface {
+impl XGBoost {
     pub fn new() -> Self {
         let config = load_config("config/config.yaml");
         Self {
@@ -197,12 +195,12 @@ impl RFInterface {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error> {
-        let params = RandomForestRegressorParameters::default()
-            .with_n_trees(self.config.model.n_trees)
+        let params = XGRegressorParameters::default()
+            .with_n_estimators(self.config.model.n_trees)
             .with_max_depth(self.config.model.max_depth)
             .with_seed(self.config.model.seed);
 
-        self.model = Some(RandomForestRegressor::fit(x_train, y_train, params)?);
+        self.model = Some(XGRegressor::fit(x_train, y_train, params)?);
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             self.evaluate(xv, yv)?;
@@ -314,7 +312,7 @@ impl RFInterface {
     }
 }
 
-pub async fn train_model(pool: &PgPool, model: &mut RFInterface) -> Result<(), anyhow::Error> {
+pub async fn train_model(pool: &PgPool, model: &mut XGBoost) -> Result<(), anyhow::Error> {
     let data = select_all_candles(pool).await?;
     model.train(data)?;
     Ok(())
@@ -357,7 +355,7 @@ async fn test_training() -> Result<(), anyhow::Error> {
     let pool = PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
         .await
         .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
-    let mut model = RFInterface::new();
+    let mut model = XGBoost::new();
 
     train_model(&pool, &mut model).await?;
 
