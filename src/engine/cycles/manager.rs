@@ -457,10 +457,10 @@ impl ModelActor {
                 } => {
                     let model = self.model.clone();
                     let features = flattenned_candles.features;
-                    let token = flattenned_candles.token;
+                    let symbol = flattenned_candles.symbol;
 
                     let result = tokio::task::spawn_blocking(move || {
-                        model.blocking_lock().predict(features, Some(&token))
+                        model.blocking_lock().predict(features, Some(&symbol))
                     })
                     .await;
 
@@ -1045,40 +1045,8 @@ impl ServersActor {
             .unwrap()
             .as_f64()
             .unwrap();
-        let average = body
-            .data
-            .clone()
-            .unwrap()
-            .get("average")
-            .unwrap()
-            .as_f64()
-            .unwrap();
-        let open = body
-            .data
-            .clone()
-            .unwrap()
-            .get("open")
-            .unwrap()
-            .as_f64()
-            .unwrap();
-        let high = body
-            .data
-            .clone()
-            .unwrap()
-            .get("high")
-            .unwrap()
-            .as_f64()
-            .unwrap();
-        let low = body.data.unwrap().get("low").unwrap().as_f64().unwrap();
 
-        Ok(Ticker {
-            bid,
-            ask,
-            open,
-            high,
-            low,
-            average,
-        })
+        Ok(Ticker { bid, ask })
     }
 
     async fn test_symbol(

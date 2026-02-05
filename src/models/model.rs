@@ -8,6 +8,7 @@ use sqlx::PgPool;
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::{mean_absolute_error, mean_squared_error, r2};
 use smartcore::model_selection::train_test_split;
+use std::collections::HashMap;
 
 use crate::data::data_interfaces::FlattenedData;
 use crate::data::requests::database::db_req::select_all_candles;
@@ -21,7 +22,7 @@ pub struct RFInterface {
     x_val: Option<DenseMatrix<f64>>,
     y_train: Option<Vec<f64>>,
     y_val: Option<Vec<f64>>,
-    token_columns: Option<Vec<String>>,
+    symbol_columns: Option<Vec<String>>,
     config: Config,
 }
 
@@ -35,7 +36,7 @@ impl RFInterface {
             x_val: None,
             y_train: None,
             y_val: None,
-            token_columns: None,
+            symbol_columns: None,
             config,
         }
     }
@@ -49,68 +50,82 @@ impl RFInterface {
             return Err(anyhow!("No data provided"));
         }
 
-        let feature_len = data[0].features.len();
-        if feature_len < 1 {
-            return Err(anyhow!("Features must have at least 1 element (target)"));
-        }
-        if data.iter().any(|d| d.features.len() != feature_len) {
-            return Err(anyhow!("All features must have the same length"));
+        let total_len = data[0].features.len();
+        if total_len < 2 {
+            return Err(anyhow!(
+                "Each row must have at least one feature and one target"
+            ));
         }
 
-        use std::collections::HashMap;
+        let feature_len = total_len - 1;
+        let target_idx = feature_len;
 
-        let tokens: Vec<&str> = data.iter().map(|d| d.token.as_str()).collect();
-        let unique_tokens: Vec<&str> = {
+        if data.iter().any(|d| d.features.len() != total_len) {
+            return Err(anyhow!(
+                "All rows must have the same number of features + target"
+            ));
+        }
+
+        let symbols: Vec<&str> = data.iter().map(|d| d.symbol.as_str()).collect();
+        let unique_symbols: Vec<&str> = {
             let mut set = std::collections::HashSet::new();
-            tokens.iter().for_each(|t| {
-                set.insert(*t);
+            symbols.iter().for_each(|s| {
+                set.insert(*s);
             });
             set.into_iter().collect()
         };
-        let n_tokens = unique_tokens.len();
+        let n_symbols = unique_symbols.len();
 
-        let token_to_idx: HashMap<&str, usize> = unique_tokens
+        let symbol_to_idx: HashMap<&str, usize> = unique_symbols
             .iter()
             .enumerate()
-            .map(|(i, &t)| (t, i))
+            .map(|(i, &s)| (s, i))
             .collect();
 
-        self.token_columns = Some(
-            unique_tokens
+        self.symbol_columns = Some(
+            unique_symbols
                 .iter()
-                .map(|t| format!("token_name_{}", t))
+                .map(|s| format!("symbol_name_{}", s))
                 .collect(),
         );
-
-        let target_idx = feature_len - 1;
 
         let mut x_rows: Vec<Vec<f64>> = Vec::with_capacity(n_samples);
         let mut y_target: Vec<f64> = Vec::with_capacity(n_samples);
 
         for row in data.iter() {
-            let mut full_row = vec![0.0; n_tokens + feature_len];
+            let target = row.features[target_idx];
+            if target.is_nan() {
+                continue;
+            }
 
-            if let Some(&idx) = token_to_idx.get(row.token.as_str()) {
+            let mut full_row = vec![0.0; n_symbols + feature_len];
+
+            if let Some(&idx) = symbol_to_idx.get(row.symbol.as_str()) {
                 full_row[idx] = 1.0;
             }
 
-            for (i, &val) in row.features.iter().enumerate() {
-                full_row[n_tokens + i] = val;
+            for (i, &val) in row.features[..feature_len].iter().enumerate() {
+                full_row[n_symbols + i] = val;
             }
 
-            y_target.push(row.features[target_idx]);
-
-            let x_row = full_row[..n_tokens + feature_len - 1].to_vec();
-            x_rows.push(x_row);
+            x_rows.push(full_row);
+            y_target.push(target);
         }
 
-        let n_features = n_tokens + feature_len - 1;
-        let mut flat_x = Vec::with_capacity(n_samples * n_features);
-        for row in x_rows {
+        assert!(
+            x_rows.len() == y_target.len(),
+            "X and y length mismatch: X={}, y={}",
+            x_rows.len(),
+            y_target.len()
+        );
+
+        let n_features = n_symbols + feature_len;
+        let mut flat_x = Vec::with_capacity(x_rows.len() * n_features);
+        for row in x_rows.iter() {
             flat_x.extend(row);
         }
 
-        let x = DenseMatrix::new(n_samples, n_features, flat_x, false)?;
+        let x = DenseMatrix::new(x_rows.len(), n_features, flat_x, false)?;
 
         Ok((x, y_target))
     }
@@ -215,27 +230,27 @@ impl RFInterface {
         Ok(accuracy)
     }
 
-    pub fn predict(&self, x: Vec<f64>, token_name: Option<&str>) -> Result<f64, anyhow::Error> {
-        let token_cols = self
-            .token_columns
+    pub fn predict(&self, x: Vec<f64>, symbol_name: Option<&str>) -> Result<f64, anyhow::Error> {
+        let symbol_cols = self
+            .symbol_columns
             .as_ref()
-            .ok_or(anyhow!("No token columns defined"))?;
+            .ok_or(anyhow!("No symbol columns defined"))?;
         let model = self
             .model
             .as_ref()
             .ok_or(anyhow!("Model not trained yet"))?;
-        let mut input: Vec<f64> = Vec::with_capacity(token_cols.len() + x.len());
+        let mut input: Vec<f64> = Vec::with_capacity(symbol_cols.len() + x.len());
 
-        let mut token_vec = vec![0.0; token_cols.len()];
-        if let Some(tn) = token_name {
-            if let Some(idx) = token_cols
+        let mut symbol_vec = vec![0.0; symbol_cols.len()];
+        if let Some(tn) = symbol_name {
+            if let Some(idx) = symbol_cols
                 .iter()
-                .position(|col| col == &format!("token_name_{}", tn))
+                .position(|col| col == &format!("symbol_name_{}", tn))
             {
-                token_vec[idx] = 1.0;
+                symbol_vec[idx] = 1.0;
             }
         }
-        input.extend(token_vec);
+        input.extend(symbol_vec);
 
         input.extend(x);
 

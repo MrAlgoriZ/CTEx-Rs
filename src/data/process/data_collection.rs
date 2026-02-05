@@ -1,24 +1,16 @@
 use crate::data::data_interfaces::*;
 use crate::data::process::features::*;
-use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::time::TimeRequest;
-use crate::engine::utils::processor::*;
-
-use rayon::prelude::*;
 use std::sync::Arc;
 
-pub const OHLCV_LEN: usize = 10;
-pub const OHLCV_FETCH_LEN: usize = 11;
-const FEATURES_LEN: usize = 26;
+pub const OHLCV_LEN: usize = 50;
+pub const OHLCV_FETCH_LEN: usize = 51;
+const FEATURES_LEN: usize = 24;
 
 pub struct AddFeatures {
     ohlcv: [Candle; OHLCV_LEN],
     ticker: Ticker,
-}
-
-pub fn mean(iter: Vec<f64>) -> f64 {
-    (iter.iter().sum::<f64>()) / (iter.len() as f64)
 }
 
 impl AddFeatures {
@@ -26,33 +18,77 @@ impl AddFeatures {
         AddFeatures { ohlcv, ticker }
     }
 
-    pub fn apply_features(&self) -> Vec<f64> {
-        let mut features: Vec<f64> = Vec::new();
+    pub fn apply_features(&self, fake_ticker: bool) -> Vec<f64> {
+        let return_1 = return_k(&self.ohlcv, 1);
+        let return_2 = return_k(&self.ohlcv, 2);
+        let return_3 = return_k(&self.ohlcv, 3);
+        let return_5 = return_k(&self.ohlcv, 5);
+        let return_10 = return_k(&self.ohlcv, 10);
+        let log_return_1 = log_return_k(&self.ohlcv, 1);
 
-        let mid: f64 = mid_price(self.ticker.ask, self.ticker.bid);
+        let vol_rolling_3 = vol_rolling_k(&self.ohlcv, 3);
+        let vol_rolling_5 = vol_rolling_k(&self.ohlcv, 5);
+        let vol_rolling_10 = vol_rolling_k(&self.ohlcv, 10);
 
-        features.push(spread_rel(self.ticker.ask, self.ticker.bid, mid));
-        features.push(mid);
-        features.push(pressure_side(self.ohlcv[9].close, mid));
-        features.push(bid_ask_ratio(self.ticker.ask, self.ticker.bid));
-        features.push(mid_distance_day_highlow(
-            mid,
-            self.ticker.high,
-            self.ticker.low,
-        ));
+        let volume_change_1 = volume_change_k(&self.ohlcv, 1);
+        let volume_change_3 = volume_change_k(&self.ohlcv, 3);
 
-        let candle_features: Vec<f64> = self
-            .ohlcv
-            .par_iter()
-            .flat_map(|candle| {
-                vec![
-                    body(candle.open, candle.close),
-                    body_strength(candle.open, candle.high, candle.low, candle.close),
-                ]
-            })
-            .collect();
-        features.extend(candle_features);
-        features.push(get_volatility(&self.ohlcv));
+        let spread_val: f64 = {
+            if fake_ticker {
+                let last = self.ohlcv.last().unwrap();
+                (last.high - last.low) / last.close
+            } else {
+                spread(self.ticker.ask, self.ticker.bid)
+            }
+        };
+
+        let ema_fast = ema(&self.ohlcv, 5);
+        let ema_slow = ema(&self.ohlcv, 20);
+        let ema_long = ema(&self.ohlcv, 50);
+
+        let rsi_7 = rsi(&self.ohlcv, 7);
+        let rsi_14 = rsi(&self.ohlcv, 14);
+
+        let macd_diff = macd_diff_percent(&self.ohlcv, ema_fast, ema_slow);
+        let bb_percent = bb_percent(&self.ohlcv, 20, 2.0);
+        let zscore = zscore_price(&self.ohlcv, 50);
+        let mean_reversion = mean_reversion(&self.ohlcv);
+
+        let breakout_high = breakout_high(&self.ohlcv, 20);
+        let breakout_low = breakout_low(&self.ohlcv, 20);
+
+        let return_1_over_vol = return_1 / vol_rolling_3;
+        let return_5_over_vol = return_5 / vol_rolling_10;
+
+        let ema_fast_percent = (ema_fast - ema_slow) / ema_slow;
+        let ema_slow_percent = (ema_slow - ema_long) / ema_long;
+
+        let features = vec![
+            return_1,
+            return_2,
+            return_3,
+            return_5,
+            return_10,
+            log_return_1,
+            vol_rolling_3,
+            vol_rolling_5,
+            vol_rolling_10,
+            volume_change_1,
+            volume_change_3,
+            spread_val,
+            ema_fast_percent,
+            ema_slow_percent,
+            rsi_7,
+            rsi_14,
+            macd_diff,
+            bb_percent,
+            zscore,
+            mean_reversion,
+            breakout_high,
+            breakout_low,
+            return_1_over_vol,
+            return_5_over_vol,
+        ];
 
         features
     }
@@ -60,24 +96,29 @@ impl AddFeatures {
 
 #[derive(Debug, Clone)]
 pub struct CollectedData {
-    pub token: String,
+    pub symbol: String,
+    pub timeframe: f64,
     pub time: CircleTime,
-    pub ohlcv: [Candle; OHLCV_LEN],
-    pub ticker: Ticker,
     pub features: [f64; FEATURES_LEN],
 }
 
 impl CollectedData {
-    pub fn new(token: &str, ohlcv: [Candle; OHLCV_FETCH_LEN], ticker: Ticker) -> Self {
-        let ohlcv10 = ohlcv[..OHLCV_LEN].try_into().unwrap();
+    pub fn new(
+        symbol: &str,
+        ohlcv: Vec<Candle>,
+        ticker: Ticker,
+        timeframe: &str,
+        fake_ticker: bool,
+    ) -> Self {
+        let ohlcv_wrapped = ohlcv[..OHLCV_LEN].try_into().unwrap();
+        let timeframe = Timeframe::from_str(timeframe).unwrap().seconds().unwrap();
 
         CollectedData {
-            token: token.to_string(),
+            symbol: symbol.to_string(),
+            timeframe,
             time: TimeRequest::new().get_time(),
-            ohlcv: ohlcv10,
-            ticker: ticker.clone(),
-            features: AddFeatures::new(ticker, ohlcv10)
-                .apply_features()
+            features: AddFeatures::new(ticker, ohlcv_wrapped)
+                .apply_features(fake_ticker)
                 .try_into()
                 .unwrap(),
         }
@@ -89,104 +130,50 @@ impl CollectedData {
     }
 }
 
-struct ProcessAll {
-    ohlcv: [Candle; OHLCV_FETCH_LEN],
-    ticker: Ticker,
-}
-
-impl ProcessAll {
-    pub fn new(ohlcv: [Candle; OHLCV_FETCH_LEN], ticker: Ticker) -> Self {
-        ProcessAll { ohlcv, ticker }
-    }
-
-    pub fn ohlcv(&self) -> [Candle; OHLCV_FETCH_LEN] {
-        process_ohlcv(&self.ohlcv, self.ohlcv[0].open)
-            .try_into()
-            .unwrap()
-    }
-
-    pub fn ticker(&self) -> Ticker {
-        process_ticker(&self.ticker, self.ohlcv[0].open)
-    }
-}
-
 pub async fn collect_all(
-    token: &str,
+    symbol: &str,
     timeframe: &str,
     client: &CCXTClient,
 ) -> Result<CollectedData, anyhow::Error> {
     let (ohlcv_res, ticker_res) = tokio::join!(
-        client.fetch_ohlcv(token, timeframe, OHLCV_FETCH_LEN),
-        client.fetch_ticker(token),
+        client.fetch_ohlcv(symbol, timeframe, OHLCV_FETCH_LEN),
+        client.fetch_ticker(symbol),
     );
 
-    let ohlcv: [Candle; OHLCV_FETCH_LEN] = ohlcv_res?
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("Failed to convert ohlcv"))?;
+    let ohlcv = ohlcv_res?;
     let ticker = ticker_res?;
 
-    let process_value = ProcessAll::new(ohlcv, ticker);
-
-    Ok(CollectedData::new(
-        token,
-        process_value.ohlcv(),
-        process_value.ticker(),
-    ))
+    Ok(CollectedData::new(symbol, ohlcv, ticker, timeframe, false))
 }
 
-pub fn collect_from_slice(symbol: &str, candles: &[CandleWithTimestamp]) -> Option<CollectedData> {
-    let ticker = Ticker {
-        bid: 101.0,
-        ask: 100.0,
-        open: candles.last()?.open,
-        high: candles.last()?.high,
-        low: candles.last()?.low,
-        average: mean(candles.par_iter().map(|candle| candle.close).collect()),
-    }; // TODO Удалить зависимость Ticker от day_high, day_lowm day_open
+pub fn collect_from_slice(
+    symbol: &str,
+    timeframe: &str,
+    candles: &[CandleWithTimestamp],
+) -> Option<CollectedData> {
+    let ticker = Ticker { bid: 0.0, ask: 0.0 };
 
-    let candles_to_process: Vec<Candle> = candles.iter().map(|candle| candle.to_candle()).collect();
-    let process_value = ProcessAll::new(candles_to_process.try_into().unwrap(), ticker);
+    let ohlcv: Vec<Candle> = candles.iter().map(|candle| candle.to_candle()).collect();
     let time = TimeRequest::from_timestamp(candles[(candles.len() - 1) - 1].timestamp).get_time();
 
-    Some(CollectedData::new(symbol, process_value.ohlcv(), process_value.ticker()).with_time(time))
+    Some(CollectedData::new(symbol, ohlcv, ticker, timeframe, true).with_time(time))
 }
 
 pub fn flat_all(collected_data: Arc<CollectedData>, target: Option<f64>) -> FlattenedData {
-    let mut features = Vec::with_capacity(4 + 50 + 6 + FEATURES_LEN + 1);
+    let mut features = Vec::with_capacity(1 + 4 + FEATURES_LEN + 1);
 
+    features.push(collected_data.timeframe);
     features.push(collected_data.time.hour_sin);
     features.push(collected_data.time.hour_cos);
     features.push(collected_data.time.min_sin);
     features.push(collected_data.time.min_cos);
 
-    let ohlcv_features: Vec<f64> = collected_data
-        .ohlcv
-        .par_iter()
-        .flat_map(|candle| {
-            vec![
-                candle.open,
-                candle.high,
-                candle.low,
-                candle.close,
-                candle.volume,
-            ]
-        })
-        .collect();
-    features.extend(ohlcv_features);
-
-    features.push(collected_data.ticker.bid);
-    features.push(collected_data.ticker.ask);
-    features.push(collected_data.ticker.open);
-    features.push(collected_data.ticker.high);
-    features.push(collected_data.ticker.low);
-    features.push(collected_data.ticker.average);
-
     features.extend_from_slice(&collected_data.features);
 
     if let Some(t) = target {
         features.push(t);
-        FlattenedData::new(collected_data.token.clone(), features, true)
+        FlattenedData::new(collected_data.symbol.clone(), features, true)
     } else {
-        FlattenedData::new(collected_data.token.clone(), features, false)
+        FlattenedData::new(collected_data.symbol.clone(), features, false)
     }
 }

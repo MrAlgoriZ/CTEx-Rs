@@ -216,7 +216,11 @@ impl TrainingCycle {
 
             volatility = get_volatility(&to_volatility);
 
-            let candles = match collect_from_slice(&self.symbol, window) {
+            let candles = match collect_from_slice(
+                &self.symbol,
+                &self.config.timeframes.main_timeframe,
+                window,
+            ) {
                 Some(collected) => Arc::new(collected),
                 None => {
                     return Err(CycleError::AnyhowError(anyhow::anyhow!(

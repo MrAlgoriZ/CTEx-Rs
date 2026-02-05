@@ -8,7 +8,7 @@ pub struct Config {
     pub prints: PrintsConfig,
     pub behaviour: BehaviourConfig,
     pub runtime: RuntimeConfig,
-    pub token: Vec<String>,
+    pub symbols: Vec<String>,
     pub main_exchange: String,
     pub timeframes: TimeframesConfig,
     pub mode: String,
@@ -175,7 +175,7 @@ impl Default for Config {
                 accuracy_capacity: 192,
                 feedback_engine_capacity: 5,
             },
-            token: vec!["BTCUSDT".to_string()],
+            symbols: vec!["BTCUSDT".to_string()],
             runtime: RuntimeConfig {
                 runtime_type: RuntimeType::Realtime,
                 with_training: false,

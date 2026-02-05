@@ -47,12 +47,12 @@ prints:
     manager_init: true
     additional_manager_prints: true
 
-token:
-  - TONUSDT
+symbols:
+  - SOLUSDT
 
 runtime:
   type: "backtest"
-  with_training: true
+  with_training: false
   cycle_type: "training"
 
 main_exchange: "binance"

@@ -15,7 +15,7 @@ const CONFIG_PATH: &'static str = "config/config.yaml";
 async fn main() -> Result<(), anyhow::Error> {
     ensure_config_exists(CONFIG_PATH);
     let config = load_config(CONFIG_PATH);
-    let symbols = config.token;
+    let symbols = config.symbols;
 
     let mut cycle_types = HashMap::new();
     for symbol in symbols.clone().into_iter() {

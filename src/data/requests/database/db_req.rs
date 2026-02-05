@@ -2,98 +2,41 @@ use crate::{data::data_interfaces::FlattenedData, engine::utils::colors::Fore};
 use sqlx::{Error, PgPool, Row, query};
 
 const COLUMNS: &'static [&str] = &[
+    "timeframe",
     "hour_sin",
     "hour_cos",
     "min_sin",
     "min_cos",
-    "open_1",
-    "high_1",
-    "low_1",
-    "close_1",
-    "volume_1",
-    "open_2",
-    "high_2",
-    "low_2",
-    "close_2",
-    "volume_2",
-    "open_3",
-    "high_3",
-    "low_3",
-    "close_3",
-    "volume_3",
-    "open_4",
-    "high_4",
-    "low_4",
-    "close_4",
-    "volume_4",
-    "open_5",
-    "high_5",
-    "low_5",
-    "close_5",
-    "volume_5",
-    "open_6",
-    "high_6",
-    "low_6",
-    "close_6",
-    "volume_6",
-    "open_7",
-    "high_7",
-    "low_7",
-    "close_7",
-    "volume_7",
-    "open_8",
-    "high_8",
-    "low_8",
-    "close_8",
-    "volume_8",
-    "open_9",
-    "high_9",
-    "low_9",
-    "close_9",
-    "volume_9",
-    "open_10",
-    "high_10",
-    "low_10",
-    "close_10",
-    "volume_10",
-    "bid",
-    "ask",
-    "day_open",
-    "day_high",
-    "day_low",
-    "mean_price",
-    "spread_rel",
-    "mid_price",
-    "pressure_side",
-    "bid_ask_ratio",
-    "mid_distance_day_highlow",
-    "body_1",
-    "body_strength_1",
-    "body_2",
-    "body_strength_2",
-    "body_3",
-    "body_strength_3",
-    "body_4",
-    "body_strength_4",
-    "body_5",
-    "body_strength_5",
-    "body_6",
-    "body_strength_6",
-    "body_7",
-    "body_strength_7",
-    "body_8",
-    "body_strength_8",
-    "body_9",
-    "body_strength_9",
-    "body_10",
-    "body_strength_10",
-    "volatility",
+    "return_1",
+    "return_2",
+    "return_3",
+    "return_5",
+    "return_10",
+    "log_return_1",
+    "vol_rolling_3",
+    "vol_rolling_5",
+    "vol_rolling_10",
+    "volume_change_1",
+    "volume_change_3",
+    "spread",
+    "ema_fast",
+    "ema_slow",
+    "rsi_7",
+    "rsi_14",
+    "macd_diff",
+    "bb_percent",
+    "zscore_price",
+    "mean_reversion",
+    "breakout_high",
+    "breakout_low",
+    "return_1_over_vol",
+    "return_5_over_vol",
     "target",
 ];
 
 pub async fn insert_candle(
     pool: &PgPool,
-    token: &str,
+    symbol: &str,
     values: &[f64],
 ) -> Result<(), anyhow::Error> {
     if values.len() != COLUMNS.len() {
@@ -110,12 +53,12 @@ pub async fn insert_candle(
         .join(", ");
 
     let sql = format!(
-        "INSERT INTO candles (token, {}) VALUES ($1, {})",
+        "INSERT INTO new_candles (symbol, {}) VALUES ($1, {})",
         COLUMNS.join(", "),
         placeholders
     );
 
-    let mut q = query(&sql).bind(token);
+    let mut q = query(&sql).bind(symbol);
     for v in values {
         q = q.bind(v);
     }
@@ -130,7 +73,7 @@ pub async fn insert_candle(
 
 pub async fn select_all_candles(pool: &PgPool) -> Result<Vec<FlattenedData>, Error> {
     let rows = sqlx::query(&format!(
-        "SELECT token, {} FROM candles",
+        "SELECT symbol, {} FROM new_candles",
         COLUMNS.join(", ")
     ))
     .fetch_all(pool)
@@ -139,7 +82,7 @@ pub async fn select_all_candles(pool: &PgPool) -> Result<Vec<FlattenedData>, Err
     let mut result = Vec::with_capacity(rows.len());
 
     for row in rows {
-        let token: String = row.try_get("token")?;
+        let symbol: String = row.try_get("symbol")?;
 
         let mut values = Vec::new();
         for i in 2..row.columns().len() {
@@ -147,7 +90,7 @@ pub async fn select_all_candles(pool: &PgPool) -> Result<Vec<FlattenedData>, Err
             values.push(value.unwrap_or(f64::NAN));
         }
 
-        result.push(FlattenedData::new(token, values, true));
+        result.push(FlattenedData::new(symbol, values, true));
     }
 
     Ok(result)

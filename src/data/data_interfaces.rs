@@ -33,10 +33,6 @@ impl CandleWithTimestamp {
 pub struct Ticker {
     pub bid: f64,
     pub ask: f64,
-    pub open: f64,
-    pub high: f64,
-    pub low: f64,
-    pub average: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -49,15 +45,15 @@ pub struct CircleTime {
 
 #[derive(Debug)]
 pub struct FlattenedData {
-    pub token: String,
+    pub symbol: String,
     pub features: Vec<f64>,
     with_target: bool,
 }
 
 impl FlattenedData {
-    pub fn new(token: String, features: Vec<f64>, with_target: bool) -> Self {
+    pub fn new(symbol: String, features: Vec<f64>, with_target: bool) -> Self {
         FlattenedData {
-            token,
+            symbol,
             features,
             with_target,
         }

@@ -162,7 +162,11 @@ impl LoaderCycle {
             let window = &all_candles[i - OHLCV_FETCH_LEN..i];
             let current_target = all_candles[i - 2].close;
 
-            let candles = match collect_from_slice(&self.symbol, window) {
+            let candles = match collect_from_slice(
+                &self.symbol,
+                &self.config.timeframes.main_timeframe,
+                window,
+            ) {
                 Some(collected) => collected,
                 None => {
                     return Err(CycleError::AnyhowError(anyhow::anyhow!(
