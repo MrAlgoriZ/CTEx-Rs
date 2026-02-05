@@ -85,7 +85,7 @@ pub async fn select_all_candles(pool: &PgPool) -> Result<Vec<FlattenedData>, Err
         let symbol: String = row.try_get("symbol")?;
 
         let mut values = Vec::new();
-        for i in 2..row.columns().len() {
+        for i in 1..row.columns().len() {
             let value: Option<f64> = row.try_get(i)?;
             values.push(value.unwrap_or(f64::NAN));
         }

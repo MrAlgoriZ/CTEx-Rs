@@ -57,8 +57,20 @@ impl AddFeatures {
         let breakout_high = breakout_high(&self.ohlcv, 20);
         let breakout_low = breakout_low(&self.ohlcv, 20);
 
-        let return_1_over_vol = return_1 / vol_rolling_3;
-        let return_5_over_vol = return_5 / vol_rolling_10;
+        let return_1_over_vol = {
+            if vol_rolling_3.abs() < 1e-12 {
+                0.0
+            } else {
+                return_1 / vol_rolling_3
+            }
+        };
+        let return_5_over_vol = {
+            if vol_rolling_10.abs() < 1e-12 {
+                0.0
+            } else {
+                return_5 / vol_rolling_10
+            }
+        };
 
         let ema_fast_percent = (ema_fast - ema_slow) / ema_slow;
         let ema_slow_percent = (ema_slow - ema_long) / ema_long;

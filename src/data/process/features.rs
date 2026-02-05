@@ -162,29 +162,72 @@ pub fn mean_reversion(candles: &[Candle]) -> f64 {
 
 pub fn breakout_high(candles: &[Candle], period: usize) -> f64 {
     let slice = &candles[candles.len() - period..];
-    let close = slice.last().unwrap().close;
+
+    let close = match slice.last() {
+        Some(candle) => {
+            if candle.close.is_nan() || candle.close.is_infinite() {
+                return 0.0;
+            }
+            candle.close
+        }
+        None => return 0.0,
+    };
 
     let rolling_high = slice
         .iter()
+        .filter(|c| !c.high.is_nan() && !c.high.is_infinite())
         .map(|c| c.high)
         .fold(f64::NEG_INFINITY, f64::max);
+
+    if rolling_high == f64::NEG_INFINITY {
+        return 0.0;
+    }
 
     if rolling_high.abs() < 1e-12 {
         return 0.0;
     }
 
-    (close - rolling_high) / rolling_high
+    let result = (close - rolling_high) / rolling_high;
+
+    if result.is_nan() || result.is_infinite() {
+        return 0.0;
+    }
+
+    result
 }
 
 pub fn breakout_low(candles: &[Candle], period: usize) -> f64 {
     let slice = &candles[candles.len() - period..];
-    let close = slice.last().unwrap().close;
 
-    let rolling_low = slice.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+    let close = match slice.last() {
+        Some(candle) => {
+            if candle.close.is_nan() || candle.close.is_infinite() {
+                return 0.0;
+            }
+            candle.close
+        }
+        None => return 0.0,
+    };
+
+    let rolling_low = slice
+        .iter()
+        .filter(|c| !c.low.is_nan() && !c.low.is_infinite())
+        .map(|c| c.low)
+        .fold(f64::INFINITY, f64::min);
+
+    if rolling_low == f64::INFINITY {
+        return 0.0;
+    }
 
     if rolling_low.abs() < 1e-12 {
         return 0.0;
     }
 
-    (close - rolling_low) / rolling_low
+    let result = (close - rolling_low) / rolling_low;
+
+    if result.is_nan() || result.is_infinite() {
+        return 0.0;
+    }
+
+    result
 }

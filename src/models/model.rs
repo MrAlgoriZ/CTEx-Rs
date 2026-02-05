@@ -57,6 +57,13 @@ impl RFInterface {
             ));
         }
 
+        if total_len != 30 {
+            return Err(anyhow!(
+                "Expected 30 columns (29 features + 1 target), got {}",
+                total_len
+            ));
+        }
+
         let feature_len = total_len - 1;
         let target_idx = feature_len;
 
@@ -91,10 +98,20 @@ impl RFInterface {
 
         let mut x_rows: Vec<Vec<f64>> = Vec::with_capacity(n_samples);
         let mut y_target: Vec<f64> = Vec::with_capacity(n_samples);
+        let mut skipped_nan_features = 0;
+        let mut skipped_nan_target = 0;
 
         for row in data.iter() {
             let target = row.features[target_idx];
+
             if target.is_nan() {
+                skipped_nan_target += 1;
+                continue;
+            }
+
+            let has_nan_features = row.features[..feature_len].iter().any(|&v| v.is_nan());
+            if has_nan_features {
+                skipped_nan_features += 1;
                 continue;
             }
 
@@ -110,6 +127,27 @@ impl RFInterface {
 
             x_rows.push(full_row);
             y_target.push(target);
+        }
+
+        if self.config.prints.model.metrics {
+            println!(
+                "{}[{}] Пропущено строк: {} (NaN в target), {} (NaN в признаках)",
+                Fore::YELLOW.as_str(),
+                Utc::now().format("%H:%M:%S"),
+                skipped_nan_target,
+                skipped_nan_features
+            );
+            println!(
+                "{}[{}] Осталось {} валидных строк из {}",
+                Fore::GREEN.as_str(),
+                Utc::now().format("%H:%M:%S"),
+                x_rows.len(),
+                n_samples
+            );
+        }
+
+        if x_rows.is_empty() {
+            return Err(anyhow!("No valid data after removing NaN values"));
         }
 
         assert!(
