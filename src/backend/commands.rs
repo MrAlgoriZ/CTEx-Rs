@@ -1,16 +1,15 @@
-use crate::{
-    CONFIG_PATH,
-    backend::structure::{ApiState, ApiStructure},
-    engine::{
-        cycles::manager::{CounterCommand, CounterType, CycleType, SupervisorCommand},
-        utils::config::load_config::load_config,
-    },
+use std::collections::HashMap;
+
+use crate::CONFIG_PATH;
+use crate::backend::structure::{ApiState, ApiStructure};
+use crate::engine::cycles::manager::{
+    CounterCommand, CounterType, CycleType, PredictionCommand, SupervisorCommand,
 };
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-    http::StatusCode,
-};
+use crate::engine::utils::config::load_config::load_config;
+
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
@@ -58,6 +57,11 @@ pub struct AccuracyQuery {
     pub window: usize,
     #[serde(rename = "type")]
     pub counter_type: String,
+}
+
+#[derive(Deserialize)]
+pub struct SymbolQuery {
+    pub symbol: String,
 }
 
 fn default_window() -> usize {
@@ -307,4 +311,75 @@ pub async fn accuracy_all_tokens(
     }
 
     Ok(Json(ApiResponse::success(accuracies)))
+}
+
+pub async fn get_last_prediction(
+    State(state): State<ApiState>,
+    Query(query): Query<SymbolQuery>,
+) -> Result<Json<ApiResponse<f64>>, StatusCode> {
+    let (tx, rx) = oneshot::channel();
+
+    state
+        .prediction_handle
+        .send(PredictionCommand::GetLastPrediction {
+            symbol: query.symbol,
+            respond_to: tx,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let last = rx
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NO_CONTENT)?;
+
+    Ok(Json(ApiResponse::success(last)))
+}
+
+pub async fn predictions_list(
+    State(state): State<ApiState>,
+    Query(query): Query<SymbolQuery>,
+) -> Result<Json<ApiResponse<Vec<f64>>>, StatusCode> {
+    let (tx, rx) = oneshot::channel();
+
+    state
+        .prediction_handle
+        .send(PredictionCommand::GetPredictions {
+            symbol: query.symbol,
+            respond_to: tx,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let result: Vec<f64> = rx
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NO_CONTENT)?
+        .data
+        .clone()
+        .into_iter()
+        .collect();
+    Ok(Json(ApiResponse::success(result)))
+}
+
+pub async fn all_predictions_list(
+    State(state): State<ApiState>,
+) -> Result<Json<ApiResponse<HashMap<String, Vec<f64>>>>, StatusCode> {
+    let (tx, rx) = oneshot::channel();
+
+    state
+        .prediction_handle
+        .send(PredictionCommand::ListPredictions { respond_to: tx })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let result: HashMap<String, Vec<f64>> = rx
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NO_CONTENT)?
+        .clone()
+        .into_iter()
+        .map(|data| (data.0, data.1.data.into_iter().collect()))
+        .collect();
+    Ok(Json(ApiResponse::success(result)))
 }

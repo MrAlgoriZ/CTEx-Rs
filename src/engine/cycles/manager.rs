@@ -1,5 +1,5 @@
 use anyhow::Context;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde::Deserialize;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -662,12 +662,6 @@ impl CycleManager {
     }
 }
 
-#[derive(Clone)]
-pub struct Prediction {
-    pub prediction: f64,
-    pub when: DateTime<Utc>,
-}
-
 pub enum PredictionCommand {
     AddPrediction {
         symbol: String,
@@ -675,21 +669,21 @@ pub enum PredictionCommand {
         respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
     },
     ListPredictions {
-        respond_to: oneshot::Sender<Option<HashMap<String, SymbolCounters<Prediction>>>>,
+        respond_to: oneshot::Sender<Option<HashMap<String, SymbolCounters<f64>>>>,
     },
     GetLastPrediction {
         symbol: String,
-        respond_to: oneshot::Sender<Option<Prediction>>,
+        respond_to: oneshot::Sender<Option<f64>>,
     },
     GetPredictions {
         symbol: String,
-        respond_to: oneshot::Sender<Option<SymbolCounters<Prediction>>>,
+        respond_to: oneshot::Sender<Option<SymbolCounters<f64>>>,
     },
 }
 
 pub struct PredictionsActor {
     capacity: usize,
-    predictions: HashMap<String, SymbolCounters<Prediction>>,
+    predictions: HashMap<String, SymbolCounters<f64>>,
     inbox: mpsc::Receiver<PredictionCommand>,
 }
 
@@ -721,10 +715,7 @@ impl PredictionsActor {
                         .predictions
                         .entry(symbol)
                         .or_insert_with(|| SymbolCounters::new(self.capacity));
-                    pred_counter.push(Prediction {
-                        prediction,
-                        when: Utc::now(),
-                    });
+                    pred_counter.push(prediction);
                     let _ = respond_to.send(Ok(()));
                 }
                 PredictionCommand::GetLastPrediction { symbol, respond_to } => {

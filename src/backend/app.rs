@@ -61,6 +61,15 @@ impl Api {
                 &structure.accuracy_all_tokens,
                 get(commands::accuracy_all_tokens),
             )
+            .route(
+                &structure.get_last_prediction,
+                get(commands::get_last_prediction),
+            )
+            .route(&structure.predictions_list, get(commands::predictions_list))
+            .route(
+                &structure.all_predictions_list,
+                get(commands::all_predictions_list),
+            )
             .with_state(state)
     }
 

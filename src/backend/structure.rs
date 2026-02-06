@@ -6,8 +6,6 @@ use tokio::sync::mpsc;
 pub struct ApiState {
     pub supervisor_handle: mpsc::Sender<SupervisorCommand>,
     pub counter_handle: mpsc::Sender<CounterCommand>,
-    // TODO Улучшить бекенд
-    #[allow(unused)]
     pub prediction_handle: mpsc::Sender<PredictionCommand>,
 }
 
@@ -24,6 +22,10 @@ pub struct ApiStructure {
     pub accuracy_total: String,
     pub accuracy_token: String,
     pub accuracy_all_tokens: String,
+
+    pub get_last_prediction: String,
+    pub predictions_list: String,
+    pub all_predictions_list: String,
 }
 
 impl Default for ApiStructure {
@@ -40,6 +42,10 @@ impl Default for ApiStructure {
             accuracy_total: "/accuracy/total".to_string(),
             accuracy_token: "/accuracy/{symbol}".to_string(),
             accuracy_all_tokens: "/accuracy".to_string(),
+
+            get_last_prediction: "/prediction/{symbol}".to_string(),
+            predictions_list: "/prediction/list/{symbol}".to_string(),
+            all_predictions_list: "/prediction/list".to_string(),
         }
     }
 }
