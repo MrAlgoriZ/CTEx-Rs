@@ -970,6 +970,12 @@ impl ServersActor {
         Some(active[0].0.clone())
     }
 
+    fn mark_server_inactive(&mut self, server: &str) {
+        if let Some(state) = self.servers.get_mut(server) {
+            state.active = false;
+        }
+    }
+
     async fn fetch_ohlcv(
         &mut self,
         symbol: &str,
@@ -978,51 +984,68 @@ impl ServersActor {
         exchange_name: &str,
         server: &str,
     ) -> Result<Vec<Candle>, anyhow::Error> {
-        let payload = serde_json::json!({
-            "exchange_name": exchange_name,
-            "symbol": parse_symbol(symbol),
-            "timeframe": timeframe,
-            "limit": limit
-        });
+        let mut current_server = server.to_string();
 
-        let res = reqwest::Client::new()
-            .post(format!("http://{}/exchange/fetch/ohlcv", server))
-            .json(&payload)
-            .send()
-            .await?;
+        loop {
+            let payload = serde_json::json!({
+                "exchange_name": exchange_name,
+                "symbol": parse_symbol(symbol),
+                "timeframe": timeframe,
+                "limit": limit
+            });
 
-        let body: ApiResponse<serde_json::Value> = res.json().await?;
-        self.add_workload(server.to_string(), limit as u8)?;
-        if !body.success {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
-        }
-        let raw_ohlcv = match body.data {
-            Some(candles) => candles,
-            None => return Err(anyhow::anyhow!("Data is None!")),
-        };
+            let res = match reqwest::Client::new()
+                .post(format!("http://{}/exchange/fetch/ohlcv", current_server))
+                .json(&payload)
+                .send()
+                .await
+            {
+                Ok(ohlcv) => ohlcv,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    self.mark_server_inactive(&current_server);
 
-        let candles = raw_ohlcv
-            .as_array()
-            .context("ohlcv is not an array")?
-            .iter()
-            .map(|item| {
-                let arr = item.as_array().context("ohlcv item is not an array")?;
+                    current_server = self
+                        .get_priority()
+                        .ok_or_else(|| anyhow::anyhow!("Нет активных серверов"))?;
 
-                if arr.len() < 6 {
-                    return Err(anyhow::anyhow!("ohlcv item has less than 6 elements"));
+                    continue;
                 }
+            };
 
-                Ok(Candle {
-                    open: arr[1].as_f64().context("open is not a number")?,
-                    high: arr[2].as_f64().context("high is not a number")?,
-                    low: arr[3].as_f64().context("low is not a number")?,
-                    close: arr[4].as_f64().context("close is not a number")?,
-                    volume: arr[5].as_f64().context("volume is not a number")?,
+            let body: ApiResponse<serde_json::Value> = res.json().await?;
+            self.add_workload(current_server.clone(), limit as u8)?;
+            if !body.success {
+                return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+            }
+            let raw_ohlcv = match body.data {
+                Some(candles) => candles,
+                None => return Err(anyhow::anyhow!("Data is None!")),
+            };
+
+            let candles = raw_ohlcv
+                .as_array()
+                .context("ohlcv is not an array")?
+                .iter()
+                .map(|item| {
+                    let arr = item.as_array().context("ohlcv item is not an array")?;
+
+                    if arr.len() < 6 {
+                        return Err(anyhow::anyhow!("ohlcv item has less than 6 elements"));
+                    }
+
+                    Ok(Candle {
+                        open: arr[1].as_f64().context("open is not a number")?,
+                        high: arr[2].as_f64().context("high is not a number")?,
+                        low: arr[3].as_f64().context("low is not a number")?,
+                        close: arr[4].as_f64().context("close is not a number")?,
+                        volume: arr[5].as_f64().context("volume is not a number")?,
+                    })
                 })
-            })
-            .collect::<Result<Vec<_>, anyhow::Error>>()?;
+                .collect::<Result<Vec<_>, anyhow::Error>>()?;
 
-        Ok(candles)
+            return Ok(candles);
+        }
     }
 
     async fn fetch_ohlcv_with_timestamps(
@@ -1033,52 +1056,69 @@ impl ServersActor {
         exchange_name: &str,
         server: &str,
     ) -> Result<Vec<CandleWithTimestamp>, anyhow::Error> {
-        let payload = serde_json::json!({
-            "exchange_name": exchange_name,
-            "symbol": parse_symbol(symbol),
-            "timeframe": timeframe,
-            "limit": limit
-        });
+        let mut current_server = server.to_string();
 
-        let res = reqwest::Client::new()
-            .post(format!("http://{}/exchange/fetch/ohlcv", server))
-            .json(&payload)
-            .send()
-            .await?;
+        loop {
+            let payload = serde_json::json!({
+                "exchange_name": exchange_name,
+                "symbol": parse_symbol(symbol),
+                "timeframe": timeframe,
+                "limit": limit
+            });
 
-        let body: ApiResponse<serde_json::Value> = res.json().await?;
-        self.add_workload(server.to_string(), limit as u8)?;
-        if !body.success {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
-        }
-        let raw_ohlcv = match body.data {
-            Some(candles) => candles,
-            None => return Err(anyhow::anyhow!("Data is None!")),
-        };
+            let res = match reqwest::Client::new()
+                .post(format!("http://{}/exchange/fetch/ohlcv", current_server))
+                .json(&payload)
+                .send()
+                .await
+            {
+                Ok(response) => response,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    self.mark_server_inactive(&current_server);
 
-        let candles = raw_ohlcv
-            .as_array()
-            .context("ohlcv is not an array")?
-            .iter()
-            .map(|item| {
-                let arr = item.as_array().context("ohlcv item is not an array")?;
+                    current_server = self
+                        .get_priority()
+                        .ok_or_else(|| anyhow::anyhow!("Нет активных серверов"))?;
 
-                if arr.len() < 6 {
-                    return Err(anyhow::anyhow!("ohlcv item has less than 6 elements"));
+                    continue;
                 }
+            };
 
-                Ok(CandleWithTimestamp {
-                    timestamp: arr[0].as_u64().context("timestamp is nor a number")?,
-                    open: arr[1].as_f64().context("open is not a number")?,
-                    high: arr[2].as_f64().context("high is not a number")?,
-                    low: arr[3].as_f64().context("low is not a number")?,
-                    close: arr[4].as_f64().context("close is not a number")?,
-                    volume: arr[5].as_f64().context("volume is not a number")?,
+            let body: ApiResponse<serde_json::Value> = res.json().await?;
+            self.add_workload(current_server.clone(), limit as u8)?;
+            if !body.success {
+                return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+            }
+            let raw_ohlcv = match body.data {
+                Some(candles) => candles,
+                None => return Err(anyhow::anyhow!("Data is None!")),
+            };
+
+            let candles = raw_ohlcv
+                .as_array()
+                .context("ohlcv is not an array")?
+                .iter()
+                .map(|item| {
+                    let arr = item.as_array().context("ohlcv item is not an array")?;
+
+                    if arr.len() < 6 {
+                        return Err(anyhow::anyhow!("ohlcv item has less than 6 elements"));
+                    }
+
+                    Ok(CandleWithTimestamp {
+                        timestamp: arr[0].as_u64().context("timestamp is nor a number")?,
+                        open: arr[1].as_f64().context("open is not a number")?,
+                        high: arr[2].as_f64().context("high is not a number")?,
+                        low: arr[3].as_f64().context("low is not a number")?,
+                        close: arr[4].as_f64().context("close is not a number")?,
+                        volume: arr[5].as_f64().context("volume is not a number")?,
+                    })
                 })
-            })
-            .collect::<Result<Vec<_>, anyhow::Error>>()?;
+                .collect::<Result<Vec<_>, anyhow::Error>>()?;
 
-        Ok(candles)
+            return Ok(candles);
+        }
     }
 
     async fn fetch_ticker(
@@ -1087,39 +1127,57 @@ impl ServersActor {
         exchange_name: &str,
         server: &str,
     ) -> Result<Ticker, anyhow::Error> {
-        let payload = serde_json::json!({
-            "exchange_name": exchange_name,
-            "symbol": parse_symbol(symbol)
-        });
+        let mut current_server = server.to_string();
 
-        let res = reqwest::Client::new()
-            .post(format!("http://{}/exchange/fetch/ticker", server))
-            .json(&payload)
-            .send()
-            .await?;
-        let body: ApiResponse<serde_json::Value> = res.json().await?;
-        self.add_workload(server.to_string(), 1)?;
-        if !body.success {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+        loop {
+            let payload = serde_json::json!({
+                "exchange_name": exchange_name,
+                "symbol": parse_symbol(symbol)
+            });
+
+            let res = match reqwest::Client::new()
+                .post(format!("http://{}/exchange/fetch/ticker", current_server))
+                .json(&payload)
+                .send()
+                .await
+            {
+                Ok(response) => response,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    self.mark_server_inactive(&current_server);
+
+                    current_server = self
+                        .get_priority()
+                        .ok_or_else(|| anyhow::anyhow!("Нет активных серверов"))?;
+
+                    continue;
+                }
+            };
+
+            let body: ApiResponse<serde_json::Value> = res.json().await?;
+            self.add_workload(current_server.clone(), 1)?;
+            if !body.success {
+                return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+            }
+            let bid = body
+                .data
+                .clone()
+                .unwrap()
+                .get("bid")
+                .unwrap()
+                .as_f64()
+                .unwrap();
+            let ask = body
+                .data
+                .clone()
+                .unwrap()
+                .get("ask")
+                .unwrap()
+                .as_f64()
+                .unwrap();
+
+            return Ok(Ticker { bid, ask });
         }
-        let bid = body
-            .data
-            .clone()
-            .unwrap()
-            .get("bid")
-            .unwrap()
-            .as_f64()
-            .unwrap();
-        let ask = body
-            .data
-            .clone()
-            .unwrap()
-            .get("ask")
-            .unwrap()
-            .as_f64()
-            .unwrap();
-
-        Ok(Ticker { bid, ask })
     }
 
     async fn test_symbol(

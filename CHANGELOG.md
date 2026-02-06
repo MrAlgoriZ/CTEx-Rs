@@ -348,3 +348,7 @@
   - Модель изменена с RandomForestRegressor на XGBoostRegressor
   - Добавлена структура AccuracyModel
   - Добавлен исполнитель PredictionActor
+
+6-2-2026:
+  - Бекенд улучшен под PredictionActor
+  - Добавлен перезапуск в случае, если сервер резко перестал работать
