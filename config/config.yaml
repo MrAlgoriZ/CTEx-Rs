@@ -37,7 +37,7 @@ behaviour:
 
 prints:
   model:
-    evualate: true
+    skipped_values: true
     metrics: true
   cycle:
     volatility: true

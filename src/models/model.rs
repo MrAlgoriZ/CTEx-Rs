@@ -112,7 +112,7 @@ pub trait Model: ModelDependencies {
             y_target.push(target);
         }
 
-        if self.get_config().prints.model.metrics {
+        if self.get_config().prints.model.skipped_values {
             println!(
                 "{}[{}] Пропущено строк: {} (NaN в target), {} (NaN в признаках)",
                 Fore::YELLOW.as_str(),
@@ -212,7 +212,7 @@ pub trait Model: ModelDependencies {
                     );
                 }
 
-                if self.get_config().prints.model.evualate {
+                if self.get_config().prints.model.metrics {
                     println!(
                         "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
                         Fore::WHITE.as_str(),
@@ -233,7 +233,7 @@ pub trait Model: ModelDependencies {
             }
             MetricType::Direction => {
                 let dir_accuracy = direction_accuracy(&y_float, &proba);
-                if self.get_config().prints.model.evualate {
+                if self.get_config().prints.model.metrics {
                     println!(
                         "{}[{}] Точность по направлению для {} составляет {:.3}%",
                         Fore::WHITE.as_str(),
@@ -250,7 +250,7 @@ pub trait Model: ModelDependencies {
                     &proba,
                     self.get_config().behaviour.success_threshold.default,
                 );
-                if self.get_config().prints.model.evualate {
+                if self.get_config().prints.model.metrics {
                     println!(
                         "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
                         Fore::WHITE.as_str(),

@@ -84,7 +84,7 @@ pub struct PrintsConfig {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ModelPrintsConfig {
-    pub evualate: bool,
+    pub skipped_values: bool,
     pub metrics: bool,
 }
 
@@ -155,7 +155,7 @@ impl Default for Config {
             servers: vec!["127.0.0.1:3737".to_string()],
             prints: PrintsConfig {
                 model: ModelPrintsConfig {
-                    evualate: true,
+                    skipped_values: true,
                     metrics: false,
                 },
                 cycle: CyclePrintsConfig {
