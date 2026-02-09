@@ -1,3 +1,4 @@
+pub mod linear;
 pub mod metrics;
 pub mod model;
 pub mod randomforest;
@@ -8,6 +9,7 @@ pub mod xgboost;
 pub enum ModelType {
     RandomForest,
     XGBoost,
+    Linear,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
@@ -15,4 +17,5 @@ pub enum ModelType {
 pub enum ModelParams {
     XGBoost { n_estimators: usize, max_depth: u16 },
     RandomForest { n_trees: usize, max_depth: u16 },
+    Linear { solver: String },
 }

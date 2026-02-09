@@ -22,6 +22,7 @@ use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::engine::utils::parse::parse_symbol;
 use crate::models::ModelParams;
+use crate::models::linear::Linear;
 use crate::models::model::Model;
 use crate::models::randomforest::RandomForest;
 use crate::models::xgboost::XGBoost;
@@ -638,6 +639,10 @@ impl CycleManager {
                     n_trees,
                     max_depth,
                 ));
+                model
+            }
+            ModelParams::Linear { solver } => {
+                let model = Box::new(Linear::new(Some(self.prediction_tx.clone()), solver));
                 model
             }
         };

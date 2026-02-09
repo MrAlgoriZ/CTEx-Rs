@@ -164,6 +164,7 @@ pub trait Model: ModelDependencies {
             true,
             Some(self.get_config().model.seed),
         );
+        let (x_train, x_val) = self.normalize(x_train, x_val);
 
         Ok((x_train, x_val, y_train, y_val))
     }
@@ -388,6 +389,13 @@ pub trait Model: ModelDependencies {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error>;
+    fn normalize(
+        &self,
+        x_train: DenseMatrix<f64>,
+        x_val: DenseMatrix<f64>,
+    ) -> (DenseMatrix<f64>, DenseMatrix<f64>) {
+        (x_train, x_val)
+    }
 }
 
 #[tokio::test]
@@ -414,6 +422,12 @@ async fn test_training() -> Result<(), anyhow::Error> {
 
             let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
             rf.train(data)?;
+        }
+        crate::models::ModelParams::Linear { solver } => {
+            let mut ln = crate::models::linear::Linear::new(None, solver);
+
+            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
+            ln.train(data)?;
         }
     }
     Ok(())
