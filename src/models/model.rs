@@ -187,6 +187,7 @@ pub trait Model: ModelDependencies {
                 let mae = mean_absolute_error(&y_float, &proba);
                 let mse = mean_squared_error(&y_float, &proba);
                 let r2_score = r2(&y_float, &proba);
+                let rmse = mean_squared_error(&y_float, &proba).sqrt();
 
                 if self.get_config().prints.model.metrics {
                     println!(
@@ -210,9 +211,7 @@ pub trait Model: ModelDependencies {
                         self.get_name(),
                         r2_score
                     );
-                }
 
-                if self.get_config().prints.model.metrics {
                     println!(
                         "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
                         Fore::WHITE.as_str(),
@@ -227,6 +226,13 @@ pub trait Model: ModelDependencies {
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         dir_accuracy * 100.0
+                    );
+                    println!(
+                        "{}[{}] Ошибка по RMSE для {}: {:.3} pp",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_name(),
+                        rmse
                     );
                 }
                 thr_accuracy
