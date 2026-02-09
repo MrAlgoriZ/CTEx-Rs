@@ -1,7 +1,5 @@
 use anyhow::anyhow;
 use chrono::Utc;
-use smartcore::xgboost::{XGRegressor, XGRegressorParameters};
-use sqlx::PgPool;
 
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::{mean_absolute_error, mean_squared_error, r2};
@@ -10,39 +8,40 @@ use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::data::data_interfaces::FlattenedData;
-use crate::data::requests::database::db_req::select_all_candles;
 use crate::engine::cycles::manager::PredictionCommand;
+use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
-use crate::engine::utils::{colors::Fore, config::load_config::load_config};
+use crate::models::metrics::*;
 
-pub struct XGBoost {
-    model: Option<XGRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
-    name: String,
-    x_train: Option<DenseMatrix<f64>>,
-    x_val: Option<DenseMatrix<f64>>,
-    y_train: Option<Vec<f64>>,
-    y_val: Option<Vec<f64>>,
-    symbol_columns: Option<Vec<String>>,
-    config: Config,
-    prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+#[derive(Debug)]
+pub struct ModelAccuracy {
+    #[allow(unused)]
+    mae: f64,
+    #[allow(unused)]
+    mse: f64,
+    #[allow(unused)]
+    r2: f64,
+    #[allow(unused)]
+    thr_acc: f64,
+    #[allow(unused)]
+    dir_acc: f64,
 }
 
-impl XGBoost {
-    pub fn new(prediction_tx: Option<mpsc::Sender<PredictionCommand>>) -> Self {
-        let config = load_config("config/config.yaml");
-        Self {
-            model: None,
-            name: config.model.name.clone(),
-            x_train: None,
-            x_val: None,
-            y_train: None,
-            y_val: None,
-            symbol_columns: None,
-            config,
-            prediction_tx,
-        }
-    }
+pub trait ModelDependencies {
+    fn get_name(&self) -> &str;
+    fn change_x_train(&mut self, x_train: Option<DenseMatrix<f64>>);
+    fn change_x_val(&mut self, x_val: Option<DenseMatrix<f64>>);
+    fn change_y_train(&mut self, y_train: Option<Vec<f64>>);
+    fn change_y_val(&mut self, y_val: Option<Vec<f64>>);
+    fn get_symbol_columns(&self) -> &Option<Vec<String>>;
+    fn change_symbol_columns(&mut self, symbol_columns: Option<Vec<String>>);
+    fn get_config(&self) -> &Config;
+    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionCommand>>;
+    fn check_model_trained(&self) -> bool;
+}
 
+#[async_trait::async_trait]
+pub trait Model: ModelDependencies {
     fn load_data(
         &mut self,
         data: Vec<FlattenedData>,
@@ -53,18 +52,18 @@ impl XGBoost {
         }
 
         let total_len = data[0].features.len();
-        if total_len < 2 {
-            return Err(anyhow!(
-                "Each row must have at least one feature and one target"
-            ));
-        }
+        // if total_len < 2 {
+        //     return Err(anyhow!(
+        //         "Each row must have at least one feature and one target"
+        //     ));
+        // }
 
-        if total_len != 30 {
-            return Err(anyhow!(
-                "Expected 30 columns (29 features + 1 target), got {}",
-                total_len
-            ));
-        }
+        // if total_len != 30 {
+        //     return Err(anyhow!(
+        //         "Expected 30 columns (29 features + 1 target), got {}",
+        //         total_len
+        //     ));
+        // }
 
         let feature_len = total_len - 1;
         let target_idx = feature_len;
@@ -91,12 +90,12 @@ impl XGBoost {
             .map(|(i, &s)| (s, i))
             .collect();
 
-        self.symbol_columns = Some(
+        self.change_symbol_columns(Some(
             unique_symbols
                 .iter()
                 .map(|s| format!("symbol_name_{}", s))
                 .collect(),
-        );
+        ));
 
         let mut x_rows: Vec<Vec<f64>> = Vec::with_capacity(n_samples);
         let mut y_target: Vec<f64> = Vec::with_capacity(n_samples);
@@ -131,7 +130,7 @@ impl XGBoost {
             y_target.push(target);
         }
 
-        if self.config.prints.model.metrics {
+        if self.get_config().prints.model.metrics {
             println!(
                 "{}[{}] Пропущено строк: {} (NaN в target), {} (NaN в признаках)",
                 Fore::YELLOW.as_str(),
@@ -152,12 +151,12 @@ impl XGBoost {
             return Err(anyhow!("No valid data after removing NaN values"));
         }
 
-        assert!(
-            x_rows.len() == y_target.len(),
-            "X and y length mismatch: X={}, y={}",
-            x_rows.len(),
-            y_target.len()
-        );
+        // assert!(
+        //     x_rows.len() == y_target.len(),
+        //     "X and y length mismatch: X={}, y={}",
+        //     x_rows.len(),
+        //     y_target.len()
+        // );
 
         let n_features = n_symbols + feature_len;
         let mut flat_x = Vec::with_capacity(x_rows.len() * n_features);
@@ -181,104 +180,81 @@ impl XGBoost {
             &y_target,
             train_ratio,
             true,
-            Some(self.config.model.seed),
+            Some(self.get_config().model.seed),
         );
 
-        self.x_train = Some(x_train.clone());
-        self.x_val = Some(x_val.clone());
-        self.y_train = Some(y_train.clone());
-        self.y_val = Some(y_val.clone());
+        self.change_x_train(Some(x_train.clone()));
+        self.change_x_val(Some(x_val.clone()));
+        self.change_y_train(Some(y_train.clone()));
+        self.change_y_val(Some(y_val.clone()));
 
         Ok((x_train, x_val, y_train, y_val))
-    }
-
-    fn fit(
-        &mut self,
-        x_train: &DenseMatrix<f64>,
-        y_train: &Vec<f64>,
-        x_val: Option<&DenseMatrix<f64>>,
-        y_val: Option<&Vec<f64>>,
-    ) -> Result<(), anyhow::Error> {
-        let params = XGRegressorParameters::default()
-            .with_n_estimators(self.config.model.n_trees)
-            .with_max_depth(self.config.model.max_depth)
-            .with_seed(self.config.model.seed);
-
-        self.model = Some(XGRegressor::fit(x_train, y_train, params)?);
-
-        if let (Some(xv), Some(yv)) = (x_val, y_val) {
-            self.evaluate(xv, yv)?;
-        }
-
-        Ok(())
     }
 
     fn evaluate(
         &self,
         x_val: &DenseMatrix<f64>,
         y_val: &Vec<f64>,
-    ) -> Result<AccuracyModel, anyhow::Error> {
-        let model = self
-            .model
-            .as_ref()
-            .ok_or(anyhow!("Model not trained yet"))?;
-
-        let proba = model.predict(x_val)?;
+    ) -> Result<ModelAccuracy, anyhow::Error> {
+        if !self.check_model_trained() {
+            return Err(anyhow!("Model not trained yet"));
+        }
+        let proba = self.model_predict(x_val)?;
         let y_float: Vec<f64> = y_val.to_vec();
 
         let thr_accuracy = threshold_accuracy(
             &y_float,
             &proba,
-            self.config.behaviour.success_threshold.default,
+            self.get_config().behaviour.success_threshold.default,
         );
         let dir_accuracy = direction_accuracy(&y_float, &proba);
         let mae = mean_absolute_error(&y_float, &proba);
         let mse = mean_squared_error(&y_float, &proba);
         let r2_score = r2(&y_float, &proba);
 
-        if self.config.prints.model.metrics {
+        if self.get_config().prints.model.metrics {
             println!(
                 "{}[{}] Ошибка по MAE для {}: {:.3} pp",
                 Fore::WHITE.as_str(),
                 Utc::now().format("%H:%M:%S"),
-                self.name,
+                self.get_name(),
                 mae
             );
             println!(
                 "{}[{}] Ошибка по MSE для {}: {:.3} (pp²)",
                 Fore::WHITE.as_str(),
                 Utc::now().format("%H:%M:%S"),
-                self.name,
+                self.get_name(),
                 mse
             );
             println!(
                 "{}[{}] Ошибка по R2 для {}: {:.3}",
                 Fore::WHITE.as_str(),
                 Utc::now().format("%H:%M:%S"),
-                self.name,
+                self.get_name(),
                 r2_score
             );
         }
 
-        if self.config.prints.model.evualate {
+        if self.get_config().prints.model.evualate {
             println!(
                 "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
                 Fore::WHITE.as_str(),
                 Utc::now().format("%H:%M:%S"),
-                self.config.behaviour.success_threshold.default,
-                self.name,
+                self.get_config().behaviour.success_threshold.default,
+                self.get_name(),
                 thr_accuracy * 100.0
             );
             println!(
                 "{}[{}] Точность по направлению для {} составляет {:.3}%",
                 Fore::WHITE.as_str(),
                 Utc::now().format("%H:%M:%S"),
-                self.name,
+                self.get_name(),
                 dir_accuracy * 100.0
             );
         }
 
-        Ok(AccuracyModel {
+        Ok(ModelAccuracy {
             mae,
             mse,
             r2: r2_score,
@@ -287,19 +263,16 @@ impl XGBoost {
         })
     }
 
-    pub async fn predict(
-        &self,
-        x: Vec<f64>,
-        symbol_name: Option<&str>,
-    ) -> Result<f64, anyhow::Error> {
+    async fn predict(&self, x: Vec<f64>, symbol_name: Option<&str>) -> Result<f64, anyhow::Error> {
         let symbol_cols = self
-            .symbol_columns
-            .as_ref()
+            .get_symbol_columns()
+            .clone()
             .ok_or(anyhow!("No symbol columns defined"))?;
-        let model = self
-            .model
-            .as_ref()
-            .ok_or(anyhow!("Model not trained yet"))?;
+
+        if !self.check_model_trained() {
+            return Err(anyhow!("Model not trained yet"));
+        }
+
         let mut input: Vec<f64> = Vec::with_capacity(symbol_cols.len() + x.len());
 
         let mut symbol_vec = vec![0.0; symbol_cols.len()];
@@ -316,10 +289,10 @@ impl XGBoost {
         input.extend(x);
 
         let input_mat = DenseMatrix::new(1, input.len(), input, false)?;
-        let proba = model.predict(&input_mat)?;
+        let proba = self.model_predict(&input_mat)?;
 
         if let Some(sn) = symbol_name
-            && let Some(ptx) = self.prediction_tx.clone()
+            && let Some(ptx) = self.get_prediction_tx().clone()
         {
             let (tx, rx) = oneshot::channel();
 
@@ -334,75 +307,37 @@ impl XGBoost {
         Ok(proba[0])
     }
 
-    pub fn train(&mut self, data: Vec<FlattenedData>) -> Result<(), anyhow::Error> {
+    fn train(&mut self, data: Vec<FlattenedData>) -> Result<(), anyhow::Error> {
         let (x, y_target) = self.load_data(data)?;
-        let (x_train, x_val, y_train, y_val) =
-            self.prepare_data(x, y_target, self.config.model.train_test_split.train_ratio)?;
-        self.fit(&x_train, &y_train, Some(&x_val), Some(&y_val))?;
+        let (x_train, x_val, y_train, y_val) = self.prepare_data(
+            x,
+            y_target,
+            self.get_config().model.train_test_split.train_ratio,
+        )?;
+        self.model_fit(&x_train, &y_train, Some(&x_val), Some(&y_val))?;
         Ok(())
     }
-}
 
-pub async fn train_model(pool: &PgPool, model: &mut XGBoost) -> Result<(), anyhow::Error> {
-    let data = select_all_candles(pool).await?;
-    model.train(data)?;
-    Ok(())
-}
-
-fn threshold_accuracy(y_true: &[f64], y_pred: &[f64], threshold: f64) -> f64 {
-    if y_true.is_empty() {
-        return 0.0;
-    }
-
-    let mut success = 0;
-
-    for (y, p) in y_true.iter().zip(y_pred.iter()) {
-        if (y - p).abs() <= threshold {
-            success += 1;
-        }
-    }
-
-    success as f64 / y_true.len() as f64
-}
-
-fn direction_accuracy(y_true: &[f64], y_pred: &[f64]) -> f64 {
-    if y_true.is_empty() {
-        return 0.0;
-    }
-
-    let mut success = 0;
-
-    for (y, p) in y_true.iter().zip(y_pred.iter()) {
-        if (y > &0.0 && p > &0.0) || (y < &0.0 && p < &0.0) || (y == &0.0 && p == &0.0) {
-            success += 1;
-        }
-    }
-
-    success as f64 / y_true.len() as f64
-}
-
-#[derive(Debug)]
-pub struct AccuracyModel {
-    #[allow(unused)]
-    mae: f64,
-    #[allow(unused)]
-    mse: f64,
-    #[allow(unused)]
-    r2: f64,
-    #[allow(unused)]
-    thr_acc: f64,
-    #[allow(unused)]
-    dir_acc: f64,
+    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error>;
+    fn model_fit(
+        &mut self,
+        x_train: &DenseMatrix<f64>,
+        y_train: &Vec<f64>,
+        x_val: Option<&DenseMatrix<f64>>,
+        y_val: Option<&Vec<f64>>,
+    ) -> Result<(), anyhow::Error>;
 }
 
 #[tokio::test]
 async fn test_training() -> Result<(), anyhow::Error> {
-    let pool = PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
-        .await
-        .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
-    let mut model = XGBoost::new(None);
+    let pool =
+        sqlx::PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
+            .await
+            .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
+    let mut xgboost = crate::models::xgboost::XGBoost::new(None);
 
-    train_model(&pool, &mut model).await?;
+    let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
+    xgboost.train(data)?;
 
     Ok(())
 }

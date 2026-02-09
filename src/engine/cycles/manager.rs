@@ -10,6 +10,7 @@ use tokio::time::{Duration, sleep};
 use crate::CONFIG_PATH;
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, FlattenedData, Ticker};
 use crate::data::requests::ccxt::client::CCXTClient;
+use crate::data::requests::database::db_req::select_all_candles;
 use crate::engine::cycles::background::cycle::BackgroundCycle;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::sandbox::cycle::{DummyAccount, SandboxCycle};
@@ -20,7 +21,8 @@ use crate::engine::utils::config::config_types::RuntimeType;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::engine::utils::parse::parse_symbol;
-use crate::models::model::{XGBoost, train_model};
+use crate::models::model::Model;
+use crate::models::xgboost::XGBoost;
 
 pub enum CycleError {
     SymbolDoesNotExist,
@@ -430,12 +432,12 @@ pub enum ModelCommand {
 }
 
 struct ModelActor {
-    model: Arc<Mutex<XGBoost>>,
+    model: Arc<Mutex<Box<dyn Model + Send + Sync>>>,
     inbox: mpsc::Receiver<ModelCommand>,
 }
 
 impl ModelActor {
-    fn new(model: XGBoost) -> (Self, mpsc::Sender<ModelCommand>) {
+    fn new(model: Box<dyn Model + Send + Sync>) -> (Self, mpsc::Sender<ModelCommand>) {
         let (tx, rx) = mpsc::channel(100);
         (
             Self {
@@ -614,10 +616,14 @@ impl CycleManager {
             .await
             .map_err(|e| format!("DB connection error: {}", e))?;
 
-        let mut model = XGBoost::new(Some(self.prediction_tx.clone()));
-        train_model(&pool, &mut model)
+        let mut model = Box::new(XGBoost::new(Some(self.prediction_tx.clone())));
+
+        let data = select_all_candles(&pool)
             .await
-            .map_err(|e| format!("Train error: {}", e))?;
+            .map_err(|e| format!("Database request error: {}", e))?;
+        model
+            .train(data)
+            .map_err(|e| format!("Model training error: {}", e))?;
 
         let (model_actor, model_tx) = ModelActor::new(model);
         tokio::spawn(model_actor.run());
