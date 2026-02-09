@@ -1,9 +1,10 @@
 model:
-  type: "XGBoost"
+  type: "DecisionTree"
   params:
-    kind: "XGBoost"
-    n_estimators: 100
+    kind: "DecisionTree"
     max_depth: 5
+    min_samples_leaf: 100
+    min_samples_split: 100
   train_test_split:
     train_ratio: 0.8
   metric: "ALL"

@@ -417,8 +417,21 @@ async fn test_training() -> Result<(), anyhow::Error> {
             let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
             xgboost.train(data)?;
         }
-        crate::models::ModelParams::RandomForest { n_trees, max_depth } => {
-            let mut rf = crate::models::randomforest::RandomForest::new(None, n_trees, max_depth);
+        crate::models::ModelParams::RandomForest {
+            n_trees,
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+            m,
+        } => {
+            let mut rf = crate::models::randomforest::RandomForest::new(
+                None,
+                n_trees,
+                max_depth,
+                min_samples_leaf,
+                min_samples_split,
+                m,
+            );
 
             let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
             rf.train(data)?;
@@ -428,6 +441,55 @@ async fn test_training() -> Result<(), anyhow::Error> {
 
             let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
             ln.train(data)?;
+        }
+        crate::models::ModelParams::Ridge { alpha, solver } => {
+            let mut ridge = crate::models::ridge::Ridge::new(None, solver, alpha);
+
+            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
+            ridge.train(data)?;
+        }
+        crate::models::ModelParams::DecisionTree {
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+        } => {
+            let mut decision = crate::models::decisiontree::DecisionTree::new(
+                None,
+                max_depth,
+                min_samples_leaf,
+                min_samples_split,
+            );
+
+            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
+            decision.train(data)?;
+        }
+        crate::models::ModelParams::KNN {
+            algorithm,
+            weight,
+            k,
+        } => {
+            let mut knn = crate::models::knn::KNN::new(None, algorithm, weight, k);
+            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
+            knn.train(data)?;
+        }
+        crate::models::ModelParams::ExtraTrees {
+            n_trees,
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+            m,
+        } => {
+            let mut et = crate::models::extratrees::ExtraTrees::new(
+                None,
+                n_trees,
+                max_depth,
+                min_samples_leaf,
+                min_samples_split,
+                m,
+            );
+
+            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
+            et.train(data)?;
         }
     }
     Ok(())

@@ -1,6 +1,6 @@
 use anyhow::anyhow;
-use smartcore::ensemble::random_forest_regressor::{
-    RandomForestRegressor, RandomForestRegressorParameters,
+use smartcore::ensemble::extra_trees_regressor::{
+    ExtraTreesRegressor, ExtraTreesRegressorParameters,
 };
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use tokio::sync::mpsc;
@@ -10,8 +10,8 @@ use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::model::{Model, ModelDependencies};
 
-pub struct RandomForest {
-    model: Option<RandomForestRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
+pub struct ExtraTrees {
+    model: Option<ExtraTreesRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
     name: String,
     symbol_columns: Option<Vec<String>>,
     config: Config,
@@ -23,7 +23,7 @@ pub struct RandomForest {
     m: usize,
 }
 
-impl RandomForest {
+impl ExtraTrees {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
         n_trees: usize,
@@ -34,7 +34,7 @@ impl RandomForest {
     ) -> Self {
         Self {
             model: None,
-            name: "RandomForest".to_string(),
+            name: "ExtraTrees".to_string(),
             symbol_columns: None,
             config: load_config("config/config.yaml"),
             prediction_tx,
@@ -47,7 +47,7 @@ impl RandomForest {
     }
 }
 
-impl ModelDependencies for RandomForest {
+impl ModelDependencies for ExtraTrees {
     fn get_name(&self) -> &str {
         &self.name
     }
@@ -76,7 +76,7 @@ impl ModelDependencies for RandomForest {
     }
 }
 
-impl Model for RandomForest {
+impl Model for ExtraTrees {
     fn model_fit(
         &mut self,
         x_train: &DenseMatrix<f64>,
@@ -84,7 +84,7 @@ impl Model for RandomForest {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error> {
-        let params = RandomForestRegressorParameters::default()
+        let params = ExtraTreesRegressorParameters::default()
             .with_n_trees(self.n_trees)
             .with_max_depth(self.max_depth)
             .with_seed(self.get_config().model.seed)
@@ -92,7 +92,7 @@ impl Model for RandomForest {
             .with_min_samples_split(self.min_samples_split)
             .with_m(self.m);
 
-        self.model = Some(RandomForestRegressor::fit(x_train, y_train, params)?);
+        self.model = Some(ExtraTreesRegressor::fit(x_train, y_train, params)?);
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             self.evaluate(xv, yv)?;

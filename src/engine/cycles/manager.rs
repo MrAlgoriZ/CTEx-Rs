@@ -22,9 +22,13 @@ use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::engine::utils::parse::parse_symbol;
 use crate::models::ModelParams;
+use crate::models::decisiontree::DecisionTree;
+use crate::models::extratrees::ExtraTrees;
+use crate::models::knn::KNN;
 use crate::models::linear::Linear;
 use crate::models::model::Model;
 use crate::models::randomforest::RandomForest;
+use crate::models::ridge::Ridge;
 use crate::models::xgboost::XGBoost;
 
 pub enum CycleError {
@@ -633,16 +637,72 @@ impl CycleManager {
                 ));
                 model
             }
-            ModelParams::RandomForest { n_trees, max_depth } => {
+            ModelParams::RandomForest {
+                n_trees,
+                max_depth,
+                min_samples_leaf,
+                min_samples_split,
+                m,
+            } => {
                 let model = Box::new(RandomForest::new(
                     Some(self.prediction_tx.clone()),
                     n_trees,
                     max_depth,
+                    min_samples_leaf,
+                    min_samples_split,
+                    m,
                 ));
                 model
             }
             ModelParams::Linear { solver } => {
                 let model = Box::new(Linear::new(Some(self.prediction_tx.clone()), solver));
+                model
+            }
+            ModelParams::Ridge { alpha, solver } => {
+                let model = Box::new(Ridge::new(Some(self.prediction_tx.clone()), solver, alpha));
+                model
+            }
+            ModelParams::DecisionTree {
+                max_depth,
+                min_samples_leaf,
+                min_samples_split,
+            } => {
+                let model = Box::new(DecisionTree::new(
+                    Some(self.prediction_tx.clone()),
+                    max_depth,
+                    min_samples_leaf,
+                    min_samples_split,
+                ));
+                model
+            }
+            ModelParams::KNN {
+                algorithm,
+                weight,
+                k,
+            } => {
+                let model = Box::new(KNN::new(
+                    Some(self.prediction_tx.clone()),
+                    algorithm,
+                    weight,
+                    k,
+                ));
+                model
+            }
+            ModelParams::ExtraTrees {
+                n_trees,
+                max_depth,
+                min_samples_leaf,
+                min_samples_split,
+                m,
+            } => {
+                let model = Box::new(ExtraTrees::new(
+                    Some(self.prediction_tx.clone()),
+                    n_trees,
+                    max_depth,
+                    min_samples_leaf,
+                    min_samples_split,
+                    m,
+                ));
                 model
             }
         };
