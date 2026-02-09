@@ -10,22 +10,8 @@ use tokio::sync::{mpsc, oneshot};
 use crate::data::data_interfaces::FlattenedData;
 use crate::engine::cycles::manager::PredictionCommand;
 use crate::engine::utils::colors::Fore;
-use crate::engine::utils::config::config_types::Config;
+use crate::engine::utils::config::config_types::{Config, MetricType};
 use crate::models::metrics::*;
-
-#[derive(Debug)]
-pub struct ModelAccuracy {
-    #[allow(unused)]
-    mae: f64,
-    #[allow(unused)]
-    mse: f64,
-    #[allow(unused)]
-    r2: f64,
-    #[allow(unused)]
-    thr_acc: f64,
-    #[allow(unused)]
-    dir_acc: f64,
-}
 
 pub trait ModelDependencies {
     fn get_name(&self) -> &str;
@@ -182,11 +168,7 @@ pub trait Model: ModelDependencies {
         Ok((x_train, x_val, y_train, y_val))
     }
 
-    fn evaluate(
-        &self,
-        x_val: &DenseMatrix<f64>,
-        y_val: &Vec<f64>,
-    ) -> Result<ModelAccuracy, anyhow::Error> {
+    fn evaluate(&self, x_val: &DenseMatrix<f64>, y_val: &Vec<f64>) -> Result<f64, anyhow::Error> {
         if !self.check_model_trained() {
             return Err(anyhow!("Model not trained yet"));
         }
@@ -198,60 +180,143 @@ pub trait Model: ModelDependencies {
             &proba,
             self.get_config().behaviour.success_threshold.default,
         );
-        let dir_accuracy = direction_accuracy(&y_float, &proba);
-        let mae = mean_absolute_error(&y_float, &proba);
-        let mse = mean_squared_error(&y_float, &proba);
-        let r2_score = r2(&y_float, &proba);
 
-        if self.get_config().prints.model.metrics {
-            println!(
-                "{}[{}] Ошибка по MAE для {}: {:.3} pp",
-                Fore::WHITE.as_str(),
-                Utc::now().format("%H:%M:%S"),
-                self.get_name(),
+        let metric = match self.get_config().model.metric {
+            MetricType::All => {
+                let dir_accuracy = direction_accuracy(&y_float, &proba);
+                let mae = mean_absolute_error(&y_float, &proba);
+                let mse = mean_squared_error(&y_float, &proba);
+                let r2_score = r2(&y_float, &proba);
+
+                if self.get_config().prints.model.metrics {
+                    println!(
+                        "{}[{}] Ошибка по MAE для {}: {:.3} pp",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_name(),
+                        mae
+                    );
+                    println!(
+                        "{}[{}] Ошибка по MSE для {}: {:.3} (pp²)",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_name(),
+                        mse
+                    );
+                    println!(
+                        "{}[{}] Ошибка по R2 для {}: {:.3}",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_name(),
+                        r2_score
+                    );
+                }
+
+                if self.get_config().prints.model.evualate {
+                    println!(
+                        "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_config().behaviour.success_threshold.default,
+                        self.get_name(),
+                        thr_accuracy * 100.0
+                    );
+                    println!(
+                        "{}[{}] Точность по направлению для {} составляет {:.3}%",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_name(),
+                        dir_accuracy * 100.0
+                    );
+                }
+                thr_accuracy
+            }
+            MetricType::Direction => {
+                let dir_accuracy = direction_accuracy(&y_float, &proba);
+                if self.get_config().prints.model.evualate {
+                    println!(
+                        "{}[{}] Точность по направлению для {} составляет {:.3}%",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_name(),
+                        dir_accuracy * 100.0
+                    );
+                }
+                dir_accuracy
+            }
+            MetricType::Threshold => {
+                let thr_accuracy = threshold_accuracy(
+                    &y_float,
+                    &proba,
+                    self.get_config().behaviour.success_threshold.default,
+                );
+                if self.get_config().prints.model.evualate {
+                    println!(
+                        "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_config().behaviour.success_threshold.default,
+                        self.get_name(),
+                        thr_accuracy * 100.0
+                    );
+                }
+                thr_accuracy
+            }
+            MetricType::MAE => {
+                let mae = mean_absolute_error(&y_float, &proba);
+                if self.get_config().prints.model.metrics {
+                    println!(
+                        "{}[{}] Ошибка по MAE для {}: {:.3} pp",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_name(),
+                        mae
+                    );
+                }
                 mae
-            );
-            println!(
-                "{}[{}] Ошибка по MSE для {}: {:.3} (pp²)",
-                Fore::WHITE.as_str(),
-                Utc::now().format("%H:%M:%S"),
-                self.get_name(),
+            }
+            MetricType::MSE => {
+                let mse = mean_squared_error(&y_float, &proba);
+                if self.get_config().prints.model.metrics {
+                    println!(
+                        "{}[{}] Ошибка по MSE для {}: {:.3} pp",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_name(),
+                        mse
+                    );
+                }
                 mse
-            );
-            println!(
-                "{}[{}] Ошибка по R2 для {}: {:.3}",
-                Fore::WHITE.as_str(),
-                Utc::now().format("%H:%M:%S"),
-                self.get_name(),
+            }
+            MetricType::R2 => {
+                let r2_score = r2(&y_float, &proba);
+                if self.get_config().prints.model.metrics {
+                    println!(
+                        "{}[{}] Ошибка по R2 для {}: {:.3}",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_name(),
+                        r2_score
+                    );
+                }
                 r2_score
-            );
-        }
+            }
+            MetricType::RMSE => {
+                let rmse = mean_squared_error(&y_float, &proba).sqrt();
+                if self.get_config().prints.model.metrics {
+                    println!(
+                        "{}[{}] Ошибка по RMSE для {}: {:.3} pp",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_name(),
+                        rmse
+                    );
+                }
+                rmse
+            }
+        };
 
-        if self.get_config().prints.model.evualate {
-            println!(
-                "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
-                Fore::WHITE.as_str(),
-                Utc::now().format("%H:%M:%S"),
-                self.get_config().behaviour.success_threshold.default,
-                self.get_name(),
-                thr_accuracy * 100.0
-            );
-            println!(
-                "{}[{}] Точность по направлению для {} составляет {:.3}%",
-                Fore::WHITE.as_str(),
-                Utc::now().format("%H:%M:%S"),
-                self.get_name(),
-                dir_accuracy * 100.0
-            );
-        }
-
-        Ok(ModelAccuracy {
-            mae,
-            mse,
-            r2: r2_score,
-            thr_acc: thr_accuracy,
-            dir_acc: dir_accuracy,
-        })
+        Ok(metric)
     }
 
     async fn predict(&self, x: Vec<f64>, symbol_name: Option<&str>) -> Result<f64, anyhow::Error> {

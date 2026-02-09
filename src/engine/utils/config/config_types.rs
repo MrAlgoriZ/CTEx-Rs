@@ -38,6 +38,9 @@ pub enum MetricType {
     MSE,
     RMSE,
     R2,
+    Direction,
+    Threshold,
+    All,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
