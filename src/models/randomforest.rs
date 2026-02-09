@@ -1,6 +1,8 @@
 use anyhow::anyhow;
+use smartcore::ensemble::random_forest_regressor::{
+    RandomForestRegressor, RandomForestRegressorParameters,
+};
 use smartcore::linalg::basic::matrix::DenseMatrix;
-use smartcore::xgboost::{XGRegressor, XGRegressorParameters};
 use tokio::sync::mpsc;
 
 use crate::engine::cycles::manager::PredictionCommand;
@@ -8,35 +10,35 @@ use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::model::{Model, ModelDependencies};
 
-pub struct XGBoost {
-    model: Option<XGRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
+pub struct RandomForest {
+    model: Option<RandomForestRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
     name: String,
     symbol_columns: Option<Vec<String>>,
     config: Config,
     prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
-    n_estimators: usize,
+    n_trees: usize,
     max_depth: u16,
 }
 
-impl XGBoost {
+impl RandomForest {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
-        n_estimators: usize,
+        n_trees: usize,
         max_depth: u16,
     ) -> Self {
         Self {
             model: None,
-            name: "XGBoost".to_string(),
+            name: "RandomForest".to_string(),
             symbol_columns: None,
             config: load_config("config/config.yaml"),
             prediction_tx,
-            n_estimators,
+            n_trees,
             max_depth,
         }
     }
 }
 
-impl ModelDependencies for XGBoost {
+impl ModelDependencies for RandomForest {
     fn get_name(&self) -> &str {
         &self.name
     }
@@ -65,7 +67,7 @@ impl ModelDependencies for XGBoost {
     }
 }
 
-impl Model for XGBoost {
+impl Model for RandomForest {
     fn model_fit(
         &mut self,
         x_train: &DenseMatrix<f64>,
@@ -73,12 +75,12 @@ impl Model for XGBoost {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error> {
-        let params = XGRegressorParameters::default()
-            .with_n_estimators(self.n_estimators)
+        let params = RandomForestRegressorParameters::default()
+            .with_n_trees(self.n_trees)
             .with_max_depth(self.max_depth)
             .with_seed(self.get_config().model.seed);
 
-        self.model = Some(XGRegressor::fit(x_train, y_train, params)?);
+        self.model = Some(RandomForestRegressor::fit(x_train, y_train, params)?);
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             self.evaluate(xv, yv)?;

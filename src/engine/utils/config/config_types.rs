@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::{ModelParams, ModelType};
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
     pub model: ModelConfig,
@@ -16,12 +18,26 @@ pub struct Config {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ModelConfig {
-    pub name: String,
-    pub n_trees: usize,
-    pub max_depth: u16,
+    #[serde(rename = "type")]
+    pub model_type: ModelType,
+    pub params: ModelParams,
+    pub train_test_split: TrainTestSplit,
+    pub metric: MetricType,
     pub seed: u64,
-    pub train_test_split: TTSConfig,
-    pub metric: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TrainTestSplit {
+    pub train_ratio: f32,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum MetricType {
+    MAE,
+    MSE,
+    RMSE,
+    R2,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -108,11 +124,6 @@ pub struct RuntimeConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct TTSConfig {
-    pub train_ratio: f32,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TimeframesConfig {
     #[serde(rename = "main")]
     pub main_timeframe: String,
@@ -124,12 +135,14 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             model: ModelConfig {
-                name: "RF".to_string(),
-                n_trees: 100,
-                max_depth: 5,
+                model_type: ModelType::XGBoost,
+                params: ModelParams::XGBoost {
+                    n_estimators: 100,
+                    max_depth: 5,
+                },
+                train_test_split: TrainTestSplit { train_ratio: 0.8 },
+                metric: MetricType::R2,
                 seed: 42,
-                train_test_split: TTSConfig { train_ratio: 0.8 },
-                metric: "MAE".to_string(),
             },
             backend: BackendConfig {
                 enabled: true,

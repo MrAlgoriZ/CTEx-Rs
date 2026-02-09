@@ -1,11 +1,13 @@
 model:
-  name: "XGBoost"
-  n_trees: 100
-  max_depth: 5
-  seed: 42
+  type: "XGBoost"
+  params:
+    kind: "XGBoost"
+    n_estimators: 100
+    max_depth: 5
   train_test_split:
     train_ratio: 0.8
-  metric: "MAE"
+  metric: "R2"
+  seed: 42
 
 backend:
   enabled: false

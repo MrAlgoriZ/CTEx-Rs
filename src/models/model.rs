@@ -29,10 +29,6 @@ pub struct ModelAccuracy {
 
 pub trait ModelDependencies {
     fn get_name(&self) -> &str;
-    fn change_x_train(&mut self, x_train: Option<DenseMatrix<f64>>);
-    fn change_x_val(&mut self, x_val: Option<DenseMatrix<f64>>);
-    fn change_y_train(&mut self, y_train: Option<Vec<f64>>);
-    fn change_y_val(&mut self, y_val: Option<Vec<f64>>);
     fn get_symbol_columns(&self) -> &Option<Vec<String>>;
     fn change_symbol_columns(&mut self, symbol_columns: Option<Vec<String>>);
     fn get_config(&self) -> &Config;
@@ -183,11 +179,6 @@ pub trait Model: ModelDependencies {
             Some(self.get_config().model.seed),
         );
 
-        self.change_x_train(Some(x_train.clone()));
-        self.change_x_val(Some(x_val.clone()));
-        self.change_y_train(Some(y_train.clone()));
-        self.change_y_val(Some(y_val.clone()));
-
         Ok((x_train, x_val, y_train, y_val))
     }
 
@@ -334,10 +325,25 @@ async fn test_training() -> Result<(), anyhow::Error> {
         sqlx::PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
             .await
             .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
-    let mut xgboost = crate::models::xgboost::XGBoost::new(None);
+    let params = crate::engine::utils::config::load_config::load_config(crate::CONFIG_PATH)
+        .model
+        .params;
+    match params {
+        crate::models::ModelParams::XGBoost {
+            n_estimators,
+            max_depth,
+        } => {
+            let mut xgboost = crate::models::xgboost::XGBoost::new(None, n_estimators, max_depth);
 
-    let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
-    xgboost.train(data)?;
+            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
+            xgboost.train(data)?;
+        }
+        crate::models::ModelParams::RandomForest { n_trees, max_depth } => {
+            let mut rf = crate::models::randomforest::RandomForest::new(None, n_trees, max_depth);
 
+            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
+            rf.train(data)?;
+        }
+    }
     Ok(())
 }

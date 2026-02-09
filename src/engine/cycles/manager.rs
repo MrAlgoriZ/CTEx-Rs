@@ -21,7 +21,9 @@ use crate::engine::utils::config::config_types::RuntimeType;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::engine::utils::parse::parse_symbol;
+use crate::models::ModelParams;
 use crate::models::model::Model;
+use crate::models::randomforest::RandomForest;
 use crate::models::xgboost::XGBoost;
 
 pub enum CycleError {
@@ -616,7 +618,29 @@ impl CycleManager {
             .await
             .map_err(|e| format!("DB connection error: {}", e))?;
 
-        let mut model = Box::new(XGBoost::new(Some(self.prediction_tx.clone())));
+        let params = load_config(CONFIG_PATH).model.params;
+
+        let mut model: Box<dyn Model + Send + Sync> = match params {
+            ModelParams::XGBoost {
+                n_estimators,
+                max_depth,
+            } => {
+                let model = Box::new(XGBoost::new(
+                    Some(self.prediction_tx.clone()),
+                    n_estimators,
+                    max_depth,
+                ));
+                model
+            }
+            ModelParams::RandomForest { n_trees, max_depth } => {
+                let model = Box::new(RandomForest::new(
+                    Some(self.prediction_tx.clone()),
+                    n_trees,
+                    max_depth,
+                ));
+                model
+            }
+        };
 
         let data = select_all_candles(&pool)
             .await

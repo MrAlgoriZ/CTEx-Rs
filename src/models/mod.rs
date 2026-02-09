@@ -1,19 +1,18 @@
 pub mod metrics;
 pub mod model;
+pub mod randomforest;
 pub mod xgboost;
 
-// pub enum ModelType {
-//     RandomForest,
-//     XGBoost,
-// }
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub enum ModelType {
+    RandomForest,
+    XGBoost,
+}
 
-// impl ModelType {
-//     pub fn from_str(model_name: String) -> Option<ModelType> {
-//         let mn: &str = &model_name.to_lowercase();
-//         match mn {
-//             "xgboost" => Some(ModelType::XGBoost),
-//             "randomforest" => Some(ModelType::RandomForest),
-//             _ => None,
-//         }
-//     }
-// }
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
+#[serde(tag = "kind")]
+pub enum ModelParams {
+    XGBoost { n_estimators: usize, max_depth: u16 },
+    RandomForest { n_trees: usize, max_depth: u16 },
+}
