@@ -79,6 +79,23 @@ impl DummyAccount {
         Ok(Some(total_usdt))
     }
 
+    pub async fn get_fake_balance_usdt(&self, price: f64) -> Result<Option<f64>, anyhow::Error> {
+        let mut total_usdt = 0.0;
+
+        for (symbol, amount) in &self.balance {
+            if *amount == 0.0 {
+                continue;
+            } else if symbol.eq("USDT") {
+                total_usdt += amount;
+                continue;
+            }
+
+            total_usdt += amount * price;
+        }
+
+        Ok(Some(total_usdt))
+    }
+
     pub async fn create_fake_order(
         &mut self,
         symbol: String,
@@ -147,6 +164,11 @@ impl DummyAccount {
         } else {
             Err(anyhow!("Order not found"))
         }
+    }
+
+    #[allow(unused)]
+    pub fn update_balance(&mut self, symbol: &str, amount: f64) {
+        *self.balance.entry(symbol.to_string()).or_insert(amount) = amount;
     }
 
     #[allow(unused)]

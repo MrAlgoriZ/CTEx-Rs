@@ -26,6 +26,7 @@ pub struct SandboxCycle {
     pub symbol: String,
     last_grouped_candles: Option<Arc<CollectedData>>,
     last_candles_target: Option<f64>,
+    last_order_price: Option<f64>,
     print_symbol: String,
     config: Config,
     pool: PgPool,
@@ -67,6 +68,7 @@ impl SandboxCycle {
             symbol: symbol.clone(),
             last_grouped_candles: None,
             last_candles_target: None,
+            last_order_price: None,
             config: load_config("config/config.yaml"),
             pool,
             client,
@@ -204,7 +206,13 @@ impl SandboxCycle {
             Fore::YELLOW.as_str()
         );
 
-        println!("Start balance (USDT): ${:.3}", start_balance);
+        println!(
+            "{}{} {}Start balance (USDT): ${:.3}",
+            self.print_time(),
+            self.print_symbol,
+            Fore::GREEN.as_str(),
+            start_balance
+        );
 
         let mut volatility: f64;
         let mut prediction: Option<f64> = None;
@@ -293,14 +301,11 @@ impl SandboxCycle {
             };
             let amount = prediction.unwrap() * 0.01;
 
+            let order_price = window.last().unwrap().open;
+
             match self
                 .account
-                .create_fake_order(
-                    self.symbol.clone(),
-                    amount,
-                    direction,
-                    window.last().unwrap().open,
-                )
+                .create_fake_order(self.symbol.clone(), amount, direction, order_price)
                 .await
             {
                 Ok(_) => {}
@@ -310,6 +315,7 @@ impl SandboxCycle {
             phase = CyclePhase::Active;
             self.last_grouped_candles = Some(candles);
             self.last_candles_target = Some(current_target);
+            self.last_order_price = Some(order_price);
             pb.inc(1);
         }
 
@@ -322,11 +328,34 @@ impl SandboxCycle {
 
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        let end_balance = self.account.get_balance_usdt(&self.client).await?.unwrap();
-        println!("End balance (USDT): ${:.3}", end_balance);
+        let end_balance = self
+            .account
+            .get_fake_balance_usdt(self.last_order_price.unwrap())
+            .await?
+            .unwrap();
+
+        let percent = ((end_balance - start_balance) / start_balance) * 100.0;
+
+        let fore = if percent > 0.0 {
+            Fore::GREEN.as_str()
+        } else {
+            Fore::RED.as_str()
+        };
+
         println!(
-            "Модель заработала: {:.5}%",
-            (end_balance - start_balance) / start_balance
+            "{}{} {}End balance (USDT): ${:.3}",
+            self.print_time(),
+            self.print_symbol,
+            fore,
+            end_balance
+        );
+
+        println!(
+            "{}{} {}Модель заработала: {:.5}%",
+            self.print_time(),
+            self.print_symbol,
+            fore,
+            percent
         );
 
         Ok(())

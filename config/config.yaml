@@ -42,17 +42,17 @@ prints:
     additional_manager_prints: true
 
 symbols:
-  - SOLUSDT
+  - TRXUSDT
 
 runtime:
   type: "backtest"
-  with_training: true
+  with_training: false
   with_saves: false
   cycle_type: "sandbox"
 
 main_exchange: "binance"
 
 timeframes:
-  main: "15m"
+  main: "1h"
   background: "1m"
 mode: "print"
