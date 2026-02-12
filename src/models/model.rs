@@ -179,7 +179,7 @@ pub trait Model: ModelDependencies {
         let thr_accuracy = threshold_accuracy(
             &y_float,
             &proba,
-            self.get_config().behaviour.success_threshold.default,
+            self.get_config().behaviour.success_threshold,
         );
 
         let metric = match self.get_config().model.metric {
@@ -217,7 +217,7 @@ pub trait Model: ModelDependencies {
                         "{}[{}] Acc on threshold {} for {}: {:.3}%",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
-                        self.get_config().behaviour.success_threshold.default,
+                        self.get_config().behaviour.success_threshold,
                         self.get_name(),
                         thr_accuracy * 100.0
                     );
@@ -259,14 +259,14 @@ pub trait Model: ModelDependencies {
                 let thr_accuracy = threshold_accuracy(
                     &y_float,
                     &proba,
-                    self.get_config().behaviour.success_threshold.default,
+                    self.get_config().behaviour.success_threshold,
                 );
                 if self.get_config().prints.model.metrics {
                     println!(
                         "{}[{}] Acc on threshold {} for {}: {:.3}%",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
-                        self.get_config().behaviour.success_threshold.default,
+                        self.get_config().behaviour.success_threshold,
                         self.get_name(),
                         thr_accuracy * 100.0
                     );

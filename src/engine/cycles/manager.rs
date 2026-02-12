@@ -13,7 +13,7 @@ use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::db_req::select_all_candles;
 use crate::engine::cycles::background::cycle::BackgroundCycle;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
-use crate::engine::cycles::sandbox::cycle::{DummyAccount, SandboxCycle};
+use crate::engine::cycles::sandbox::cycle::SandboxCycle;
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::{Counters, SymbolCounters};
 use crate::engine::utils::colors::Fore;
@@ -264,19 +264,12 @@ impl CycleSupervisor {
             }
             CycleType::Sandbox => {
                 let mut cycle = SandboxCycle::init(symbol.to_string(), client).await?;
-                let account = Arc::new(Mutex::new(DummyAccount::with_balance(100.0)));
                 sleep(Duration::from_secs(10)).await;
                 match config.runtime.runtime_type {
                     RuntimeType::Realtime => {
-                        cycle
-                            .run(counter_tx, model_tx.as_ref().unwrap(), account)
-                            .await?
+                        cycle.run(counter_tx, model_tx.as_ref().unwrap()).await?
                     }
-                    RuntimeType::Backtest => {
-                        cycle
-                            .run_backtest(counter_tx, model_tx.as_ref().unwrap(), account)
-                            .await?
-                    }
+                    RuntimeType::Backtest => cycle.run_backtest(model_tx.as_ref().unwrap()).await?,
                 }
             }
         }

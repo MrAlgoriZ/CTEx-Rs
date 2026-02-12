@@ -1,18 +1,22 @@
+use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
-use std::collections::{HashMap, VecDeque};
-use std::fmt::Debug;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::sync::{mpsc, oneshot};
+use std::time::Duration;
+use tokio::sync::mpsc;
 
-use crate::data::data_interfaces::FlattenedData;
-use crate::data::process::data_collection::CollectedData;
+use crate::data::data_interfaces::{Candle, FlattenedData};
+use crate::data::process::data_collection::{CollectedData, OHLCV_FETCH_LEN};
 use crate::data::process::target::{process_target, restore_price};
+use crate::data::process::volatility::get_volatility;
+use crate::data::requests::ccxt::account::{Direction, DummyAccount};
 use crate::data::requests::ccxt::client::CCXTClient;
-use crate::engine::cycles::manager::{CounterCommand, CounterType, CycleError, ModelCommand};
+use crate::data::requests::database::db_req::insert_candle;
+use crate::engine::cycles::CyclePhase;
+use crate::engine::cycles::manager::{CounterCommand, CycleError, ModelCommand};
 use crate::engine::cycles::traits::{
     Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
 };
+use crate::engine::state::counters::SymbolCounters;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
@@ -23,11 +27,10 @@ pub struct SandboxCycle {
     last_grouped_candles: Option<Arc<CollectedData>>,
     last_candles_target: Option<f64>,
     print_symbol: String,
-    client: CCXTClient,
     config: Config,
     pool: PgPool,
-    risk_engine: RiskEngine,
-    feedback_engine: FeedBackEngine,
+    client: CCXTClient,
+    account: DummyAccount,
 }
 
 impl CycleGetters for SandboxCycle {
@@ -58,520 +61,274 @@ impl Cycle for SandboxCycle {}
 impl CycleWithModel for SandboxCycle {}
 
 impl SandboxCycle {
-    fn new(symbol: String, client: CCXTClient, pool: PgPool) -> Self {
+    fn new(symbol: String, pool: PgPool, client: CCXTClient, account: DummyAccount) -> Self {
         SandboxCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol.clone(),
             last_grouped_candles: None,
             last_candles_target: None,
             config: load_config("config/config.yaml"),
-            client,
             pool,
-            risk_engine: RiskEngine::new(symbol, load_config("config/config.yaml")),
-            feedback_engine: FeedBackEngine::new(load_config("config/config.yaml")),
+            client,
+            account,
         }
     }
 
     pub async fn init(symbol: String, client: CCXTClient) -> Result<Self, anyhow::Error> {
         let pool = PgPool::connect(&load_env().database_url).await?;
-        Ok(Self::new(symbol, client, pool))
+        let account = DummyAccount::init("".to_string(), "".to_string());
+        Ok(Self::new(symbol, pool, client, account))
     }
 
     pub async fn run(
         &mut self,
         counter_tx: &mpsc::Sender<CounterCommand>,
-        model: &mpsc::Sender<ModelCommand>,
-        account: Arc<Mutex<DummyAccount>>,
+        model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), CycleError> {
-        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+        if !self.get_client().test_symbol(&self.symbol).await.is_ok() {
             return Err(CycleError::SymbolDoesNotExist);
         }
-
-        let mut target_indicate: Option<bool> = None;
-        let mut prediction: Option<f64> = None;
         let mut volatility: f64 = 0.0;
+
+        let mut phase = CyclePhase::Warmup;
+        let mut prediction: Option<f64> = None;
 
         loop {
             self.wait_for_next_interval().await?;
             self.update_volatility(&mut volatility).await?;
-            if self.config.prints.cycle.volatility && target_indicate == None {
+            if self.config.prints.cycle.volatility {
                 self.print_volatility_status(volatility);
             }
 
             let candles = Arc::new(
-                self.client
+                self.get_client()
                     .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
                     .await?,
             );
             let candles_target: f64 = self
-                .client
+                .get_client()
                 .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
                 .await?[0]
                 .close;
 
-            if target_indicate == Some(true) {
-                let target: Option<f64> =
-                    process_target(self.last_candles_target.unwrap(), candles_target);
+            match phase {
+                CyclePhase::Active => {
+                    let target: Option<f64> =
+                        process_target(self.last_candles_target.unwrap(), candles_target);
 
-                let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
-                let success: bool =
-                    diff < (self.config.behaviour.success_threshold.default * 100.0 * volatility);
+                    let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
+                    let success: bool =
+                        diff < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
-                if self.config.prints.cycle.target {
-                    println!(
-                        "{}{} {}Pred: {:.5} | Target: {:.5} | Diff {:.5}",
-                        self.print_time(),
-                        self.print_symbol,
-                        Fore::WHITE.as_str(),
+                    if self.config.prints.cycle.target {
+                        println!(
+                            "{}{} {}Pred: {:.5} | Target: {:.5} | Diff {:.5}",
+                            self.print_time(),
+                            self.print_symbol,
+                            Fore::WHITE.as_str(),
+                            prediction.unwrap(),
+                            target.unwrap(),
+                            diff
+                        );
+                    }
+
+                    self.update_counters(
                         prediction.unwrap(),
                         target.unwrap(),
-                        diff
-                    );
-                }
-
-                self.update_counters(prediction.unwrap(), target.unwrap(), volatility, counter_tx)
+                        volatility,
+                        counter_tx,
+                    )
                     .await;
 
-                self.feedback_engine.update_last_diffs(diff);
-                self.feedback_engine.update_success_threshold();
-
-                if !success {
-                    let last_grouped = self.last_grouped_candles.clone().unwrap();
-                    let flattened = FlattenedData::from_collected(last_grouped, target);
-                    self.handle_mistake(flattened, counter_tx, model).await?;
+                    if !success {
+                        let last_grouped = self.last_grouped_candles.clone().unwrap();
+                        let flattened = FlattenedData::from_collected(last_grouped, target);
+                        self.handle_mistake(flattened, counter_tx, model_tx).await?;
+                    }
                 }
-
-                self.risk_engine.update_risk(volatility, counter_tx).await;
-
-                self.feedback_engine
-                    .update_trading_mode(volatility, self.risk_engine.risk_threshold);
-                println!(
-                    "Риски {:.3}, trading_mode: {:?}, tdv: {}",
-                    self.risk_engine.risk_threshold,
-                    self.feedback_engine.trading_mode.clone().unwrap(),
-                    self.feedback_engine.trading_mode_value
-                );
+                _ => {}
             }
 
             let candles_to_flattened = candles.clone();
             let flattened_for_pred = FlattenedData::from_collected(candles_to_flattened, None);
 
-            prediction = Some(self.predict(flattened_for_pred, &model).await.unwrap());
+            prediction = Some(self.predict(flattened_for_pred, &model_tx).await.unwrap());
             let restored_price: f64 = restore_price(candles_target, prediction.unwrap());
 
-            target_indicate = Some(true);
+            let direction = if prediction.unwrap() > 0.0 {
+                Direction::Buy
+            } else {
+                Direction::Sell
+            };
+            let amount = prediction.unwrap() * 0.01;
+
+            self.account
+                .create_fake_order(
+                    self.symbol.clone(),
+                    amount,
+                    direction,
+                    self.client.fetch_ticker(&self.symbol).await?.bid,
+                )
+                .await?;
+
+            phase = CyclePhase::Active;
             self.log_prediction(prediction.unwrap(), restored_price);
             self.last_grouped_candles = Some(candles);
             self.last_candles_target = Some(candles_target);
 
+            println!(
+                "Balance (USDT): ${:.3}",
+                self.account.get_balance_usdt(&self.client).await?.unwrap()
+            ); // TODO CycleWithAccount.log_balance_usdt()
+
             if self.config.prints.cycle.accuracy {
                 self.print_accuracy(counter_tx).await;
             }
-
-            let choice = self
-                .generate_choice(prediction.unwrap(), volatility, counter_tx)
-                .await;
-            match choice {
-                TradingChoice::Buy(amount) => {
-                    account
-                        .lock()
-                        .await
-                        .buy(
-                            &self.symbol,
-                            amount * account.lock().await.get_balance(),
-                            &self.client,
-                        )
-                        .await?
-                }
-                TradingChoice::Sell(amount) => {
-                    account
-                        .lock()
-                        .await
-                        .sell(
-                            &self.symbol,
-                            amount * account.lock().await.get_token_balance(&self.symbol),
-                            &self.client,
-                        )
-                        .await?
-                }
-                TradingChoice::DoNothing => {}
-            }
-
-            self.print_account_balance(account.clone()).await?;
         }
     }
 
-    // TODO Реализовать после нормальной логики для Sandbox
     pub async fn run_backtest(
         &mut self,
-        #[allow(unused)] counter_tx: &mpsc::Sender<CounterCommand>,
-        #[allow(unused)] model_tx: &mpsc::Sender<ModelCommand>,
-        #[allow(unused)] account: Arc<Mutex<DummyAccount>>,
+        model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), CycleError> {
-        Err(CycleError::AnyhowError(anyhow::anyhow!(
-            "БЕКТЕСТ ДЛЯ SANDBOX CYCLE НЕ РЕАЛИЗОВАН!"
-        )))
-    }
+        if !self.get_client().test_symbol(&self.symbol).await.is_ok() {
+            return Err(CycleError::SymbolDoesNotExist);
+        }
 
-    // --- Методы ---
-    async fn generate_choice(
-        &self,
-        prediction: f64,
-        volatility: f64,
-        counter_tx: &mpsc::Sender<CounterCommand>,
-    ) -> TradingChoice {
-        let mut diffs: Vec<f64> = self.feedback_engine.last_diffs.iter().cloned().collect();
-        diffs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let start_balance = self.account.get_balance_usdt(&self.client).await?.unwrap();
 
-        let trimmed = if diffs.len() >= 3 {
-            &diffs[1..diffs.len() - 1]
-        } else {
-            &diffs
-        };
+        println!(
+            "{}{} {}Бектест начался!",
+            self.print_time(),
+            self.print_symbol,
+            Fore::YELLOW.as_str()
+        );
 
-        let avg_diffs = trimmed.iter().sum::<f64>() / trimmed.len() as f64;
-        let real_accuracy = 1.0 - avg_diffs;
-        let (tx_local, rx_local) = oneshot::channel();
-        let _ = counter_tx
-            .send(CounterCommand::GetAccuracy {
-                symbol: self.symbol.to_uppercase(),
-                counter_type: CounterType::Threshold,
-                respond_to: tx_local,
-            })
-            .await;
+        println!("Start balance (USDT): ${:.3}", start_balance);
 
-        let (tx_global, rx_global) = oneshot::channel();
-        let _ = counter_tx
-            .send(CounterCommand::GetTotalAccuracy {
-                counter_type: CounterType::Threshold,
-                respond_to: tx_global,
-            })
-            .await;
+        let mut volatility: f64;
+        let mut prediction: Option<f64> = None;
 
-        let accuracy =
-            if let (Ok(Some(local_acc)), Ok(global_acc)) = (rx_local.await, rx_global.await) {
-                (local_acc * 0.6 + global_acc * 0.4) / 100.0
+        let all_candles = self
+            .get_client()
+            .fetch_ohlcv_with_timestamp(&self.symbol, &self.config.timeframes.main_timeframe, 1000)
+            .await?;
+
+        let mut phase = CyclePhase::Warmup;
+
+        let total = (all_candles.len() - 1 - OHLCV_FETCH_LEN) as u64;
+
+        let mut threshold_counter: SymbolCounters<u8> = SymbolCounters::new(total as usize);
+
+        let pb = ProgressBar::new(total);
+        pb.set_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}] {spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) ETA {eta_precise}"
+            )
+            .unwrap()
+            .progress_chars("> "),
+        );
+
+        for i in OHLCV_FETCH_LEN..all_candles.len() - 1 {
+            let window = &all_candles[i - OHLCV_FETCH_LEN..i];
+
+            let to_volatility: Vec<Candle> = window[..10]
+                .iter()
+                .map(|candle| candle.to_candle())
+                .collect();
+
+            volatility = get_volatility(&to_volatility);
+
+            let candles = match CollectedData::from_slice(
+                &self.symbol,
+                &self.config.timeframes.main_timeframe,
+                window,
+            ) {
+                Some(collected) => Arc::new(collected),
+                None => {
+                    return Err(CycleError::AnyhowError(anyhow::anyhow!(
+                        "Collection the data has been failed!"
+                    )));
+                }
+            };
+            let current_target = all_candles[i - 2].close;
+
+            match phase {
+                CyclePhase::Active => {
+                    let target = process_target(self.last_candles_target.unwrap(), current_target);
+
+                    let diff = (prediction.unwrap() - target.unwrap()).abs();
+                    let success: bool =
+                        diff < (self.config.behaviour.success_threshold * 100.0 * volatility);
+
+                    let threshold_value: u8 = success.into();
+
+                    threshold_counter.push(threshold_value);
+
+                    if !success && self.config.runtime.with_training {
+                        let last_grouped = self.last_grouped_candles.clone().unwrap();
+                        let flattened = FlattenedData::from_collected(last_grouped, target);
+
+                        if flattened.is_there_a_target() && self.config.runtime.with_saves {
+                            insert_candle(&self.pool, &self.symbol, &flattened.features).await?;
+                        }
+                        let shifted_acc = threshold_counter.get_shifted_accuracy(3);
+                        if shifted_acc.unwrap_or(0.0) == 0.0 {
+                            self.train_model(model_tx).await?;
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            let candles_to_flattened = candles.clone();
+            let flattened_for_pred = FlattenedData::from_collected(candles_to_flattened, None);
+
+            prediction = Some(self.predict(flattened_for_pred, &model_tx).await?);
+
+            let direction = if prediction.unwrap() > 0.0 {
+                Direction::Buy
             } else {
-                0.0
+                Direction::Sell
+            };
+            let amount = prediction.unwrap() * 0.01;
+
+            match self
+                .account
+                .create_fake_order(
+                    self.symbol.clone(),
+                    amount,
+                    direction,
+                    window.last().unwrap().open,
+                )
+                .await
+            {
+                Ok(_) => {}
+                Err(_) => {}
             };
 
-        let accuracy_diff = accuracy - real_accuracy;
-
-        if accuracy_diff <= 5.0 {
-            let choice: f64 = (prediction
-                * self.feedback_engine.trading_mode_value.abs()
-                * 100.0
-                * volatility
-                * 100.0
-                * real_accuracy
-                * 100.0)
-                / self.risk_engine.risk_threshold;
-            if choice > 0.1 {
-                return TradingChoice::Buy(choice);
-            } else if choice < -0.1 {
-                return TradingChoice::Sell(choice.abs());
-            } else {
-                return TradingChoice::DoNothing;
-            }
+            phase = CyclePhase::Active;
+            self.last_grouped_candles = Some(candles);
+            self.last_candles_target = Some(current_target);
+            pb.inc(1);
         }
-        TradingChoice::DoNothing
-    }
 
-    async fn print_account_balance(
-        &self,
-        account: Arc<Mutex<DummyAccount>>,
-    ) -> Result<(), anyhow::Error> {
-        println!(
-            "{}DummyAccount total balance = {} USDT",
+        pb.finish_with_message(format!(
+            "{}{} {}Бектест окончен!",
             self.print_time(),
-            account.lock().await.get_total_value(&self.client).await?
-        );
-        Ok(())
-    }
-}
+            self.print_symbol,
+            Fore::GREEN.as_str()
+        ));
 
-enum TradingChoice {
-    Buy(f64),  // Percent
-    Sell(f64), // Also percent
-    DoNothing,
-}
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
-#[derive(Debug, Clone)]
-enum TradingMode {
-    Agressive,
-    Conservative,
-    Neutral,
-}
-
-struct FeedBackEngine {
-    last_diffs: VecDeque<f64>,
-    success_threshold: f64,
-    trading_mode: Option<TradingMode>,
-    trading_mode_value: f64,
-    config: Config,
-}
-
-impl FeedBackEngine {
-    fn new(config: Config) -> Self {
-        Self {
-            last_diffs: VecDeque::with_capacity(config.behaviour.feedback_engine_capacity),
-            success_threshold: config.behaviour.success_threshold.default,
-            trading_mode: None,
-            trading_mode_value: config.behaviour.trading_mode_value.default,
-            config,
-        }
-    }
-
-    fn update_last_diffs(&mut self, diff: f64) {
-        self.last_diffs.push_back(diff);
-        if self.last_diffs.len() > self.last_diffs.capacity() {
-            self.last_diffs.pop_front();
-        }
-    }
-
-    fn update_success_threshold(&mut self) {
-        let mut diffs: Vec<f64> = self.last_diffs.iter().cloned().collect();
-        diffs.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-        let trimmed = if diffs.len() >= 3 {
-            &diffs[1..diffs.len() - 1]
-        } else {
-            &diffs
-        };
-
-        let avg = trimmed.iter().sum::<f64>() / trimmed.len() as f64;
-        let new_threshold = avg * self.config.behaviour.success_threshold.ratio;
-        self.success_threshold = new_threshold.clamp(
-            self.config.behaviour.success_threshold.minimum,
-            self.config.behaviour.success_threshold.maximum,
-        );
-    }
-
-    fn update_trading_mode(&mut self, volatility: f64, risk_threshold: f64) {
-        let volatility_norm = volatility.clamp(0.02, 0.1) / 0.1;
-        let risk_norm = (1.0 / risk_threshold).clamp(0.5, 2.0) / 2.0;
-
-        let pressure = risk_norm - volatility_norm;
-
-        self.trading_mode_value = (self.trading_mode_value * 0.85 + pressure * 0.15).clamp(
-            self.config.behaviour.trading_mode_value.minimum,
-            self.config.behaviour.trading_mode_value.maximum,
+        let end_balance = self.account.get_balance_usdt(&self.client).await?.unwrap();
+        println!("End balance (USDT): ${:.3}", end_balance);
+        println!(
+            "Модель заработала: {:.5}%",
+            (end_balance - start_balance) / start_balance
         );
 
-        self.trading_mode = if self.trading_mode_value > 0.2 {
-            Some(TradingMode::Agressive)
-        } else if self.trading_mode_value < -0.2 {
-            Some(TradingMode::Conservative)
-        } else {
-            Some(TradingMode::Neutral)
-        };
-    }
-}
-
-struct RiskEngine {
-    risk_threshold: f64,
-    symbol: String,
-    config: Config,
-}
-
-impl RiskEngine {
-    fn new(symbol: String, config: Config) -> Self {
-        Self {
-            risk_threshold: config.behaviour.risk_threshold.default,
-            symbol,
-            config,
-        }
-    }
-
-    async fn update_risk(&mut self, volatility: f64, counter_tx: &mpsc::Sender<CounterCommand>) {
-        let (tx_local, rx_local) = oneshot::channel();
-        let _ = counter_tx
-            .send(CounterCommand::GetAccuracy {
-                symbol: self.symbol.to_uppercase(),
-                counter_type: CounterType::Threshold,
-                respond_to: tx_local,
-            })
-            .await;
-
-        let (tx_global, rx_global) = oneshot::channel();
-        let _ = counter_tx
-            .send(CounterCommand::GetTotalAccuracy {
-                counter_type: CounterType::Threshold,
-                respond_to: tx_global,
-            })
-            .await;
-
-        if let (Ok(Some(local_acc)), Ok(global_acc)) = (rx_local.await, rx_global.await) {
-            let accuracy = (global_acc.max(0.1) * 0.4) + (local_acc.max(0.1) * 0.6);
-
-            let risk_modifier = (1.0 / accuracy).clamp(0.5, 2.0);
-
-            self.risk_threshold =
-                ((volatility * 100.0 * risk_modifier * 0.4) + self.risk_threshold * 0.6).clamp(
-                    self.config.behaviour.risk_threshold.minimum,
-                    self.config.behaviour.risk_threshold.maximum,
-                );
-        }
-    }
-}
-
-// Dummy crypto balance
-#[derive(Debug, Clone)]
-pub struct DummyAccount {
-    balance: f64,                 // Main balance (Tether USDT)
-    tokens: HashMap<String, f64>, // Token name & Balance
-}
-
-impl DummyAccount {
-    // pub fn new() -> Self {
-    //     DummyAccount {
-    //         balance: 0.0,
-    //         tokens: HashMap::new(),
-    //     }
-    // }
-
-    pub fn with_balance(balance: f64) -> Self {
-        DummyAccount {
-            balance,
-            tokens: HashMap::new(),
-        }
-    }
-
-    pub async fn buy(
-        &mut self,
-        token: &str,
-        amount: f64,
-        client: &CCXTClient,
-    ) -> Result<(), anyhow::Error> {
-        if amount <= 0.0 {
-            return Err(anyhow::anyhow!(
-                "Невозможно купить валюту, если депозит меньше нуля!"
-            ));
-        }
-
-        if self.balance < amount {
-            return Err(anyhow::anyhow!("Недостаточно на балансе!"));
-        }
-
-        let ask = client.fetch_ticker(token).await?.ask;
-
-        if ask <= 0.0 {
-            return Err(anyhow::anyhow!("Спрос меньше нуля"));
-        }
-
-        let token_amount = amount / ask;
-
-        self.balance -= amount;
-        self.add_token_balance(token, token_amount);
         Ok(())
     }
-
-    pub async fn sell(
-        &mut self,
-        token: &str,
-        amount: f64,
-        client: &CCXTClient,
-    ) -> Result<(), anyhow::Error> {
-        if amount <= 0.0 {
-            return Err(anyhow::anyhow!(
-                "Невозможно продать валюту, если депозит меньше нуля!"
-            ));
-        }
-
-        let current_balance = self.tokens.get(token).copied().unwrap_or(0.0);
-
-        if current_balance < amount {
-            return Err(anyhow::anyhow!("Недостаточно на балансе!"));
-        }
-
-        let bid = client.fetch_ticker(token).await?.bid;
-
-        if bid <= 0.0 {
-            return Err(anyhow::anyhow!("Предложение меньше нуля!"));
-        }
-
-        let usdt_amount = amount * bid;
-
-        self.remove_token_balance(token, amount);
-        self.balance += usdt_amount;
-        Ok(())
-    }
-
-    pub fn add_token_balance(&mut self, token: &str, amount: f64) {
-        if amount <= 0.0 {
-            return;
-        }
-
-        *self.tokens.entry(token.to_string()).or_insert(0.0) += amount;
-    }
-
-    pub fn remove_token_balance(&mut self, token: &str, amount: f64) {
-        if amount <= 0.0 {
-            return;
-        }
-
-        if let Some(balance) = self.tokens.get_mut(token) {
-            *balance -= amount;
-
-            if *balance <= 0.0 {
-                self.tokens.remove(token);
-            }
-        }
-    }
-
-    pub fn get_balance(&self) -> f64 {
-        self.balance
-    }
-
-    pub fn get_token_balance(&self, token: &str) -> f64 {
-        self.tokens.get(token).copied().unwrap_or(0.0)
-    }
-
-    // pub fn get_tokens(&self) -> &HashMap<String, f64> {
-    //     &self.tokens
-    // }
-
-    // pub fn deposit(&mut self, amount: f64) -> Result<(), String> {
-    //     if amount <= 0.0 {
-    //         return Err("Deposit amount must be positive".to_string());
-    //     }
-    //     self.balance += amount;
-    //     Ok(())
-    // }
-
-    // pub fn withdraw(&mut self, amount: f64) -> Result<(), String> {
-    //     if amount <= 0.0 {
-    //         return Err("Withdrawal amount must be positive".to_string());
-    //     }
-    //     if self.balance < amount {
-    //         return Err(format!(
-    //             "Insufficient balance. Available: {}, Required: {}",
-    //             self.balance, amount
-    //         ));
-    //     }
-    //     self.balance -= amount;
-    //     Ok(())
-    // }
-
-    pub async fn get_total_value(&self, client: &CCXTClient) -> Result<f64, anyhow::Error> {
-        let mut total = self.balance;
-
-        for (token, amount) in &self.tokens {
-            let bid = client.fetch_ticker(token).await?.bid;
-            total += amount * bid;
-        }
-
-        Ok(total)
-    }
-
-    // pub async fn liquidate_all(&mut self, client: &BinanceClient) {
-    //     let tokens: Vec<String> = self.tokens.keys().cloned().collect();
-
-    //     for token in tokens {
-    //         let amount = self.get_token_balance(&token);
-    //         if amount > 0.0 {
-    //             self.sell(&token, amount, client).await;
-    //         }
-    //     }
-    // }
 }

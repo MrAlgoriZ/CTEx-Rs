@@ -45,34 +45,9 @@ pub enum MetricType {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BehaviourConfig {
-    pub success_threshold: SuccessThresholdConfig,
-    pub risk_threshold: RiskThresholdConfig,
-    pub trading_mode_value: TradingModeConfig,
+    pub success_threshold: f64,
     pub accuracy_capacity: usize,
     pub predictions_capacity: usize,
-    pub feedback_engine_capacity: usize,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct SuccessThresholdConfig {
-    pub minimum: f64,
-    pub default: f64,
-    pub maximum: f64,
-    pub ratio: f64,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct RiskThresholdConfig {
-    pub minimum: f64,
-    pub default: f64,
-    pub maximum: f64,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct TradingModeConfig {
-    pub minimum: f64,
-    pub default: f64,
-    pub maximum: f64,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -123,6 +98,7 @@ pub struct RuntimeConfig {
     #[serde(rename = "type")]
     pub runtime_type: RuntimeType,
     pub with_training: bool,
+    pub with_saves: bool,
     pub cycle_type: String,
 }
 
@@ -173,30 +149,15 @@ impl Default for Config {
                 },
             },
             behaviour: BehaviourConfig {
-                success_threshold: SuccessThresholdConfig {
-                    minimum: 0.2,
-                    default: 0.125,
-                    maximum: 1.7,
-                    ratio: 1.25,
-                },
-                risk_threshold: RiskThresholdConfig {
-                    minimum: 0.5,
-                    default: 1.0,
-                    maximum: 3.0,
-                },
-                trading_mode_value: TradingModeConfig {
-                    minimum: -1.0,
-                    default: 0.0,
-                    maximum: 1.0,
-                },
+                success_threshold: 0.125,
                 accuracy_capacity: 192,
                 predictions_capacity: 96,
-                feedback_engine_capacity: 5,
             },
             symbols: vec!["BTCUSDT".to_string()],
             runtime: RuntimeConfig {
                 runtime_type: RuntimeType::Realtime,
                 with_training: false,
+                with_saves: true,
                 cycle_type: "loader".to_string(),
             },
             main_exchange: "binance".to_string(),

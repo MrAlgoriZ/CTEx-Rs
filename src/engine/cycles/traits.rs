@@ -125,7 +125,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
     ) {
         let diff: f64 = (prediction - target).abs();
         let success_threshold: f64 =
-            self.get_config().behaviour.success_threshold.default * 100.0 * volatility;
+            self.get_config().behaviour.success_threshold * 100.0 * volatility;
 
         let threshold_value: u8 = (diff < success_threshold).into();
         let direction_value: u8 = {

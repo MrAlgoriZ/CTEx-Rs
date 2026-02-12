@@ -22,22 +22,9 @@ servers:
   - "127.0.0.1:3737"
 
 behaviour:
-  success_threshold:
-    minimum: 0.2
-    default: 0.3
-    maximum: 1.7
-    ratio: 1.25
-  risk_threshold:
-    minimum: 0.5
-    default: 1.0
-    maximum: 3.0
-  trading_mode_value:
-    minimum: -1.0
-    default: 0.0
-    maximum: 1.0
+  success_threshold: 0.3
   accuracy_capacity: 192
   predictions_capacity: 96
-  feedback_engine_capacity: 5
 
 prints:
   model:
@@ -60,7 +47,8 @@ symbols:
 runtime:
   type: "backtest"
   with_training: true
-  cycle_type: "training"
+  with_saves: false
+  cycle_type: "sandbox"
 
 main_exchange: "binance"
 

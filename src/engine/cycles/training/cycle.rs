@@ -113,8 +113,8 @@ impl TrainingCycle {
                         process_target(self.last_candles_target.unwrap(), candles_target);
 
                     let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
-                    let success: bool = diff
-                        < (self.config.behaviour.success_threshold.default * 100.0 * volatility);
+                    let success: bool =
+                        diff < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
                     if self.config.prints.cycle.target {
                         println!(
@@ -230,8 +230,8 @@ impl TrainingCycle {
                     let target = process_target(self.last_candles_target.unwrap(), current_target);
 
                     let diff = (prediction.unwrap() - target.unwrap()).abs();
-                    let success: bool = diff
-                        < (self.config.behaviour.success_threshold.default * 100.0 * volatility);
+                    let success: bool =
+                        diff < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
                     let threshold_value: u8 = success.into();
                     let direction_value: u8 = {
@@ -247,7 +247,7 @@ impl TrainingCycle {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
                         let flattened = FlattenedData::from_collected(last_grouped, target);
 
-                        if flattened.is_there_a_target() {
+                        if flattened.is_there_a_target() && self.config.runtime.with_saves {
                             insert_candle(&self.pool, &self.symbol, &flattened.features).await?;
                         }
                         let shifted_acc = threshold_counter.get_shifted_accuracy(3);
