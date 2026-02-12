@@ -114,14 +114,14 @@ pub trait Model: ModelDependencies {
 
         if self.get_config().prints.model.skipped_values {
             println!(
-                "{}[{}] Пропущено строк: {} (NaN в target), {} (NaN в признаках)",
+                "{}[{}] Skipped rows: {} (NaN in target), {} (NaN in features)",
                 Fore::YELLOW.as_str(),
                 Utc::now().format("%H:%M:%S"),
                 skipped_nan_target,
                 skipped_nan_features
             );
             println!(
-                "{}[{}] Осталось {} валидных строк из {}",
+                "{}[{}] Remaining {} valid rows from {}",
                 Fore::GREEN.as_str(),
                 Utc::now().format("%H:%M:%S"),
                 x_rows.len(),
@@ -192,21 +192,21 @@ pub trait Model: ModelDependencies {
 
                 if self.get_config().prints.model.metrics {
                     println!(
-                        "{}[{}] Ошибка по MAE для {}: {:.3} pp",
+                        "{}[{}] MAE for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         mae
                     );
                     println!(
-                        "{}[{}] Ошибка по MSE для {}: {:.3} (pp²)",
+                        "{}[{}] MSE for {}: {:.3} (pp²)",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         mse
                     );
                     println!(
-                        "{}[{}] Ошибка по R2 для {}: {:.3}",
+                        "{}[{}] R2 for {}: {:.3}",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
@@ -214,7 +214,7 @@ pub trait Model: ModelDependencies {
                     );
 
                     println!(
-                        "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
+                        "{}[{}] Acc on threshold {} for {}: {:.3}%",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_config().behaviour.success_threshold.default,
@@ -222,27 +222,31 @@ pub trait Model: ModelDependencies {
                         thr_accuracy * 100.0
                     );
                     println!(
-                        "{}[{}] Точность по направлению для {} составляет {:.3}%",
+                        "{}[{}] Acc on direction for {}: {:.3}%",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         dir_accuracy * 100.0
                     );
                     println!(
-                        "{}[{}] Ошибка по RMSE для {}: {:.3} pp",
+                        "{}[{}] RMSE for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         rmse
                     );
                 }
+                // print!(
+                //     "{};{};{};{};{};{}\n",
+                //     mae, mse, rmse, r2_score, dir_accuracy, thr_accuracy
+                // );
                 thr_accuracy
             }
             MetricType::Direction => {
                 let dir_accuracy = direction_accuracy(&y_float, &proba);
                 if self.get_config().prints.model.metrics {
                     println!(
-                        "{}[{}] Точность по направлению для {} составляет {:.3}%",
+                        "{}[{}] Acc on direction for {}: {:.3}%",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
@@ -259,7 +263,7 @@ pub trait Model: ModelDependencies {
                 );
                 if self.get_config().prints.model.metrics {
                     println!(
-                        "{}[{}] Точность по порогу {} для {} составляет {:.3}%",
+                        "{}[{}] Acc on threshold {} for {}: {:.3}%",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_config().behaviour.success_threshold.default,
@@ -273,7 +277,7 @@ pub trait Model: ModelDependencies {
                 let mae = mean_absolute_error(&y_float, &proba);
                 if self.get_config().prints.model.metrics {
                     println!(
-                        "{}[{}] Ошибка по MAE для {}: {:.3} pp",
+                        "{}[{}] MAE for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
@@ -286,7 +290,7 @@ pub trait Model: ModelDependencies {
                 let mse = mean_squared_error(&y_float, &proba);
                 if self.get_config().prints.model.metrics {
                     println!(
-                        "{}[{}] Ошибка по MSE для {}: {:.3} pp",
+                        "{}[{}] MSE for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
@@ -299,7 +303,7 @@ pub trait Model: ModelDependencies {
                 let r2_score = r2(&y_float, &proba);
                 if self.get_config().prints.model.metrics {
                     println!(
-                        "{}[{}] Ошибка по R2 для {}: {:.3}",
+                        "{}[{}] R2 for {}: {:.3}",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
@@ -312,7 +316,7 @@ pub trait Model: ModelDependencies {
                 let rmse = mean_squared_error(&y_float, &proba).sqrt();
                 if self.get_config().prints.model.metrics {
                     println!(
-                        "{}[{}] Ошибка по RMSE для {}: {:.3} pp",
+                        "{}[{}] RMSE for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
@@ -354,17 +358,25 @@ pub trait Model: ModelDependencies {
         let input_mat = DenseMatrix::new(1, input.len(), input, false)?;
         let proba = self.model_predict(&input_mat)?;
 
-        if let Some(sn) = symbol_name
-            && let Some(ptx) = self.get_prediction_tx().clone()
-        {
-            let (tx, rx) = oneshot::channel();
+        if let Some(sn) = symbol_name {
+            if let Some(ptx) = self.get_prediction_tx().clone() {
+                let (tx, rx) = oneshot::channel();
 
-            let _ = ptx.send(PredictionCommand::AddPrediction {
-                symbol: sn.to_string(),
-                prediction: proba[0],
-                respond_to: tx,
-            });
-            rx.await??;
+                if let Err(e) = ptx
+                    .send(PredictionCommand::AddPrediction {
+                        symbol: sn.to_string(),
+                        prediction: proba[0],
+                        respond_to: tx,
+                    })
+                    .await
+                {
+                    println!("Prediction channel closed: {}", e);
+                } else {
+                    if let Err(e) = rx.await {
+                        println!("Prediction response cancelled: {}", e);
+                    }
+                }
+            }
         }
 
         Ok(proba[0])
@@ -492,5 +504,174 @@ async fn test_training() -> Result<(), anyhow::Error> {
             et.train(data)?;
         }
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_all_models() -> Result<(), anyhow::Error> {
+    let pool =
+        sqlx::PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
+            .await
+            .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
+
+    let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
+    drop(pool);
+    println!(
+        "model;n_trees;max_depth;min_samples_leaf;min_samples_split;m;solver;alpha;algorithm;weight;k;mae;mse;rmse;r2;dir;thr"
+    );
+
+    // XGBoost
+    {
+        let n_estimators_arr = [10, 25, 50, 100, 150];
+        let max_depth_arr = [1, 2, 3, 4, 5];
+
+        for n_estimators in n_estimators_arr.into_iter() {
+            for max_depth in max_depth_arr.into_iter() {
+                let mut xgboost =
+                    crate::models::xgboost::XGBoost::new(None, n_estimators, max_depth);
+                print!("XGBoost;{};{};;;;;;;;;", n_estimators, max_depth);
+                xgboost.train(data.clone())?;
+            }
+        }
+    }
+
+    // RandomForest
+    {
+        let n_trees_arr = [10, 25, 50, 75, 100];
+        let max_depth_arr = [1, 2, 3, 4, 5];
+        let min_samples_leaf_arr = [1, 2, 5, 8, 10];
+        let min_samples_split_arr = [2, 5, 10, 15, 20];
+        let m_arr = [1, 2, 3, 4, 5];
+
+        for n_trees in n_trees_arr.into_iter() {
+            for max_depth in max_depth_arr.into_iter() {
+                for min_samples_leaf in min_samples_leaf_arr.into_iter() {
+                    for min_samples_split in min_samples_split_arr.into_iter() {
+                        for m in m_arr.into_iter() {
+                            let mut rf = crate::models::randomforest::RandomForest::new(
+                                None,
+                                n_trees,
+                                max_depth,
+                                min_samples_leaf,
+                                min_samples_split,
+                                m,
+                            );
+                            print!(
+                                "RandomForest;{};{};{};{};{};;;;;;",
+                                n_trees, max_depth, min_samples_leaf, min_samples_split, m
+                            );
+                            rf.train(data.clone())?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Linear
+    {
+        let solver_arr = [String::from("SVD"), String::from("QR")];
+
+        for solver in solver_arr.into_iter() {
+            let mut ln = crate::models::linear::Linear::new(None, solver.clone());
+            print!("Linear;;;;;;{};;;;;", solver);
+            ln.train(data.clone())?;
+        }
+    }
+
+    // Ridge
+    {
+        let alpha_arr = [0.1, 0.5, 1.0, 5.0, 10.0];
+        let solver_arr = [String::from("SVD"), String::from("Cholesky")];
+
+        for alpha in alpha_arr.into_iter() {
+            for solver in solver_arr.iter() {
+                let mut ridge = crate::models::ridge::Ridge::new(None, solver.to_string(), alpha);
+                print!("Ridge;;;;;;{};{};;;;", solver, alpha);
+                ridge.train(data.clone())?;
+            }
+        }
+    }
+
+    // DecisionTree
+    {
+        let max_depth_arr = [1, 2, 3, 4, 5];
+        let min_samples_leaf_arr = [1, 2, 5, 8, 10];
+        let min_samples_split_arr = [2, 5, 10, 15, 20];
+
+        for max_depth in max_depth_arr.into_iter() {
+            for min_samples_leaf in min_samples_leaf_arr.into_iter() {
+                for min_samples_split in min_samples_split_arr.into_iter() {
+                    let mut decision = crate::models::decisiontree::DecisionTree::new(
+                        None,
+                        max_depth,
+                        min_samples_leaf,
+                        min_samples_split,
+                    );
+                    print!(
+                        "DecisionTree;;{};{};{};;;;;;;",
+                        max_depth, min_samples_leaf, min_samples_split,
+                    );
+                    decision.train(data.clone())?;
+                }
+            }
+        }
+    }
+
+    // KNN
+    {
+        let algorithm_arr = [String::from("CoverTree"), String::from("LinearSearch")];
+        let weight_arr = [String::from("Uniform"), String::from("Distance")];
+        let k_arr = [3, 5, 7, 10, 15];
+
+        for algorithm in algorithm_arr.iter() {
+            for weight in weight_arr.iter() {
+                for k in k_arr.into_iter() {
+                    let mut knn = crate::models::knn::KNN::new(
+                        None,
+                        algorithm.to_string(),
+                        weight.to_string(),
+                        k,
+                    );
+                    print!("KNN;;;;;;;;{};{};{};", algorithm, weight, k);
+                    knn.train(data.clone())?;
+                }
+            }
+        }
+    }
+
+    // ExtraTrees
+    {
+        let n_trees_arr = [10, 25, 50, 75, 100];
+        let max_depth_arr = [1, 2, 3, 4, 5];
+        let min_samples_leaf_arr = [1, 2, 5, 8, 10];
+        let min_samples_split_arr = [2, 5, 10, 15, 20];
+        let m_arr = [1, 2, 3, 4, 5];
+
+        for n_trees in n_trees_arr.into_iter() {
+            for max_depth in max_depth_arr.into_iter() {
+                for min_samples_leaf in min_samples_leaf_arr.into_iter() {
+                    for min_samples_split in min_samples_split_arr.into_iter() {
+                        for m in m_arr.into_iter() {
+                            let mut et = crate::models::extratrees::ExtraTrees::new(
+                                None,
+                                n_trees,
+                                max_depth,
+                                min_samples_leaf,
+                                min_samples_split,
+                                m,
+                            );
+                            print!(
+                                "ExtraTrees;{};{};{};{};{};;;;;;",
+                                n_trees, max_depth, min_samples_leaf, min_samples_split, m
+                            );
+                            et.train(data.clone())?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }

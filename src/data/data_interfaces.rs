@@ -46,7 +46,7 @@ pub struct CircleTime {
     pub min_cos: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FlattenedData {
     pub symbol: String,
     pub features: Vec<f64>,

@@ -1,10 +1,13 @@
 model:
-  type: "DecisionTree"
+  type: "RandomForest"
   params:
-    kind: "DecisionTree"
+    kind: "RandomForest"
+    n_trees: 50
     max_depth: 5
-    min_samples_leaf: 100
-    min_samples_split: 100
+    min_samples_leaf: 8
+    min_samples_split: 2
+    m: 3
+
   train_test_split:
     train_ratio: 0.8
   metric: "ALL"
@@ -38,8 +41,8 @@ behaviour:
 
 prints:
   model:
-    skipped_values: true
-    metrics: true
+    skipped_values: false
+    metrics: false
   cycle:
     volatility: true
     cycle_start: true
@@ -56,7 +59,7 @@ symbols:
 
 runtime:
   type: "backtest"
-  with_training: false
+  with_training: true
   cycle_type: "training"
 
 main_exchange: "binance"
