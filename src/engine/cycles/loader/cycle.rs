@@ -64,7 +64,7 @@ impl LoaderCycle {
         Ok(Self::new(symbol, client, pool))
     }
 
-    pub async fn run(&mut self) -> Result<(), CycleError> {
+    pub async fn run(mut self) -> Result<(), CycleError> {
         if !self.client.test_symbol(&self.symbol).await.is_ok() {
             return Err(CycleError::SymbolDoesNotExist);
         }
@@ -124,7 +124,7 @@ impl LoaderCycle {
         }
     }
 
-    pub async fn run_backtest(&mut self) -> Result<(), CycleError> {
+    pub async fn run_backtest(mut self) -> Result<(), CycleError> {
         if !self.client.test_symbol(&self.symbol).await.is_ok() {
             return Err(CycleError::SymbolDoesNotExist);
         }

@@ -17,7 +17,7 @@ use crate::engine::cycles::sandbox::cycle::SandboxCycle;
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::{Counters, SymbolCounters};
 use crate::engine::utils::colors::Fore;
-use crate::engine::utils::config::config_types::RuntimeType;
+use crate::engine::utils::config::config_types::{CycleType, RuntimeType};
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::engine::utils::parse::parse_symbol;
@@ -243,7 +243,7 @@ impl CycleSupervisor {
 
         match cycle_type {
             CycleType::Loader => {
-                let mut cycle = LoaderCycle::init(symbol.to_string(), client).await?;
+                let cycle = LoaderCycle::init(symbol.to_string(), client).await?;
                 sleep(Duration::from_secs(10)).await;
 
                 match config.runtime.runtime_type {
@@ -252,7 +252,7 @@ impl CycleSupervisor {
                 }
             }
             CycleType::Training => {
-                let mut cycle = TrainingCycle::init(symbol.to_string(), client).await?;
+                let cycle = TrainingCycle::init(symbol.to_string(), client).await?;
                 sleep(Duration::from_secs(10)).await;
 
                 match config.runtime.runtime_type {
@@ -263,7 +263,7 @@ impl CycleSupervisor {
                 }
             }
             CycleType::Sandbox => {
-                let mut cycle = SandboxCycle::init(symbol.to_string(), client).await?;
+                let cycle = SandboxCycle::init(symbol.to_string(), client).await?;
                 sleep(Duration::from_secs(10)).await;
                 match config.runtime.runtime_type {
                     RuntimeType::Realtime => {
@@ -493,24 +493,6 @@ impl ModelActor {
         }
 
         log_warning("ModelActor остановлен");
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum CycleType {
-    Loader,
-    Training,
-    Sandbox,
-}
-
-impl CycleType {
-    pub fn from_str(cycle_type: &str) -> Self {
-        match cycle_type {
-            "training" => CycleType::Training,
-            "loader" => CycleType::Loader,
-            "sandbox" => CycleType::Sandbox,
-            _ => panic!("Cycle type must be 'training', 'loader', or 'sandbox'"),
-        }
     }
 }
 

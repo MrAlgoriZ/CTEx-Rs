@@ -77,7 +77,7 @@ impl TrainingCycle {
     }
 
     pub async fn run(
-        &mut self,
+        mut self,
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), CycleError> {
@@ -163,7 +163,7 @@ impl TrainingCycle {
     }
 
     pub async fn run_backtest(
-        &mut self,
+        mut self,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), CycleError> {
         if !self.client.test_symbol(&self.symbol).await.is_ok() {

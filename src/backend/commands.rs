@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use crate::CONFIG_PATH;
 use crate::backend::structure::{ApiState, ApiStructure};
 use crate::engine::cycles::manager::{
-    CounterCommand, CounterType, CycleType, PredictionCommand, SupervisorCommand,
+    CounterCommand, CounterType, PredictionCommand, SupervisorCommand,
 };
+use crate::engine::utils::config::config_types::CycleType;
 use crate::engine::utils::config::load_config::load_config;
 
 use axum::Json;

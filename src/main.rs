@@ -4,7 +4,7 @@ mod engine;
 mod models;
 
 use crate::backend::app::Api;
-use crate::engine::cycles::manager::{CycleManager, CycleType};
+use crate::engine::cycles::manager::CycleManager;
 use crate::engine::utils::config::load_config::{ensure_config_exists, load_config};
 
 use std::collections::HashMap;
@@ -19,10 +19,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut cycle_types = HashMap::new();
     for symbol in symbols.clone().into_iter() {
-        cycle_types.insert(
-            symbol,
-            CycleType::from_str(&config.runtime.cycle_type.to_lowercase()),
-        );
+        cycle_types.insert(symbol, config.runtime.cycle_type);
     }
 
     let mut manager = CycleManager::new().await;

@@ -32,6 +32,7 @@ pub struct SandboxCycle {
     pool: PgPool,
     client: CCXTClient,
     account: DummyAccount,
+    start_balance: Option<f64>,
 }
 
 impl CycleGetters for SandboxCycle {
@@ -73,6 +74,7 @@ impl SandboxCycle {
             pool,
             client,
             account,
+            start_balance: None,
         }
     }
 
@@ -83,7 +85,7 @@ impl SandboxCycle {
     }
 
     pub async fn run(
-        &mut self,
+        mut self,
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), CycleError> {
@@ -190,28 +192,18 @@ impl SandboxCycle {
     }
 
     pub async fn run_backtest(
-        &mut self,
+        mut self,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), CycleError> {
         if !self.get_client().test_symbol(&self.symbol).await.is_ok() {
             return Err(CycleError::SymbolDoesNotExist);
         }
 
-        let start_balance = self.account.get_balance_usdt(&self.client).await?.unwrap();
-
         println!(
             "{}{} {}Бектест начался!",
             self.print_time(),
             self.print_symbol,
             Fore::YELLOW.as_str()
-        );
-
-        println!(
-            "{}{} {}Start balance (USDT): ${:.3}",
-            self.print_time(),
-            self.print_symbol,
-            Fore::GREEN.as_str(),
-            start_balance
         );
 
         let mut volatility: f64;
@@ -286,7 +278,21 @@ impl SandboxCycle {
                         }
                     }
                 }
-                _ => {}
+                CyclePhase::Warmup => {
+                    self.start_balance = Some(
+                        self.account
+                            .get_fake_balance_usdt(window.last().unwrap().open)
+                            .await?
+                            .unwrap(),
+                    );
+                    println!(
+                        "{}{} {}Start balance (USDT): ${:.3}",
+                        self.print_time(),
+                        self.print_symbol,
+                        Fore::GREEN.as_str(),
+                        self.start_balance.unwrap()
+                    );
+                }
             }
 
             let candles_to_flattened = candles.clone();
@@ -303,14 +309,10 @@ impl SandboxCycle {
 
             let order_price = window.last().unwrap().open;
 
-            match self
+            let _ = self
                 .account
                 .create_fake_order(self.symbol.clone(), amount, direction, order_price)
-                .await
-            {
-                Ok(_) => {}
-                Err(_) => {}
-            };
+                .await;
 
             phase = CyclePhase::Active;
             self.last_grouped_candles = Some(candles);
@@ -334,7 +336,8 @@ impl SandboxCycle {
             .await?
             .unwrap();
 
-        let percent = ((end_balance - start_balance) / start_balance) * 100.0;
+        let percent =
+            ((end_balance - self.start_balance.unwrap()) / self.start_balance.unwrap()) * 100.0;
 
         let fore = if percent > 0.0 {
             Fore::GREEN.as_str()

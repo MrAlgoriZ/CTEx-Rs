@@ -13,7 +13,7 @@ pub struct Config {
     pub symbols: Vec<String>,
     pub main_exchange: String,
     pub timeframes: TimeframesConfig,
-    pub mode: String,
+    pub mode: PrintMode,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -99,7 +99,7 @@ pub struct RuntimeConfig {
     pub runtime_type: RuntimeType,
     pub with_training: bool,
     pub with_saves: bool,
-    pub cycle_type: String,
+    pub cycle_type: CycleType,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -108,6 +108,21 @@ pub struct TimeframesConfig {
     pub main_timeframe: String,
     #[serde(rename = "background")]
     pub background_timeframe: String,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CycleType {
+    Loader,
+    Training,
+    Sandbox,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum PrintMode {
+    Log,
+    Print,
 }
 
 impl Default for Config {
@@ -158,14 +173,14 @@ impl Default for Config {
                 runtime_type: RuntimeType::Realtime,
                 with_training: false,
                 with_saves: true,
-                cycle_type: "loader".to_string(),
+                cycle_type: CycleType::Loader,
             },
             main_exchange: "binance".to_string(),
             timeframes: TimeframesConfig {
                 main_timeframe: "15m".to_string(),
                 background_timeframe: "1m".to_string(),
             },
-            mode: "print".to_string(),
+            mode: PrintMode::Print,
         }
     }
 }
