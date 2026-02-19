@@ -171,7 +171,7 @@ impl TrainingCycle {
         }
 
         println!(
-            "{}{} {}Бектест начался!",
+            "{}{} {}Бектест начался!\n",
             self.print_time(),
             self.print_symbol,
             Fore::YELLOW.as_str()
@@ -280,7 +280,7 @@ impl TrainingCycle {
         tokio::time::sleep(Duration::from_secs(1)).await;
 
         println!(
-            "{}{} {}Точность по threshold составляет: {:.3}%",
+            "\n{}{} {}Точность по threshold составляет: {:.3}%",
             self.print_time(),
             self.print_symbol,
             Fore::YELLOW.as_str(),

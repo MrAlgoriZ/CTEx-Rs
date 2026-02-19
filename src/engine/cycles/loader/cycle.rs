@@ -130,7 +130,7 @@ impl LoaderCycle {
         }
 
         println!(
-            "{}{} {}Бектест начался!",
+            "{}{} {}Бектест начался!\n",
             self.print_time(),
             self.print_symbol,
             Fore::YELLOW.as_str()
@@ -195,6 +195,7 @@ impl LoaderCycle {
             self.print_symbol,
             Fore::GREEN.as_str()
         ));
+        println!("");
 
         Ok(())
     }

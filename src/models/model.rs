@@ -11,6 +11,8 @@ use crate::data::data_interfaces::FlattenedData;
 use crate::engine::cycles::manager::PredictionCommand;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::{Config, MetricType};
+use crate::models::SingleModelParams;
+use crate::models::ensemble::Ensemble;
 use crate::models::metrics::*;
 
 pub trait ModelDependencies {
@@ -19,6 +21,7 @@ pub trait ModelDependencies {
     fn change_symbol_columns(&mut self, symbol_columns: Option<Vec<String>>);
     fn get_config(&self) -> &Config;
     fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionCommand>>;
+    fn get_target_index(&self) -> i32;
     fn check_model_trained(&self) -> bool;
 }
 
@@ -34,21 +37,9 @@ pub trait Model: ModelDependencies {
         }
 
         let total_len = data[0].features.len();
-        // if total_len < 2 {
-        //     return Err(anyhow!(
-        //         "Each row must have at least one feature and one target"
-        //     ));
-        // }
-
-        // if total_len != 30 {
-        //     return Err(anyhow!(
-        //         "Expected 30 columns (29 features + 1 target), got {}",
-        //         total_len
-        //     ));
-        // }
 
         let feature_len = total_len - 1;
-        let target_idx = feature_len;
+        let target_idx = (feature_len as i32 + 1 + self.get_target_index()) as usize;
 
         if data.iter().any(|d| d.features.len() != total_len) {
             return Err(anyhow!(
@@ -132,13 +123,6 @@ pub trait Model: ModelDependencies {
         if x_rows.is_empty() {
             return Err(anyhow!("No valid data after removing NaN values"));
         }
-
-        // assert!(
-        //     x_rows.len() == y_target.len(),
-        //     "X and y length mismatch: X={}, y={}",
-        //     x_rows.len(),
-        //     y_target.len()
-        // );
 
         let n_features = n_symbols + feature_len;
         let mut flat_x = Vec::with_capacity(x_rows.len() * n_features);
@@ -410,6 +394,107 @@ pub trait Model: ModelDependencies {
     }
 }
 
+pub fn init_single_model(
+    params: SingleModelParams,
+    prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+) -> Box<dyn Model + Send + Sync> {
+    let model: Box<dyn Model + Send + Sync> = match params {
+        SingleModelParams::XGBoost {
+            target_type,
+            n_estimators,
+            max_depth,
+        } => Box::new(crate::models::xgboost::XGBoost::new(
+            prediction_tx,
+            target_type,
+            n_estimators,
+            max_depth,
+        )),
+        SingleModelParams::RandomForest {
+            target_type,
+            n_trees,
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+            m,
+        } => Box::new(crate::models::randomforest::RandomForest::new(
+            prediction_tx,
+            target_type,
+            n_trees,
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+            m,
+        )),
+        SingleModelParams::Linear {
+            target_type,
+            solver,
+        } => Box::new(crate::models::linear::Linear::new(
+            prediction_tx,
+            target_type,
+            solver,
+        )),
+        SingleModelParams::Ridge {
+            target_type,
+            alpha,
+            solver,
+        } => Box::new(crate::models::ridge::Ridge::new(
+            prediction_tx,
+            target_type,
+            solver,
+            alpha,
+        )),
+        SingleModelParams::DecisionTree {
+            target_type,
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+        } => Box::new(crate::models::decisiontree::DecisionTree::new(
+            prediction_tx,
+            target_type,
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+        )),
+        SingleModelParams::KNN {
+            target_type,
+            algorithm,
+            weight,
+            k,
+        } => Box::new(crate::models::knn::KNN::new(
+            prediction_tx,
+            target_type,
+            algorithm,
+            weight,
+            k,
+        )),
+        SingleModelParams::ExtraTrees {
+            target_type,
+            n_trees,
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+            m,
+        } => Box::new(crate::models::extratrees::ExtraTrees::new(
+            prediction_tx,
+            target_type,
+            n_trees,
+            max_depth,
+            min_samples_leaf,
+            min_samples_split,
+            m,
+        )),
+    };
+    model
+}
+
+pub fn init_ensemble_model(
+    prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+) -> Result<Box<dyn Model + Send + Sync>, anyhow::Error> {
+    let mut model = Ensemble::new(prediction_tx);
+    model.init_from_config()?;
+    Ok(Box::new(model))
+}
+
 #[tokio::test]
 async fn test_training() -> Result<(), anyhow::Error> {
     let pool =
@@ -419,91 +504,20 @@ async fn test_training() -> Result<(), anyhow::Error> {
     let params = crate::engine::utils::config::load_config::load_config(crate::CONFIG_PATH)
         .model
         .params;
+
     match params {
-        crate::models::ModelParams::XGBoost {
-            n_estimators,
-            max_depth,
-        } => {
-            let mut xgboost = crate::models::xgboost::XGBoost::new(None, n_estimators, max_depth);
-
+        crate::models::ModelParams::Ensemble { .. } => {
+            let mut model = init_ensemble_model(None)?;
             let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
-            xgboost.train(data)?;
+            model.train(data)?;
         }
-        crate::models::ModelParams::RandomForest {
-            n_trees,
-            max_depth,
-            min_samples_leaf,
-            min_samples_split,
-            m,
-        } => {
-            let mut rf = crate::models::randomforest::RandomForest::new(
-                None,
-                n_trees,
-                max_depth,
-                min_samples_leaf,
-                min_samples_split,
-                m,
-            );
-
+        crate::models::ModelParams::Single { params } => {
+            let mut model = init_single_model(params, None);
             let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
-            rf.train(data)?;
-        }
-        crate::models::ModelParams::Linear { solver } => {
-            let mut ln = crate::models::linear::Linear::new(None, solver);
-
-            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
-            ln.train(data)?;
-        }
-        crate::models::ModelParams::Ridge { alpha, solver } => {
-            let mut ridge = crate::models::ridge::Ridge::new(None, solver, alpha);
-
-            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
-            ridge.train(data)?;
-        }
-        crate::models::ModelParams::DecisionTree {
-            max_depth,
-            min_samples_leaf,
-            min_samples_split,
-        } => {
-            let mut decision = crate::models::decisiontree::DecisionTree::new(
-                None,
-                max_depth,
-                min_samples_leaf,
-                min_samples_split,
-            );
-
-            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
-            decision.train(data)?;
-        }
-        crate::models::ModelParams::KNN {
-            algorithm,
-            weight,
-            k,
-        } => {
-            let mut knn = crate::models::knn::KNN::new(None, algorithm, weight, k);
-            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
-            knn.train(data)?;
-        }
-        crate::models::ModelParams::ExtraTrees {
-            n_trees,
-            max_depth,
-            min_samples_leaf,
-            min_samples_split,
-            m,
-        } => {
-            let mut et = crate::models::extratrees::ExtraTrees::new(
-                None,
-                n_trees,
-                max_depth,
-                min_samples_leaf,
-                min_samples_split,
-                m,
-            );
-
-            let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
-            et.train(data)?;
+            model.train(data)?;
         }
     }
+
     Ok(())
 }
 
@@ -519,6 +533,7 @@ async fn test_all_models() -> Result<(), anyhow::Error> {
     println!(
         "model;n_trees;max_depth;min_samples_leaf;min_samples_split;m;solver;alpha;algorithm;weight;k;mae;mse;rmse;r2;dir;thr"
     );
+    let target_type = crate::models::TargetType::FutureReturn;
 
     // XGBoost
     {
@@ -527,8 +542,12 @@ async fn test_all_models() -> Result<(), anyhow::Error> {
 
         for n_estimators in n_estimators_arr.into_iter() {
             for max_depth in max_depth_arr.into_iter() {
-                let mut xgboost =
-                    crate::models::xgboost::XGBoost::new(None, n_estimators, max_depth);
+                let mut xgboost = crate::models::xgboost::XGBoost::new(
+                    None,
+                    target_type.clone(),
+                    n_estimators,
+                    max_depth,
+                );
                 print!("XGBoost;{};{};;;;;;;;;", n_estimators, max_depth);
                 xgboost.train(data.clone())?;
             }
@@ -550,6 +569,7 @@ async fn test_all_models() -> Result<(), anyhow::Error> {
                         for m in m_arr.into_iter() {
                             let mut rf = crate::models::randomforest::RandomForest::new(
                                 None,
+                                target_type.clone(),
                                 n_trees,
                                 max_depth,
                                 min_samples_leaf,
@@ -573,7 +593,8 @@ async fn test_all_models() -> Result<(), anyhow::Error> {
         let solver_arr = [String::from("SVD"), String::from("QR")];
 
         for solver in solver_arr.into_iter() {
-            let mut ln = crate::models::linear::Linear::new(None, solver.clone());
+            let mut ln =
+                crate::models::linear::Linear::new(None, target_type.clone(), solver.clone());
             print!("Linear;;;;;;{};;;;;", solver);
             ln.train(data.clone())?;
         }
@@ -586,7 +607,12 @@ async fn test_all_models() -> Result<(), anyhow::Error> {
 
         for alpha in alpha_arr.into_iter() {
             for solver in solver_arr.iter() {
-                let mut ridge = crate::models::ridge::Ridge::new(None, solver.to_string(), alpha);
+                let mut ridge = crate::models::ridge::Ridge::new(
+                    None,
+                    target_type.clone(),
+                    solver.to_string(),
+                    alpha,
+                );
                 print!("Ridge;;;;;;{};{};;;;", solver, alpha);
                 ridge.train(data.clone())?;
             }
@@ -604,6 +630,7 @@ async fn test_all_models() -> Result<(), anyhow::Error> {
                 for min_samples_split in min_samples_split_arr.into_iter() {
                     let mut decision = crate::models::decisiontree::DecisionTree::new(
                         None,
+                        target_type.clone(),
                         max_depth,
                         min_samples_leaf,
                         min_samples_split,
@@ -629,6 +656,7 @@ async fn test_all_models() -> Result<(), anyhow::Error> {
                 for k in k_arr.into_iter() {
                     let mut knn = crate::models::knn::KNN::new(
                         None,
+                        target_type.clone(),
                         algorithm.to_string(),
                         weight.to_string(),
                         k,
@@ -655,6 +683,7 @@ async fn test_all_models() -> Result<(), anyhow::Error> {
                         for m in m_arr.into_iter() {
                             let mut et = crate::models::extratrees::ExtraTrees::new(
                                 None,
+                                target_type.clone(),
                                 n_trees,
                                 max_depth,
                                 min_samples_leaf,

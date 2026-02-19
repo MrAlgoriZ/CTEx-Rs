@@ -11,11 +11,13 @@ use tokio::sync::mpsc;
 use crate::engine::cycles::manager::PredictionCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
+use crate::models::TargetType;
 use crate::models::model::{Model, ModelDependencies};
 
 pub struct Linear {
     model: Option<LinearRegression<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
     name: String,
+    target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
     config: Config,
     prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
@@ -23,10 +25,15 @@ pub struct Linear {
 }
 
 impl Linear {
-    pub fn new(prediction_tx: Option<mpsc::Sender<PredictionCommand>>, solver: String) -> Self {
+    pub fn new(
+        prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+        target_type: TargetType,
+        solver: String,
+    ) -> Self {
         Self {
             model: None,
             name: "Linear".to_string(),
+            target_type,
             symbol_columns: None,
             config: load_config("config/config.yaml"),
             prediction_tx,
@@ -61,6 +68,10 @@ impl ModelDependencies for Linear {
 
     fn get_symbol_columns(&self) -> &Option<Vec<String>> {
         &self.symbol_columns
+    }
+
+    fn get_target_index(&self) -> i32 {
+        self.target_type.get_index()
     }
 }
 

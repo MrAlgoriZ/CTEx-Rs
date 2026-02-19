@@ -286,7 +286,7 @@ impl SandboxCycle {
                             .unwrap(),
                     );
                     println!(
-                        "{}{} {}Start balance (USDT): ${:.3}",
+                        "{}{} {}Start balance (USDT): ${:.3}\n",
                         self.print_time(),
                         self.print_symbol,
                         Fore::GREEN.as_str(),
@@ -346,7 +346,7 @@ impl SandboxCycle {
         };
 
         println!(
-            "{}{} {}End balance (USDT): ${:.3}",
+            "\n\n{}{} {}End balance (USDT): ${:.3}",
             self.print_time(),
             self.print_symbol,
             fore,

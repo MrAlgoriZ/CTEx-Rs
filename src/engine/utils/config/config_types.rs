@@ -129,10 +129,13 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             model: ModelConfig {
-                model_type: ModelType::XGBoost,
-                params: ModelParams::XGBoost {
-                    n_estimators: 100,
-                    max_depth: 5,
+                model_type: ModelType::Single,
+                params: ModelParams::Single {
+                    params: crate::models::SingleModelParams::XGBoost {
+                        target_type: crate::models::TargetType::FutureReturn,
+                        n_estimators: 100,
+                        max_depth: 5,
+                    },
                 },
                 train_test_split: TrainTestSplit { train_ratio: 0.8 },
                 metric: MetricType::R2,
