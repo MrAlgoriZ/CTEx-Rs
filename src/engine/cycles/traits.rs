@@ -101,7 +101,8 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
             model_tx
                 .send(ModelCommand::Predict {
-                    flattenned_candles: flattened_candles,
+                    features: flattened_candles.features,
+                    symbol: flattened_candles.symbol,
                     respond_to: tx,
                 })
                 .await?;

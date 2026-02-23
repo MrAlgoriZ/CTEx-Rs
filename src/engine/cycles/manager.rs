@@ -323,7 +323,7 @@ struct CounterActor {
 
 impl CounterActor {
     fn new(capacity: usize) -> (Self, mpsc::Sender<CounterCommand>) {
-        let (tx, rx) = mpsc::channel(1000);
+        let (tx, rx) = mpsc::channel(10);
         (
             Self {
                 threshold_counters: Counters::new(capacity),
@@ -415,7 +415,8 @@ impl CounterActor {
 
 pub enum ModelCommand {
     Predict {
-        flattenned_candles: FlattenedData,
+        features: Vec<f64>,
+        symbol: String,
         respond_to: oneshot::Sender<f64>,
     },
     Train {
@@ -424,14 +425,14 @@ pub enum ModelCommand {
     },
 }
 
-struct ModelActor {
+pub struct ModelActor {
     model: Arc<Mutex<Box<dyn Model + Send + Sync>>>,
     inbox: mpsc::Receiver<ModelCommand>,
 }
 
 impl ModelActor {
-    fn new(model: Box<dyn Model + Send + Sync>) -> (Self, mpsc::Sender<ModelCommand>) {
-        let (tx, rx) = mpsc::channel(100);
+    pub fn new(model: Box<dyn Model + Send + Sync>) -> (Self, mpsc::Sender<ModelCommand>) {
+        let (tx, rx) = mpsc::channel(10);
         (
             Self {
                 model: Arc::new(Mutex::new(model)),
@@ -441,18 +442,17 @@ impl ModelActor {
         )
     }
 
-    async fn run(mut self) {
+    pub async fn run(mut self) {
         log_info("ModelActor запущен");
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
                 ModelCommand::Predict {
-                    flattenned_candles,
+                    features,
+                    symbol,
                     respond_to,
                 } => {
                     let model = self.model.clone();
-                    let features = flattenned_candles.features;
-                    let symbol = flattenned_candles.symbol;
 
                     let result = model.lock().await.predict(features, Some(&symbol)).await;
 
@@ -594,8 +594,34 @@ impl CycleManager {
         let params = load_config(CONFIG_PATH).model.params;
 
         let mut model: Box<dyn Model + Send + Sync> = match params {
-            ModelParams::Ensemble { .. } => init_ensemble_model(Some(self.prediction_tx.clone()))
-                .map_err(|e| format!("{}", e))?,
+            ModelParams::Ensemble {
+                volatility_model_params,
+                volume_model_params,
+                spread_model_params,
+                trend_strength_model_params,
+                range_model_params,
+                return_model_params,
+                return_mean_model_params,
+                return_std_model_params,
+                return_skew_model_params,
+                return_kurt_model_params,
+                action_model_params,
+                interpretator_model_params,
+            } => init_ensemble_model(
+                Some(self.prediction_tx.clone()),
+                volatility_model_params,
+                volume_model_params,
+                spread_model_params,
+                trend_strength_model_params,
+                range_model_params,
+                return_model_params,
+                return_mean_model_params,
+                return_std_model_params,
+                return_skew_model_params,
+                return_kurt_model_params,
+                action_model_params,
+                interpretator_model_params,
+            ),
             ModelParams::Single { params } => {
                 init_single_model(params, Some(self.prediction_tx.clone()))
             }
@@ -678,7 +704,7 @@ pub struct PredictionsActor {
 
 impl PredictionsActor {
     pub fn new(capacity: usize) -> (Self, mpsc::Sender<PredictionCommand>) {
-        let (tx, rx) = mpsc::channel(300);
+        let (tx, rx) = mpsc::channel(10);
 
         (
             Self {
@@ -799,7 +825,7 @@ pub struct ServersActor {
 
 impl ServersActor {
     pub async fn new() -> (Self, mpsc::Sender<ServersCommand>) {
-        let (tx, rx) = mpsc::channel(200);
+        let (tx, rx) = mpsc::channel(10);
 
         let servers_vec = load_config(CONFIG_PATH).servers;
 

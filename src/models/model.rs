@@ -489,10 +489,35 @@ pub fn init_single_model(
 
 pub fn init_ensemble_model(
     prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
-) -> Result<Box<dyn Model + Send + Sync>, anyhow::Error> {
-    let mut model = Ensemble::new(prediction_tx);
-    model.init_from_config()?;
-    Ok(Box::new(model))
+    volatility_model_params: SingleModelParams,
+    volume_model_params: SingleModelParams,
+    spread_model_params: SingleModelParams,
+    trend_strength_model_params: SingleModelParams,
+    range_model_params: SingleModelParams,
+    return_model_params: SingleModelParams,
+    return_mean_model_params: SingleModelParams,
+    return_std_model_params: SingleModelParams,
+    return_skew_model_params: SingleModelParams,
+    return_kurt_model_params: SingleModelParams,
+    action_model_params: SingleModelParams,
+    interpretator_model_params: SingleModelParams,
+) -> Box<dyn Model + Send + Sync> {
+    let model = Ensemble::init(
+        prediction_tx,
+        volatility_model_params,
+        volume_model_params,
+        spread_model_params,
+        trend_strength_model_params,
+        range_model_params,
+        return_model_params,
+        return_mean_model_params,
+        return_std_model_params,
+        return_skew_model_params,
+        return_kurt_model_params,
+        action_model_params,
+        interpretator_model_params,
+    );
+    Box::new(model)
 }
 
 #[tokio::test]
@@ -506,8 +531,35 @@ async fn test_training() -> Result<(), anyhow::Error> {
         .params;
 
     match params {
-        crate::models::ModelParams::Ensemble { .. } => {
-            let mut model = init_ensemble_model(None)?;
+        crate::models::ModelParams::Ensemble {
+            volatility_model_params,
+            volume_model_params,
+            spread_model_params,
+            trend_strength_model_params,
+            range_model_params,
+            return_model_params,
+            return_mean_model_params,
+            return_std_model_params,
+            return_skew_model_params,
+            return_kurt_model_params,
+            action_model_params,
+            interpretator_model_params,
+        } => {
+            let mut model = init_ensemble_model(
+                None,
+                volatility_model_params,
+                volume_model_params,
+                spread_model_params,
+                trend_strength_model_params,
+                range_model_params,
+                return_model_params,
+                return_mean_model_params,
+                return_std_model_params,
+                return_skew_model_params,
+                return_kurt_model_params,
+                action_model_params,
+                interpretator_model_params,
+            );
             let data = crate::data::requests::database::db_req::select_all_candles(&pool).await?;
             model.train(data)?;
         }

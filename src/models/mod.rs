@@ -99,54 +99,20 @@ pub enum SingleModelParams {
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
-pub enum EnsembleModelParams {
-    FutureVolatilityModel { params: SingleModelParams },
-    FutureVolumeModel { params: SingleModelParams },
-    FutureSpreadModel { params: SingleModelParams },
-    FutureTrendStrengthModel { params: SingleModelParams },
-    FutureRangeModel { params: SingleModelParams },
-    FutureReturnModel { params: SingleModelParams },
-    FutureReturnMeanModel { params: SingleModelParams },
-    FutureReturnStdModel { params: SingleModelParams },
-    FutureReturnSkewModel { params: SingleModelParams },
-    FutureReturnKurtModel { params: SingleModelParams },
-    ActionTypeModel { params: SingleModelParams },
-}
-
-impl EnsembleModelParams {
-    pub fn get_params(&self) -> &SingleModelParams {
-        match self {
-            EnsembleModelParams::FutureVolatilityModel { params } => params,
-            EnsembleModelParams::FutureVolumeModel { params } => params,
-            EnsembleModelParams::FutureSpreadModel { params } => params,
-            EnsembleModelParams::FutureTrendStrengthModel { params } => params,
-            EnsembleModelParams::FutureRangeModel { params } => params,
-            EnsembleModelParams::FutureReturnModel { params } => params,
-            EnsembleModelParams::FutureReturnMeanModel { params } => params,
-            EnsembleModelParams::FutureReturnStdModel { params } => params,
-            EnsembleModelParams::FutureReturnSkewModel { params } => params,
-            EnsembleModelParams::FutureReturnKurtModel { params } => params,
-            EnsembleModelParams::ActionTypeModel { params } => params,
-        }
-    }
-}
-
-#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
-#[serde(tag = "kind")]
-#[serde(rename_all = "snake_case")]
 pub enum ModelParams {
     Ensemble {
-        volatility_model_params: EnsembleModelParams,
-        volume_model_params: EnsembleModelParams,
-        spread_model_params: EnsembleModelParams,
-        trend_strength_model_params: EnsembleModelParams,
-        range_model_params: EnsembleModelParams,
-        return_model_params: EnsembleModelParams,
-        return_mean_model_params: EnsembleModelParams,
-        return_std_model_params: EnsembleModelParams,
-        return_skew_model_params: EnsembleModelParams,
-        return_kurt_model_params: EnsembleModelParams,
-        action_model_params: EnsembleModelParams,
+        volatility_model_params: SingleModelParams,
+        volume_model_params: SingleModelParams,
+        spread_model_params: SingleModelParams,
+        trend_strength_model_params: SingleModelParams,
+        range_model_params: SingleModelParams,
+        return_model_params: SingleModelParams,
+        return_mean_model_params: SingleModelParams,
+        return_std_model_params: SingleModelParams,
+        return_skew_model_params: SingleModelParams,
+        return_kurt_model_params: SingleModelParams,
+        action_model_params: SingleModelParams,
+        interpretator_model_params: SingleModelParams,
     },
     Single {
         params: SingleModelParams,
