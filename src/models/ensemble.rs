@@ -2,7 +2,8 @@ use anyhow::anyhow;
 use tokio::sync::mpsc;
 
 use crate::CONFIG_PATH;
-use crate::engine::cycles::manager::{ModelActor, ModelCommand, PredictionCommand};
+use crate::engine::cycles::manager::{ModelActor, ModelCommand, PredictionsCommand};
+use crate::engine::state::counters::Counters;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::SingleModelParams;
@@ -23,11 +24,10 @@ pub struct Ensemble {
     action_model_tx: mpsc::Sender<ModelCommand>,
     interpretator_model_tx: mpsc::Sender<ModelCommand>,
 
+    counters: Counters,
     name: String,
     config: Config,
-    prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
-
-    symbol_columns: Option<Vec<String>>,
+    prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
 }
 
 impl Ensemble {
@@ -44,7 +44,7 @@ impl Ensemble {
         return_kurt_model_tx: mpsc::Sender<ModelCommand>,
         action_model_tx: mpsc::Sender<ModelCommand>,
         interpretator_model_tx: mpsc::Sender<ModelCommand>,
-        prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+        prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         config: Config,
     ) -> Self {
         Self {
@@ -61,14 +61,14 @@ impl Ensemble {
             action_model_tx,
             interpretator_model_tx,
             name: "Ensemble".to_string(),
-            config,
+            config: config.clone(),
             prediction_tx,
-            symbol_columns: None,
+            counters: Counters::new(config.behaviour.accuracy_capacity),
         }
     }
 
     pub fn init(
-        prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+        prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         volatility_model_params: SingleModelParams,
         volume_model_params: SingleModelParams,
         spread_model_params: SingleModelParams,
@@ -164,7 +164,7 @@ impl ModelDependencies for Ensemble {
     fn get_name(&self) -> &str {
         &self.name
     }
-    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionCommand>> {
+    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionsCommand>> {
         &self.prediction_tx
     }
     fn get_symbol_columns(&self) -> &Option<Vec<String>> {

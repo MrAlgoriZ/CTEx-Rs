@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::data::data_interfaces::FlattenedData;
-use crate::engine::cycles::manager::PredictionCommand;
+use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::{Config, MetricType};
 use crate::models::SingleModelParams;
@@ -20,7 +20,7 @@ pub trait ModelDependencies {
     fn get_symbol_columns(&self) -> &Option<Vec<String>>;
     fn change_symbol_columns(&mut self, symbol_columns: Option<Vec<String>>);
     fn get_config(&self) -> &Config;
-    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionCommand>>;
+    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionsCommand>>;
     fn get_target_index(&self) -> i32;
     fn check_model_trained(&self) -> bool;
 }
@@ -347,7 +347,7 @@ pub trait Model: ModelDependencies {
                 let (tx, rx) = oneshot::channel();
 
                 if let Err(e) = ptx
-                    .send(PredictionCommand::AddPrediction {
+                    .send(PredictionsCommand::AddPrediction {
                         symbol: sn.to_string(),
                         prediction: proba[0],
                         respond_to: tx,
@@ -396,7 +396,7 @@ pub trait Model: ModelDependencies {
 
 pub fn init_single_model(
     params: SingleModelParams,
-    prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+    prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
 ) -> Box<dyn Model + Send + Sync> {
     let model: Box<dyn Model + Send + Sync> = match params {
         SingleModelParams::XGBoost {
@@ -488,7 +488,7 @@ pub fn init_single_model(
 }
 
 pub fn init_ensemble_model(
-    prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+    prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
     volatility_model_params: SingleModelParams,
     volume_model_params: SingleModelParams,
     spread_model_params: SingleModelParams,

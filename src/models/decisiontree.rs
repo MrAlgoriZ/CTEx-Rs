@@ -5,7 +5,7 @@ use smartcore::tree::decision_tree_regressor::{
 };
 use tokio::sync::mpsc;
 
-use crate::engine::cycles::manager::PredictionCommand;
+use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::TargetType;
@@ -17,7 +17,7 @@ pub struct DecisionTree {
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
     config: Config,
-    prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+    prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
     max_depth: u16,
     min_samples_leaf: usize,
     min_samples_split: usize,
@@ -25,7 +25,7 @@ pub struct DecisionTree {
 
 impl DecisionTree {
     pub fn new(
-        prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+        prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
         max_depth: u16,
         min_samples_leaf: usize,
@@ -58,7 +58,7 @@ impl ModelDependencies for DecisionTree {
         self.symbol_columns = symbol_columns;
     }
 
-    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionCommand>> {
+    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionsCommand>> {
         &self.prediction_tx
     }
 

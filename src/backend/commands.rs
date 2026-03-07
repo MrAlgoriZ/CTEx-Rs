@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::CONFIG_PATH;
 use crate::backend::structure::{ApiState, ApiStructure};
 use crate::engine::cycles::manager::{
-    CounterCommand, CounterType, PredictionCommand, SupervisorCommand,
+    CounterCommand, CounterType, PredictionsCommand, SupervisorCommand,
 };
 use crate::engine::utils::config::config_types::CycleType;
 use crate::engine::utils::config::load_config::load_config;
@@ -322,7 +322,7 @@ pub async fn get_last_prediction(
 
     state
         .prediction_handle
-        .send(PredictionCommand::GetLastPrediction {
+        .send(PredictionsCommand::GetLastPrediction {
             symbol: query.symbol,
             respond_to: tx,
         })
@@ -345,7 +345,7 @@ pub async fn predictions_list(
 
     state
         .prediction_handle
-        .send(PredictionCommand::GetPredictions {
+        .send(PredictionsCommand::GetPredictions {
             symbol: query.symbol,
             respond_to: tx,
         })
@@ -370,7 +370,7 @@ pub async fn all_predictions_list(
 
     state
         .prediction_handle
-        .send(PredictionCommand::ListPredictions { respond_to: tx })
+        .send(PredictionsCommand::ListPredictions { respond_to: tx })
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 

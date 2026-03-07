@@ -1,7 +1,7 @@
 use crate::CONFIG_PATH;
 use crate::backend::commands;
 use crate::backend::structure::{ApiState, ApiStructure};
-use crate::engine::cycles::manager::PredictionCommand;
+use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::cycles::manager::{CounterCommand, SupervisorCommand};
 use crate::engine::utils::config::load_config::load_config;
 
@@ -18,7 +18,7 @@ impl Api {
     pub async fn new(
         supervisor_handle: mpsc::Sender<SupervisorCommand>,
         counter_handle: mpsc::Sender<CounterCommand>,
-        prediction_handle: mpsc::Sender<PredictionCommand>,
+        prediction_handle: mpsc::Sender<PredictionsCommand>,
     ) -> Result<Self, anyhow::Error> {
         let config = load_config(CONFIG_PATH);
         let listener = tokio::net::TcpListener::bind(&config.backend.listener)
@@ -36,7 +36,7 @@ impl Api {
     fn init_app(
         supervisor_handle: mpsc::Sender<SupervisorCommand>,
         counter_handle: mpsc::Sender<CounterCommand>,
-        prediction_handle: mpsc::Sender<PredictionCommand>,
+        prediction_handle: mpsc::Sender<PredictionsCommand>,
     ) -> Router {
         let structure = ApiStructure::default();
         let state = ApiState {

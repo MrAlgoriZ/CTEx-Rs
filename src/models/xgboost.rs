@@ -3,7 +3,7 @@ use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::xgboost::{XGRegressor, XGRegressorParameters};
 use tokio::sync::mpsc;
 
-use crate::engine::cycles::manager::PredictionCommand;
+use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::TargetType;
@@ -15,14 +15,14 @@ pub struct XGBoost {
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
     config: Config,
-    prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+    prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
     n_estimators: usize,
     max_depth: u16,
 }
 
 impl XGBoost {
     pub fn new(
-        prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+        prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
         n_estimators: usize,
         max_depth: u16,
@@ -53,7 +53,7 @@ impl ModelDependencies for XGBoost {
         self.symbol_columns = symbol_columns;
     }
 
-    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionCommand>> {
+    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionsCommand>> {
         &self.prediction_tx
     }
 

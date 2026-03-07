@@ -8,7 +8,7 @@ use smartcore::linear::linear_regression::{
 use smartcore::preprocessing::numerical::StandardScaler;
 use tokio::sync::mpsc;
 
-use crate::engine::cycles::manager::PredictionCommand;
+use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::TargetType;
@@ -20,13 +20,13 @@ pub struct Linear {
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
     config: Config,
-    prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+    prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
     solver: String,
 }
 
 impl Linear {
     pub fn new(
-        prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+        prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
         solver: String,
     ) -> Self {
@@ -55,7 +55,7 @@ impl ModelDependencies for Linear {
         self.symbol_columns = symbol_columns;
     }
 
-    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionCommand>> {
+    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionsCommand>> {
         &self.prediction_tx
     }
 

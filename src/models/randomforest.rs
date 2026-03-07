@@ -5,7 +5,7 @@ use smartcore::ensemble::random_forest_regressor::{
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use tokio::sync::mpsc;
 
-use crate::engine::cycles::manager::PredictionCommand;
+use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::TargetType;
@@ -17,7 +17,7 @@ pub struct RandomForest {
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
     config: Config,
-    prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+    prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
     n_trees: usize,
     max_depth: u16,
     min_samples_leaf: usize,
@@ -27,7 +27,7 @@ pub struct RandomForest {
 
 impl RandomForest {
     pub fn new(
-        prediction_tx: Option<mpsc::Sender<PredictionCommand>>,
+        prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
         n_trees: usize,
         max_depth: u16,
@@ -64,7 +64,7 @@ impl ModelDependencies for RandomForest {
         self.symbol_columns = symbol_columns;
     }
 
-    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionCommand>> {
+    fn get_prediction_tx(&self) -> &Option<mpsc::Sender<PredictionsCommand>> {
         &self.prediction_tx
     }
 

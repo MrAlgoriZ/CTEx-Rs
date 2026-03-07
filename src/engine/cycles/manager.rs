@@ -315,14 +315,14 @@ pub enum CounterCommand {
     },
 }
 
-struct CounterActor {
+pub struct CounterActor {
     threshold_counters: Counters,
     direction_counters: Counters,
     inbox: mpsc::Receiver<CounterCommand>,
 }
 
 impl CounterActor {
-    fn new(capacity: usize) -> (Self, mpsc::Sender<CounterCommand>) {
+    pub fn new(capacity: usize) -> (Self, mpsc::Sender<CounterCommand>) {
         let (tx, rx) = mpsc::channel(10);
         (
             Self {
@@ -334,7 +334,7 @@ impl CounterActor {
         )
     }
 
-    async fn run(mut self) {
+    pub async fn run(mut self) {
         log_info("CounterActor запущен");
 
         while let Some(cmd) = self.inbox.recv().await {
@@ -506,7 +506,7 @@ impl WorkerHandle {
 pub struct CycleManager {
     supervisor_tx: mpsc::Sender<SupervisorCommand>,
     counter_tx: mpsc::Sender<CounterCommand>,
-    prediction_tx: mpsc::Sender<PredictionCommand>,
+    prediction_tx: mpsc::Sender<PredictionsCommand>,
     _counter_task: tokio::task::JoinHandle<()>,
     _supervisor_task: tokio::task::JoinHandle<()>,
     _servers_task: tokio::task::JoinHandle<()>,
@@ -672,12 +672,12 @@ impl CycleManager {
         self.supervisor_tx.clone()
     }
 
-    pub fn prediction_handle(&self) -> mpsc::Sender<PredictionCommand> {
+    pub fn prediction_handle(&self) -> mpsc::Sender<PredictionsCommand> {
         self.prediction_tx.clone()
     }
 }
 
-pub enum PredictionCommand {
+pub enum PredictionsCommand {
     AddPrediction {
         symbol: String,
         prediction: f64,
@@ -699,11 +699,11 @@ pub enum PredictionCommand {
 pub struct PredictionsActor {
     capacity: usize,
     predictions: HashMap<String, SymbolCounters<f64>>,
-    inbox: mpsc::Receiver<PredictionCommand>,
+    inbox: mpsc::Receiver<PredictionsCommand>,
 }
 
 impl PredictionsActor {
-    pub fn new(capacity: usize) -> (Self, mpsc::Sender<PredictionCommand>) {
+    pub fn new(capacity: usize) -> (Self, mpsc::Sender<PredictionsCommand>) {
         let (tx, rx) = mpsc::channel(10);
 
         (
@@ -721,7 +721,7 @@ impl PredictionsActor {
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
-                PredictionCommand::AddPrediction {
+                PredictionsCommand::AddPrediction {
                     symbol,
                     prediction,
                     respond_to,
@@ -733,7 +733,7 @@ impl PredictionsActor {
                     pred_counter.push(prediction);
                     let _ = respond_to.send(Ok(()));
                 }
-                PredictionCommand::GetLastPrediction { symbol, respond_to } => {
+                PredictionsCommand::GetLastPrediction { symbol, respond_to } => {
                     let pred_counter = self.predictions.get(&symbol);
                     if let Some(counter) = pred_counter {
                         let _ = respond_to.send(counter.data.back().cloned());
@@ -741,11 +741,11 @@ impl PredictionsActor {
                         let _ = respond_to.send(None);
                     }
                 }
-                PredictionCommand::GetPredictions { symbol, respond_to } => {
+                PredictionsCommand::GetPredictions { symbol, respond_to } => {
                     let pred_counter = self.predictions.get(&symbol);
                     let _ = respond_to.send(pred_counter.cloned());
                 }
-                PredictionCommand::ListPredictions { respond_to } => {
+                PredictionsCommand::ListPredictions { respond_to } => {
                     let _ = respond_to.send(Some(self.predictions.clone()));
                 }
             }

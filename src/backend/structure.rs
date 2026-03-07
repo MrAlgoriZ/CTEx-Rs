@@ -1,4 +1,4 @@
-use crate::engine::cycles::manager::{CounterCommand, PredictionCommand, SupervisorCommand};
+use crate::engine::cycles::manager::{CounterCommand, PredictionsCommand, SupervisorCommand};
 use serde::Serialize;
 use tokio::sync::mpsc;
 
@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 pub struct ApiState {
     pub supervisor_handle: mpsc::Sender<SupervisorCommand>,
     pub counter_handle: mpsc::Sender<CounterCommand>,
-    pub prediction_handle: mpsc::Sender<PredictionCommand>,
+    pub prediction_handle: mpsc::Sender<PredictionsCommand>,
 }
 
 #[derive(Debug, Serialize)]
