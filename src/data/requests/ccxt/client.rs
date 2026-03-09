@@ -181,14 +181,8 @@ impl CCXTClient {
         symbol: &str,
         timeframe: &str,
     ) -> Result<CollectedData, anyhow::Error> {
-        let (ohlcv_res, ticker_res) = tokio::join!(
-            self.fetch_ohlcv(symbol, timeframe, OHLCV_FETCH_LEN),
-            self.fetch_ticker(symbol),
-        );
+        let ohlcv = self.fetch_ohlcv(symbol, timeframe, OHLCV_FETCH_LEN).await?;
 
-        let ohlcv = ohlcv_res?;
-        let ticker = ticker_res?;
-
-        Ok(CollectedData::new(symbol, ohlcv, ticker, timeframe, false))
+        Ok(CollectedData::new(symbol, ohlcv, timeframe))
     }
 }

@@ -36,14 +36,6 @@ pub fn volume_change_k(candles: &[Candle], k: usize) -> f64 {
     (volume_t - volume_k) / volume_k
 }
 
-pub fn mid(ask: f64, bid: f64) -> f64 {
-    (ask + bid) / 2.0
-}
-
-pub fn spread(ask: f64, bid: f64) -> f64 {
-    (ask - bid) / mid(ask, bid)
-}
-
 pub fn sma(candles: &[Candle], period: usize) -> f64 {
     let slice = &candles[candles.len() - period..];
     slice.iter().map(|c| c.close).sum::<f64>() / period as f64

@@ -9,6 +9,7 @@ use smartcore::neighbors::knn_regressor::{KNNRegressor, KNNRegressorParameters};
 use smartcore::preprocessing::numerical::StandardScaler;
 use tokio::sync::mpsc;
 
+use crate::data::requests::database::consts::SQLStandart;
 use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
@@ -22,6 +23,7 @@ pub struct KNN {
     symbol_columns: Option<Vec<String>>,
     config: Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+    standart: SQLStandart,
     algorithm: String,
     weight: String,
     k: usize,
@@ -31,6 +33,7 @@ impl KNN {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
+        standart: SQLStandart,
         algorithm: String,
         weight: String,
         k: usize,
@@ -42,6 +45,7 @@ impl KNN {
             symbol_columns: None,
             config: load_config("config/config.yaml"),
             prediction_tx,
+            standart,
             algorithm,
             weight,
             k,
@@ -76,8 +80,13 @@ impl ModelDependencies for KNN {
     fn get_symbol_columns(&self) -> &Option<Vec<String>> {
         &self.symbol_columns
     }
-    fn get_target_index(&self) -> i32 {
-        self.target_type.get_index()
+
+    fn get_target_name(&self) -> &str {
+        self.target_type.get_name()
+    }
+
+    fn get_standart(&self) -> &SQLStandart {
+        &self.standart
     }
 }
 

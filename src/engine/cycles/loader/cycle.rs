@@ -2,12 +2,12 @@ use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 use std::sync::Arc;
 
-use crate::data::data_interfaces::{Candle, CandleWithTimestamp, FlattenedData};
+use crate::data::data_interfaces::{Candle, CandleWithTimestamp, DataMap};
 use crate::data::process::data_collection::{CollectedData, OHLCV_FETCH_LEN};
 use crate::data::process::target::process_target;
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
-use crate::data::requests::database::db_req::insert_candle;
+use crate::data::requests::database::consts::SQLStandart;
 use crate::engine::cycles::CyclePhase;
 use crate::engine::cycles::manager::CycleError;
 use crate::engine::cycles::traits::{Cycle, CycleGetters};
@@ -112,8 +112,8 @@ impl LoaderCycle {
 
                     let last_grouped = self.last_grouped_candles.clone().unwrap();
 
-                    let flattenned = FlattenedData::from_collected(last_grouped, target);
-                    self.save_data(flattenned, &self.pool).await.unwrap();
+                    let data = DataMap::from_collected(last_grouped, target, None);
+                    self.save_data(data, &self.pool).await.unwrap();
                 }
                 _ => {}
             }
@@ -177,8 +177,8 @@ impl LoaderCycle {
 
                     let last_grouped = self.last_grouped_candles.clone().unwrap();
 
-                    let flattened = FlattenedData::from_collected(last_grouped, target);
-                    self.save_data(flattened, &self.pool).await?;
+                    let data = DataMap::from_collected(last_grouped, target, None);
+                    self.save_data(data, &self.pool).await?;
                 }
                 _ => {}
             }
@@ -201,13 +201,9 @@ impl LoaderCycle {
     }
 
     // --- Методы ---
-    async fn save_data(
-        &self,
-        flattened_candles: crate::data::data_interfaces::FlattenedData,
-        pool: &PgPool,
-    ) -> Result<(), anyhow::Error> {
-        if flattened_candles.is_there_a_target() {
-            insert_candle(pool, &self.symbol, &flattened_candles.features).await?;
+    async fn save_data(&self, data: DataMap, pool: &PgPool) -> Result<(), anyhow::Error> {
+        if data.has_target() {
+            SQLStandart::SingleModel.insert_row(pool, data).await?;
             Ok(())
         } else {
             Err(anyhow::anyhow!("Flattened candles must have the target!"))

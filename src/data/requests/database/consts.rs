@@ -1,0 +1,167 @@
+pub const COLUMNS_FIRST_LAYER: &'static [&str] = &[
+    "timeframe",
+    "hour_sin",
+    "hour_cos",
+    "minute_sin",
+    "minute_cos",
+    "return_1",
+    "return_2",
+    "return_3",
+    "return_4",
+    "return_5",
+    "return_10",
+    "log_return_1",
+    "vol_rolling_3",
+    "vol_rolling_5",
+    "vol_rolling_10",
+    "volume_change_1",
+    "volume_change_3",
+    "ema_fast",
+    "ema_slow",
+    "rsi_7",
+    "rsi_14",
+    "macd_diff",
+    "bb_percent",
+    "zscore_price",
+    "mean_reversion",
+    "breakout_high",
+    "breakout_low",
+    "return_1_over_vol",
+    "return_5_over_vol",
+    "trend_strength",
+    "trend_presistence",
+    "volatility_regime",
+    "compression_ratio",
+    "range_ratio",
+    "volume_acceleration",
+    "volume_volatility",
+    "return_autocorr_1",
+    "return_autocorr_2",
+    "return_autocorr_3",
+    "return_autocorr_4",
+    "return_autocorr_5",
+    "vol_autocorr_10",
+    "momentum_decay",
+    "trend_memory",
+    "downside_vol",
+    "upside_vol",
+    "skewness_returns",
+    "kurtosis_returns",
+    "tail_risk",
+    "distance_to_vwap",
+];
+
+pub const COLUMNS_SECOND_LAYER: &[&str] = &[
+    "timeframe",
+    "hour_sin",
+    "hour_cos",
+    "minute_sin",
+    "minute_cos",
+    "ema_fast",
+    "ema_slow",
+    "rsi_7",
+    "rsi_14",
+    "macd_diff",
+    "bb_percent",
+    "zscore_price",
+    "trend_strength",
+    "future_volatility",
+    "future_volatility_confidence",
+    "future_volume",
+    "future_volume_confidence",
+    "future_trend_strength",
+    "future_trend_strength_confidence",
+    "future_range",
+    "future_range_confidence",
+    "future_return_mean",
+    "future_return_mean_confidence",
+    "future_return_std",
+    "future_return_std_confidence",
+    "future_return_skewness",
+    "future_return_skewness_confidence",
+    "future_return_kurtosis",
+    "future_return_kurtosis_confidence",
+];
+
+pub const COLUMNS_THIRD_LAYER: &[&str] = &[
+    "timeframe",
+    "hour_sin",
+    "hour_cos",
+    "minute_sin",
+    "minute_cos",
+    "future_volatility",
+    "future_volatility_confidence",
+    "future_volume",
+    "future_volume_confidence",
+    "future_trend_strength",
+    "future_trend_strength_confidence",
+    "future_range",
+    "future_range_confidence",
+    "future_return_mean",
+    "future_return_mean_confidence",
+    "future_return_std",
+    "future_return_std_confidence",
+    "future_return_skewness",
+    "future_return_skewness_confidence",
+    "future_return_kurtosis",
+    "future_return_kurtosis_confidence",
+    "risk_score",
+    "risk_score_confidence",
+    "drawdown_probability",
+    "drawdown_probability_confidence",
+    "tail_event_probability",
+    "tail_event_probability_confidence",
+    "volatility_spike_probability",
+    "volatility_spike_probability_confidence",
+    "liquidity_drop_probability",
+    "liquidity_drop_probability_confidence",
+];
+
+pub const TARGETS_FIRST_LAYER: &[&str] = &[
+    "future_volatility",
+    "future_volume",
+    "future_trend_strength",
+    "future_range",
+    "future_return_mean",
+    "future_return_std",
+    "future_return_skewness",
+    "future_return_kurtosis",
+];
+
+pub const TARGETS_SECOND_LAYER: &[&str] = &[
+    "risk_score",
+    "drawdown_probability",
+    "tail_event_probability",
+    "volatility_spike_probability",
+    "liquidity_drop_probability",
+];
+
+pub const TARGETS_THIRD_LAYER: &[&str] = &["future_return", "action_type", "position_size"];
+pub const TARGETS_SINGLE_MODEL: &[&str] = &["position_size"];
+
+pub enum SQLStandart {
+    FirstLayer,
+    SecondLayer,
+    ThirdLayer,
+    SingleModel,
+}
+
+impl SQLStandart {
+    pub fn get_columns(&self) -> &[&str] {
+        match self {
+            SQLStandart::FirstLayer => COLUMNS_FIRST_LAYER,
+            SQLStandart::SecondLayer => COLUMNS_SECOND_LAYER,
+            SQLStandart::ThirdLayer => COLUMNS_THIRD_LAYER,
+            SQLStandart::SingleModel => &[],
+        }
+    }
+
+    pub fn get_target_list(&self) -> &[&str] {
+        match self {
+            SQLStandart::FirstLayer => TARGETS_FIRST_LAYER,
+            SQLStandart::SecondLayer => TARGETS_SECOND_LAYER,
+            SQLStandart::ThirdLayer => TARGETS_THIRD_LAYER,
+            SQLStandart::SingleModel => TARGETS_SINGLE_MODEL,
+        }
+    }
+}

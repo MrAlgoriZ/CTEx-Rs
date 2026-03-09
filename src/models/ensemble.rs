@@ -1,7 +1,9 @@
 use anyhow::anyhow;
+use sqlx::PgPool;
 use tokio::sync::mpsc;
 
 use crate::CONFIG_PATH;
+use crate::data::requests::database::consts::SQLStandart;
 use crate::engine::cycles::manager::{ModelActor, ModelCommand, PredictionsCommand};
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::config::config_types::Config;
@@ -11,18 +13,21 @@ use crate::models::model::{Model, ModelDependencies, init_single_model};
 use smartcore::linalg::basic::matrix::DenseMatrix;
 
 pub struct Ensemble {
-    volatility_model_tx: mpsc::Sender<ModelCommand>,
-    volume_model_tx: mpsc::Sender<ModelCommand>,
-    spread_model_tx: mpsc::Sender<ModelCommand>,
-    trend_strength_model_tx: mpsc::Sender<ModelCommand>,
-    range_model_tx: mpsc::Sender<ModelCommand>,
-    return_model_tx: mpsc::Sender<ModelCommand>,
-    return_mean_model_tx: mpsc::Sender<ModelCommand>,
-    return_std_model_tx: mpsc::Sender<ModelCommand>,
-    return_skew_model_tx: mpsc::Sender<ModelCommand>,
-    return_kurt_model_tx: mpsc::Sender<ModelCommand>,
-    action_model_tx: mpsc::Sender<ModelCommand>,
-    interpretator_model_tx: mpsc::Sender<ModelCommand>,
+    future_volatility_model_tx: mpsc::Sender<ModelCommand>,
+    future_volume_model_tx: mpsc::Sender<ModelCommand>,
+    future_trend_strength_model_tx: mpsc::Sender<ModelCommand>,
+    future_range_model_tx: mpsc::Sender<ModelCommand>,
+    future_return_mean_model_tx: mpsc::Sender<ModelCommand>,
+    future_return_std_model_tx: mpsc::Sender<ModelCommand>,
+    future_return_skew_model_tx: mpsc::Sender<ModelCommand>,
+    future_return_kurt_model_tx: mpsc::Sender<ModelCommand>,
+    risk_score_model_tx: mpsc::Sender<ModelCommand>,
+    drawdown_probability_model_tx: mpsc::Sender<ModelCommand>,
+    tail_event_probability_model_tx: mpsc::Sender<ModelCommand>,
+    liquidity_drop_probability_model_tx: mpsc::Sender<ModelCommand>,
+    future_return_model_tx: mpsc::Sender<ModelCommand>,
+    action_type_model_tx: mpsc::Sender<ModelCommand>,
+    position_size_model_tx: mpsc::Sender<ModelCommand>,
 
     counters: Counters,
     name: String,
@@ -32,34 +37,40 @@ pub struct Ensemble {
 
 impl Ensemble {
     pub fn new(
-        volatility_model_tx: mpsc::Sender<ModelCommand>,
-        volume_model_tx: mpsc::Sender<ModelCommand>,
-        spread_model_tx: mpsc::Sender<ModelCommand>,
-        trend_strength_model_tx: mpsc::Sender<ModelCommand>,
-        range_model_tx: mpsc::Sender<ModelCommand>,
-        return_model_tx: mpsc::Sender<ModelCommand>,
-        return_mean_model_tx: mpsc::Sender<ModelCommand>,
-        return_std_model_tx: mpsc::Sender<ModelCommand>,
-        return_skew_model_tx: mpsc::Sender<ModelCommand>,
-        return_kurt_model_tx: mpsc::Sender<ModelCommand>,
-        action_model_tx: mpsc::Sender<ModelCommand>,
-        interpretator_model_tx: mpsc::Sender<ModelCommand>,
+        future_volatility_model_tx: mpsc::Sender<ModelCommand>,
+        future_volume_model_tx: mpsc::Sender<ModelCommand>,
+        future_trend_strength_model_tx: mpsc::Sender<ModelCommand>,
+        future_range_model_tx: mpsc::Sender<ModelCommand>,
+        future_return_mean_model_tx: mpsc::Sender<ModelCommand>,
+        future_return_std_model_tx: mpsc::Sender<ModelCommand>,
+        future_return_skew_model_tx: mpsc::Sender<ModelCommand>,
+        future_return_kurt_model_tx: mpsc::Sender<ModelCommand>,
+        risk_score_model_tx: mpsc::Sender<ModelCommand>,
+        drawdown_probability_model_tx: mpsc::Sender<ModelCommand>,
+        tail_event_probability_model_tx: mpsc::Sender<ModelCommand>,
+        liquidity_drop_probability_model_tx: mpsc::Sender<ModelCommand>,
+        future_return_model_tx: mpsc::Sender<ModelCommand>,
+        action_type_model_tx: mpsc::Sender<ModelCommand>,
+        position_size_model_tx: mpsc::Sender<ModelCommand>,
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         config: Config,
     ) -> Self {
         Self {
-            volatility_model_tx,
-            volume_model_tx,
-            spread_model_tx,
-            trend_strength_model_tx,
-            range_model_tx,
-            return_model_tx,
-            return_mean_model_tx,
-            return_std_model_tx,
-            return_skew_model_tx,
-            return_kurt_model_tx,
-            action_model_tx,
-            interpretator_model_tx,
+            future_volatility_model_tx,
+            future_volume_model_tx,
+            future_trend_strength_model_tx,
+            future_range_model_tx,
+            future_return_mean_model_tx,
+            future_return_std_model_tx,
+            future_return_skew_model_tx,
+            future_return_kurt_model_tx,
+            risk_score_model_tx,
+            drawdown_probability_model_tx,
+            tail_event_probability_model_tx,
+            liquidity_drop_probability_model_tx,
+            future_return_model_tx,
+            action_type_model_tx,
+            position_size_model_tx,
             name: "Ensemble".to_string(),
             config: config.clone(),
             prediction_tx,
@@ -69,84 +80,119 @@ impl Ensemble {
 
     pub fn init(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
-        volatility_model_params: SingleModelParams,
-        volume_model_params: SingleModelParams,
-        spread_model_params: SingleModelParams,
-        trend_strength_model_params: SingleModelParams,
-        range_model_params: SingleModelParams,
-        return_model_params: SingleModelParams,
-        return_mean_model_params: SingleModelParams,
-        return_std_model_params: SingleModelParams,
-        return_skew_model_params: SingleModelParams,
-        return_kurt_model_params: SingleModelParams,
-        action_model_params: SingleModelParams,
-        interpretator_model_params: SingleModelParams,
+        pool: PgPool,
+        future_volatility_model_params: SingleModelParams,
+        future_volume_model_params: SingleModelParams,
+        future_trend_strength_model_params: SingleModelParams,
+        future_range_model_params: SingleModelParams,
+        future_return_mean_model_params: SingleModelParams,
+        future_return_std_model_params: SingleModelParams,
+        future_return_skew_model_params: SingleModelParams,
+        future_return_kurt_model_params: SingleModelParams,
+        risk_score_model_params: SingleModelParams,
+        drawdown_probability_model_params: SingleModelParams,
+        tail_event_probability_model_params: SingleModelParams,
+        liquidity_drop_probability_model_params: SingleModelParams,
+        future_return_model_params: SingleModelParams,
+        action_type_model_params: SingleModelParams,
+        position_size_model_params: SingleModelParams,
     ) -> Self {
         let config = load_config(CONFIG_PATH);
 
-        let volatility_model = init_single_model(volatility_model_params, None);
-        let (volatility_model_actor, volatility_model_tx) = ModelActor::new(volatility_model);
-        tokio::spawn(volatility_model_actor.run());
+        let future_volatility_model = init_single_model(future_volatility_model_params, None);
+        let (future_volatility_model_actor, future_volatility_model_tx) =
+            ModelActor::new(future_volatility_model, pool.clone());
+        tokio::spawn(future_volatility_model_actor.run());
 
-        let volume_model = init_single_model(volume_model_params, None);
-        let (volume_model_actor, volume_model_tx) = ModelActor::new(volume_model);
-        tokio::spawn(volume_model_actor.run());
+        let future_volume_model = init_single_model(future_volume_model_params, None);
+        let (future_volume_model_actor, future_volume_model_tx) =
+            ModelActor::new(future_volume_model, pool.clone());
+        tokio::spawn(future_volume_model_actor.run());
 
-        let spread_model = init_single_model(spread_model_params, None);
-        let (spread_model_actor, spread_model_tx) = ModelActor::new(spread_model);
-        tokio::spawn(spread_model_actor.run());
+        let future_trend_strength_model =
+            init_single_model(future_trend_strength_model_params, None);
+        let (future_trend_strength_model_actor, future_trend_strength_model_tx) =
+            ModelActor::new(future_trend_strength_model, pool.clone());
+        tokio::spawn(future_trend_strength_model_actor.run());
 
-        let trend_strength_model = init_single_model(trend_strength_model_params, None);
-        let (trend_strength_model_actor, trend_strength_model_tx) =
-            ModelActor::new(trend_strength_model);
-        tokio::spawn(trend_strength_model_actor.run());
+        let future_range_model = init_single_model(future_range_model_params, None);
+        let (future_range_model_actor, future_range_model_tx) =
+            ModelActor::new(future_range_model, pool.clone());
+        tokio::spawn(future_range_model_actor.run());
 
-        let range_model = init_single_model(range_model_params, None);
-        let (range_model_actor, range_model_tx) = ModelActor::new(range_model);
-        tokio::spawn(range_model_actor.run());
+        let future_return_mean_model = init_single_model(future_return_mean_model_params, None);
+        let (future_return_mean_model_actor, future_return_mean_model_tx) =
+            ModelActor::new(future_return_mean_model, pool.clone());
+        tokio::spawn(future_return_mean_model_actor.run());
 
-        let return_model = init_single_model(return_model_params, None);
-        let (return_model_actor, return_model_tx) = ModelActor::new(return_model);
-        tokio::spawn(return_model_actor.run());
+        let future_return_std_model = init_single_model(future_return_std_model_params, None);
+        let (future_return_std_model_actor, future_return_std_model_tx) =
+            ModelActor::new(future_return_std_model, pool.clone());
+        tokio::spawn(future_return_std_model_actor.run());
 
-        let return_mean_model = init_single_model(return_mean_model_params, None);
-        let (return_mean_model_actor, return_mean_model_tx) = ModelActor::new(return_mean_model);
-        tokio::spawn(return_mean_model_actor.run());
+        let future_return_skew_model = init_single_model(future_return_skew_model_params, None);
+        let (future_return_skew_model_actor, future_return_skew_model_tx) =
+            ModelActor::new(future_return_skew_model, pool.clone());
+        tokio::spawn(future_return_skew_model_actor.run());
 
-        let return_std_model = init_single_model(return_std_model_params, None);
-        let (return_std_model_actor, return_std_model_tx) = ModelActor::new(return_std_model);
-        tokio::spawn(return_std_model_actor.run());
+        let future_return_kurt_model = init_single_model(future_return_kurt_model_params, None);
+        let (future_return_kurt_model_actor, future_return_kurt_model_tx) =
+            ModelActor::new(future_return_kurt_model, pool.clone());
+        tokio::spawn(future_return_kurt_model_actor.run());
 
-        let return_skew_model = init_single_model(return_skew_model_params, None);
-        let (return_skew_model_actor, return_skew_model_tx) = ModelActor::new(return_skew_model);
-        tokio::spawn(return_skew_model_actor.run());
+        let risk_score_model = init_single_model(risk_score_model_params, None);
+        let (risk_score_model_actor, risk_score_model_tx) =
+            ModelActor::new(risk_score_model, pool.clone());
+        tokio::spawn(risk_score_model_actor.run());
 
-        let return_kurt_model = init_single_model(return_kurt_model_params, None);
-        let (return_kurt_model_actor, return_kurt_model_tx) = ModelActor::new(return_kurt_model);
-        tokio::spawn(return_kurt_model_actor.run());
+        let drawdown_probability_model = init_single_model(drawdown_probability_model_params, None);
+        let (drawdown_probability_model_actor, drawdown_probability_model_tx) =
+            ModelActor::new(drawdown_probability_model, pool.clone());
+        tokio::spawn(drawdown_probability_model_actor.run());
 
-        let action_model = init_single_model(action_model_params, None);
-        let (action_model_actor, action_model_tx) = ModelActor::new(action_model);
-        tokio::spawn(action_model_actor.run());
+        let tail_event_probability_model =
+            init_single_model(tail_event_probability_model_params, None);
+        let (tail_event_probability_model_actor, tail_event_probability_model_tx) =
+            ModelActor::new(tail_event_probability_model, pool.clone());
+        tokio::spawn(tail_event_probability_model_actor.run());
 
-        let interpretator_model = init_single_model(interpretator_model_params, None);
-        let (interpretator_model_actor, interpretator_model_tx) =
-            ModelActor::new(interpretator_model);
-        tokio::spawn(interpretator_model_actor.run());
+        let liquidity_drop_probability_model =
+            init_single_model(liquidity_drop_probability_model_params, None);
+        let (liquidity_drop_probability_model_actor, liquidity_drop_probability_model_tx) =
+            ModelActor::new(liquidity_drop_probability_model, pool.clone());
+        tokio::spawn(liquidity_drop_probability_model_actor.run());
+
+        let future_return_model = init_single_model(future_return_model_params, None);
+        let (future_return_model_actor, future_return_model_tx) =
+            ModelActor::new(future_return_model, pool.clone());
+        tokio::spawn(future_return_model_actor.run());
+
+        let action_type_model = init_single_model(action_type_model_params, None);
+        let (action_type_model_actor, action_type_model_tx) =
+            ModelActor::new(action_type_model, pool.clone());
+        tokio::spawn(action_type_model_actor.run());
+
+        let position_size_model = init_single_model(position_size_model_params, None);
+        let (position_size_model_actor, position_size_model_tx) =
+            ModelActor::new(position_size_model, pool.clone());
+        tokio::spawn(position_size_model_actor.run());
 
         Self::new(
-            volatility_model_tx,
-            volume_model_tx,
-            spread_model_tx,
-            trend_strength_model_tx,
-            range_model_tx,
-            return_model_tx,
-            return_mean_model_tx,
-            return_std_model_tx,
-            return_skew_model_tx,
-            return_kurt_model_tx,
-            action_model_tx,
-            interpretator_model_tx,
+            future_volatility_model_tx,
+            future_volume_model_tx,
+            future_trend_strength_model_tx,
+            future_range_model_tx,
+            future_return_mean_model_tx,
+            future_return_std_model_tx,
+            future_return_skew_model_tx,
+            future_return_kurt_model_tx,
+            risk_score_model_tx,
+            drawdown_probability_model_tx,
+            tail_event_probability_model_tx,
+            liquidity_drop_probability_model_tx,
+            future_return_model_tx,
+            action_type_model_tx,
+            position_size_model_tx,
             prediction_tx,
             config,
         )
@@ -170,8 +216,11 @@ impl ModelDependencies for Ensemble {
     fn get_symbol_columns(&self) -> &Option<Vec<String>> {
         &None
     }
-    fn get_target_index(&self) -> i32 {
-        i32::MAX
+    fn get_target_name(&self) -> &str {
+        "position_size"
+    }
+    fn get_standart(&self) -> &SQLStandart {
+        &SQLStandart::ThirdLayer
     }
 }
 
@@ -183,10 +232,10 @@ impl Model for Ensemble {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error> {
-        Err(anyhow!("Not implemented!"))
+        todo!()
     }
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
-        Err(anyhow!("Not implemented!"))
+        todo!()
     }
     fn normalize(
         &self,

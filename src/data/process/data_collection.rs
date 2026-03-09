@@ -1,22 +1,22 @@
+use std::collections::BTreeMap;
+
 use crate::data::data_interfaces::*;
 use crate::data::process::features::*;
 use crate::data::requests::time::TimeRequest;
 
 pub const OHLCV_LEN: usize = 50;
 pub const OHLCV_FETCH_LEN: usize = 51;
-pub const FEATURES_LEN: usize = 24;
 
 pub struct AddFeatures {
     ohlcv: [Candle; OHLCV_LEN],
-    ticker: Ticker,
 }
 
 impl AddFeatures {
-    pub fn new(ticker: Ticker, ohlcv: [Candle; OHLCV_LEN]) -> Self {
-        AddFeatures { ohlcv, ticker }
+    pub fn new(ohlcv: [Candle; OHLCV_LEN]) -> Self {
+        AddFeatures { ohlcv }
     }
 
-    pub fn apply_features(&self, fake_ticker: bool) -> Vec<f64> {
+    pub fn apply_features(&self) -> BTreeMap<String, f64> {
         let return_1 = return_k(&self.ohlcv, 1);
         let return_2 = return_k(&self.ohlcv, 2);
         let return_3 = return_k(&self.ohlcv, 3);
@@ -32,12 +32,8 @@ impl AddFeatures {
         let volume_change_3 = volume_change_k(&self.ohlcv, 3);
 
         let spread_val: f64 = {
-            if fake_ticker {
-                let last = self.ohlcv.last().unwrap();
-                (last.high - last.low) / last.close
-            } else {
-                spread(self.ticker.ask, self.ticker.bid)
-            }
+            let last = self.ohlcv.last().unwrap();
+            (last.high - last.low) / last.close
         };
 
         let ema_fast = ema(&self.ohlcv, 5);
@@ -73,32 +69,32 @@ impl AddFeatures {
         let ema_fast_percent = (ema_fast - ema_slow) / ema_slow;
         let ema_slow_percent = (ema_slow - ema_long) / ema_long;
 
-        let features = vec![
-            return_1,
-            return_2,
-            return_3,
-            return_5,
-            return_10,
-            log_return_1,
-            vol_rolling_3,
-            vol_rolling_5,
-            vol_rolling_10,
-            volume_change_1,
-            volume_change_3,
-            spread_val,
-            ema_fast_percent,
-            ema_slow_percent,
-            rsi_7,
-            rsi_14,
-            macd_diff,
-            bb_percent,
-            zscore,
-            mean_reversion,
-            breakout_high,
-            breakout_low,
-            return_1_over_vol,
-            return_5_over_vol,
-        ];
+        let features = BTreeMap::from([
+            ("return_1".to_string(), return_1),
+            ("return_2".to_string(), return_2),
+            ("return_3".to_string(), return_3),
+            ("return_5".to_string(), return_5),
+            ("return_10".to_string(), return_10),
+            ("log_return_1".to_string(), log_return_1),
+            ("vol_rolling_3".to_string(), vol_rolling_3),
+            ("vol_rolling_5".to_string(), vol_rolling_5),
+            ("vol_rolling_10".to_string(), vol_rolling_10),
+            ("volume_change_1".to_string(), volume_change_1),
+            ("volume_change_3".to_string(), volume_change_3),
+            ("spread_val".to_string(), spread_val),
+            ("ema_fast_percent".to_string(), ema_fast_percent),
+            ("ema_slow_percent".to_string(), ema_slow_percent),
+            ("rsi_7".to_string(), rsi_7),
+            ("rsi_14".to_string(), rsi_14),
+            ("macd_diff".to_string(), macd_diff),
+            ("bb_percent".to_string(), bb_percent),
+            ("zscore".to_string(), zscore),
+            ("mean_reversion".to_string(), mean_reversion),
+            ("breakout_high".to_string(), breakout_high),
+            ("breakout_low".to_string(), breakout_low),
+            ("return_1_over_vol".to_string(), return_1_over_vol),
+            ("return_5_over_vol".to_string(), return_5_over_vol),
+        ]);
 
         features
     }
@@ -109,17 +105,11 @@ pub struct CollectedData {
     pub symbol: String,
     pub timeframe: f64,
     pub time: CircleTime,
-    pub features: [f64; FEATURES_LEN],
+    pub features: BTreeMap<String, f64>,
 }
 
 impl CollectedData {
-    pub fn new(
-        symbol: &str,
-        ohlcv: Vec<Candle>,
-        ticker: Ticker,
-        timeframe: &str,
-        fake_ticker: bool,
-    ) -> Self {
+    pub fn new(symbol: &str, ohlcv: Vec<Candle>, timeframe: &str) -> Self {
         let ohlcv_wrapped = ohlcv[..OHLCV_LEN].try_into().unwrap();
         let timeframe = Timeframe::from_str(timeframe).unwrap().seconds().unwrap();
 
@@ -127,10 +117,7 @@ impl CollectedData {
             symbol: symbol.to_string(),
             timeframe,
             time: TimeRequest::new().get_time(),
-            features: AddFeatures::new(ticker, ohlcv_wrapped)
-                .apply_features(fake_ticker)
-                .try_into()
-                .unwrap(),
+            features: AddFeatures::new(ohlcv_wrapped).apply_features(),
         }
     }
 
@@ -144,12 +131,10 @@ impl CollectedData {
         timeframe: &str,
         candles: &[CandleWithTimestamp],
     ) -> Option<Self> {
-        let ticker = Ticker { bid: 0.0, ask: 0.0 };
-
         let ohlcv: Vec<Candle> = candles.iter().map(|candle| candle.to_candle()).collect();
         let time =
             TimeRequest::from_timestamp(candles[(candles.len() - 1) - 1].timestamp).get_time();
 
-        Some(Self::new(symbol, ohlcv, ticker, timeframe, true).with_time(time))
+        Some(Self::new(symbol, ohlcv, timeframe).with_time(time))
     }
 }

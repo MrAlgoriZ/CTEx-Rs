@@ -8,6 +8,7 @@ use smartcore::linear::ridge_regression::{
 use smartcore::preprocessing::numerical::StandardScaler;
 use tokio::sync::mpsc;
 
+use crate::data::requests::database::consts::SQLStandart;
 use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
@@ -21,6 +22,7 @@ pub struct Ridge {
     symbol_columns: Option<Vec<String>>,
     config: Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+    standart: SQLStandart,
     solver: String,
     alpha: f64,
 }
@@ -29,6 +31,7 @@ impl Ridge {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
+        standart: SQLStandart,
         solver: String,
         alpha: f64,
     ) -> Self {
@@ -39,6 +42,7 @@ impl Ridge {
             symbol_columns: None,
             config: load_config("config/config.yaml"),
             prediction_tx,
+            standart,
             solver,
             alpha,
         }
@@ -73,8 +77,12 @@ impl ModelDependencies for Ridge {
         &self.symbol_columns
     }
 
-    fn get_target_index(&self) -> i32 {
-        self.target_type.get_index()
+    fn get_target_name(&self) -> &str {
+        self.target_type.get_name()
+    }
+
+    fn get_standart(&self) -> &SQLStandart {
+        &self.standart
     }
 }
 

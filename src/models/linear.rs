@@ -8,6 +8,7 @@ use smartcore::linear::linear_regression::{
 use smartcore::preprocessing::numerical::StandardScaler;
 use tokio::sync::mpsc;
 
+use crate::data::requests::database::consts::SQLStandart;
 use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
@@ -21,6 +22,7 @@ pub struct Linear {
     symbol_columns: Option<Vec<String>>,
     config: Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+    standart: SQLStandart,
     solver: String,
 }
 
@@ -28,6 +30,7 @@ impl Linear {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
+        standart: SQLStandart,
         solver: String,
     ) -> Self {
         Self {
@@ -37,6 +40,7 @@ impl Linear {
             symbol_columns: None,
             config: load_config("config/config.yaml"),
             prediction_tx,
+            standart,
             solver,
         }
     }
@@ -70,8 +74,12 @@ impl ModelDependencies for Linear {
         &self.symbol_columns
     }
 
-    fn get_target_index(&self) -> i32 {
-        self.target_type.get_index()
+    fn get_target_name(&self) -> &str {
+        self.target_type.get_name()
+    }
+
+    fn get_standart(&self) -> &SQLStandart {
+        &self.standart
     }
 }
 

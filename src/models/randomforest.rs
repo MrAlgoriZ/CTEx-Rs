@@ -5,6 +5,7 @@ use smartcore::ensemble::random_forest_regressor::{
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use tokio::sync::mpsc;
 
+use crate::data::requests::database::consts::SQLStandart;
 use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
@@ -18,6 +19,7 @@ pub struct RandomForest {
     symbol_columns: Option<Vec<String>>,
     config: Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+    standart: SQLStandart,
     n_trees: usize,
     max_depth: u16,
     min_samples_leaf: usize,
@@ -29,6 +31,7 @@ impl RandomForest {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
+        standart: SQLStandart,
         n_trees: usize,
         max_depth: u16,
         min_samples_leaf: usize,
@@ -42,6 +45,7 @@ impl RandomForest {
             symbol_columns: None,
             config: load_config("config/config.yaml"),
             prediction_tx,
+            standart,
             n_trees,
             max_depth,
             min_samples_leaf,
@@ -79,8 +83,12 @@ impl ModelDependencies for RandomForest {
         &self.symbol_columns
     }
 
-    fn get_target_index(&self) -> i32 {
-        self.target_type.get_index()
+    fn get_target_name(&self) -> &str {
+        self.target_type.get_name()
+    }
+
+    fn get_standart(&self) -> &SQLStandart {
+        &self.standart
     }
 }
 

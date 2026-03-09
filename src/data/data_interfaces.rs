@@ -1,5 +1,13 @@
-use crate::data::process::data_collection::{CollectedData, FEATURES_LEN};
-use std::sync::Arc;
+use crate::data::process::data_collection::CollectedData;
+use crate::data::requests::database::consts::{
+    COLUMNS_FIRST_LAYER, COLUMNS_SECOND_LAYER, COLUMNS_THIRD_LAYER, SQLStandart,
+    TARGETS_SINGLE_MODEL,
+};
+use crate::data::requests::database::consts::{
+    TARGETS_FIRST_LAYER, TARGETS_SECOND_LAYER, TARGETS_THIRD_LAYER,
+};
+
+use std::{collections::BTreeMap, sync::Arc};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Candle {
@@ -47,40 +55,106 @@ pub struct CircleTime {
 }
 
 #[derive(Debug, Clone)]
-pub struct FlattenedData {
+pub struct DataMap {
     pub symbol: String,
-    pub features: Vec<f64>,
-    with_target: bool,
+    pub data: BTreeMap<String, f64>,
 }
 
-impl FlattenedData {
-    pub fn new(symbol: String, features: Vec<f64>, with_target: bool) -> Self {
-        FlattenedData {
-            symbol,
-            features,
-            with_target,
+impl DataMap {
+    pub fn from_collected(
+        collected: Arc<CollectedData>,
+        target: Option<f64>,
+        target_name: Option<&str>,
+    ) -> Self {
+        let mut map = BTreeMap::new();
+
+        if let Some(target) = target
+            && let Some(target_name) = target_name
+        {
+            map.insert(target_name.to_string(), target);
+        }
+        map.insert("timeframe".to_string(), collected.timeframe);
+        map.insert("hour_sin".to_string(), collected.time.hour_sin);
+        map.insert("hour_cos".to_string(), collected.time.hour_cos);
+        map.insert("minute_sin".to_string(), collected.time.min_sin);
+        map.insert("minute_cos".to_string(), collected.time.min_cos);
+
+        for (key, value) in collected.features.iter() {
+            map.insert(key.to_string(), *value);
+        }
+
+        Self {
+            symbol: collected.symbol.to_string(),
+            data: map,
         }
     }
-    pub fn is_there_a_target(&self) -> bool {
-        self.with_target
+
+    pub fn get_only_features(&self) -> BTreeMap<String, f64> {
+        let mut map = BTreeMap::new();
+        let targets = TARGETS_FIRST_LAYER
+            .iter()
+            .map(|s| s.to_string())
+            .chain(TARGETS_SECOND_LAYER.iter().map(|s| s.to_string()))
+            .chain(TARGETS_THIRD_LAYER.iter().map(|s| s.to_string()))
+            .collect::<Vec<_>>();
+
+        for (key, value) in self.data.iter() {
+            if !targets.contains(key) {
+                map.insert(key.to_string(), *value);
+            }
+        }
+
+        map
     }
 
-    pub fn from_collected(collected_data: Arc<CollectedData>, target: Option<f64>) -> Self {
-        let mut features = Vec::with_capacity(1 + 4 + FEATURES_LEN + 1);
+    pub fn has_target(&self) -> bool {
+        let targets = TARGETS_FIRST_LAYER
+            .iter()
+            .map(|s| s.to_string())
+            .chain(TARGETS_SECOND_LAYER.iter().map(|s| s.to_string()))
+            .chain(TARGETS_THIRD_LAYER.iter().map(|s| s.to_string()))
+            .collect::<Vec<_>>();
 
-        features.push(collected_data.timeframe);
-        features.push(collected_data.time.hour_sin);
-        features.push(collected_data.time.hour_cos);
-        features.push(collected_data.time.min_sin);
-        features.push(collected_data.time.min_cos);
+        for (key, _) in self.data.iter() {
+            if targets.contains(key) {
+                return true;
+            }
+        }
 
-        features.extend_from_slice(&collected_data.features);
+        false
+    }
 
-        if let Some(t) = target {
-            features.push(t);
-            Self::new(collected_data.symbol.clone(), features, true)
-        } else {
-            Self::new(collected_data.symbol.clone(), features, false)
+    pub fn to_standart(&self, standart: &SQLStandart) -> DataMap {
+        let mut map = BTreeMap::new();
+        let columns = {
+            let targets = match standart {
+                SQLStandart::FirstLayer => TARGETS_FIRST_LAYER,
+                SQLStandart::SecondLayer => TARGETS_SECOND_LAYER,
+                SQLStandart::ThirdLayer => TARGETS_THIRD_LAYER,
+                SQLStandart::SingleModel => TARGETS_SINGLE_MODEL,
+            };
+            let features = match standart {
+                SQLStandart::FirstLayer => COLUMNS_FIRST_LAYER,
+                SQLStandart::SecondLayer => COLUMNS_SECOND_LAYER,
+                SQLStandart::ThirdLayer => COLUMNS_THIRD_LAYER,
+                SQLStandart::SingleModel => COLUMNS_FIRST_LAYER,
+            };
+            targets
+                .iter()
+                .chain(features.iter())
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        };
+
+        for (key, value) in self.data.iter() {
+            if columns.contains(key) {
+                map.insert(key.to_string(), *value);
+            }
+        }
+
+        DataMap {
+            symbol: self.symbol.clone(),
+            data: map,
         }
     }
 }

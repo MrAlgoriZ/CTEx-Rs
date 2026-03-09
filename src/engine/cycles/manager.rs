@@ -8,9 +8,8 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::time::{Duration, sleep};
 
 use crate::CONFIG_PATH;
-use crate::data::data_interfaces::{Candle, CandleWithTimestamp, FlattenedData, Ticker};
+use crate::data::data_interfaces::{Candle, CandleWithTimestamp, DataMap, Ticker};
 use crate::data::requests::ccxt::client::CCXTClient;
-use crate::data::requests::database::db_req::select_all_candles;
 use crate::engine::cycles::background::cycle::BackgroundCycle;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::sandbox::cycle::SandboxCycle;
@@ -415,27 +414,30 @@ impl CounterActor {
 
 pub enum ModelCommand {
     Predict {
-        features: Vec<f64>,
-        symbol: String,
+        data: DataMap,
         respond_to: oneshot::Sender<f64>,
     },
     Train {
-        data: Vec<FlattenedData>,
         respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
     },
 }
 
 pub struct ModelActor {
     model: Arc<Mutex<Box<dyn Model + Send + Sync>>>,
+    pool: PgPool,
     inbox: mpsc::Receiver<ModelCommand>,
 }
 
 impl ModelActor {
-    pub fn new(model: Box<dyn Model + Send + Sync>) -> (Self, mpsc::Sender<ModelCommand>) {
+    pub fn new(
+        model: Box<dyn Model + Send + Sync>,
+        pool: PgPool,
+    ) -> (Self, mpsc::Sender<ModelCommand>) {
         let (tx, rx) = mpsc::channel(10);
         (
             Self {
                 model: Arc::new(Mutex::new(model)),
+                pool,
                 inbox: rx,
             },
             tx,
@@ -447,14 +449,20 @@ impl ModelActor {
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
-                ModelCommand::Predict {
-                    features,
-                    symbol,
-                    respond_to,
-                } => {
+                ModelCommand::Predict { data, respond_to } => {
                     let model = self.model.clone();
+                    let locked = model.lock().await;
 
-                    let result = model.lock().await.predict(features, Some(&symbol)).await;
+                    let standart = locked.get_standart();
+
+                    let x = data
+                        .to_standart(standart)
+                        .get_only_features()
+                        .values()
+                        .cloned()
+                        .collect::<Vec<_>>();
+
+                    let result = locked.predict(x, Some(&data.symbol)).await;
 
                     let prediction = match result {
                         Ok(pred) => pred,
@@ -467,12 +475,28 @@ impl ModelActor {
                     let _ = respond_to.send(prediction);
                 }
 
-                ModelCommand::Train { data, respond_to } => {
-                    let model = self.model.clone();
+                ModelCommand::Train { respond_to } => {
+                    let result = {
+                        let model = self.model.clone();
+                        let locked = model.lock().await;
+                        let standart = locked.get_standart();
 
-                    let result =
-                        tokio::task::spawn_blocking(move || model.blocking_lock().train(data))
-                            .await;
+                        let data = standart.select_all(&self.pool).await;
+
+                        if let Err(e) = data {
+                            Ok(Err(anyhow::anyhow!("Ошибка select_all: {}", e)))
+                        } else {
+                            let data = data.unwrap();
+
+                            let model = model.clone();
+
+                            tokio::task::spawn_blocking(move || {
+                                let mut locked = model.blocking_lock();
+                                locked.train(data)
+                            })
+                            .await
+                        }
+                    };
 
                     let train_result = match result {
                         Ok(Ok(())) => Ok(()),
@@ -595,46 +619,55 @@ impl CycleManager {
 
         let mut model: Box<dyn Model + Send + Sync> = match params {
             ModelParams::Ensemble {
-                volatility_model_params,
-                volume_model_params,
-                spread_model_params,
-                trend_strength_model_params,
-                range_model_params,
-                return_model_params,
-                return_mean_model_params,
-                return_std_model_params,
-                return_skew_model_params,
-                return_kurt_model_params,
-                action_model_params,
-                interpretator_model_params,
+                future_volatility_model_params,
+                future_volume_model_params,
+                future_trend_strength_model_params,
+                future_range_model_params,
+                future_return_mean_model_params,
+                future_return_std_model_params,
+                future_return_skew_model_params,
+                future_return_kurt_model_params,
+                risk_score_model_params,
+                drawdown_probability_model_params,
+                tail_event_probability_model_params,
+                liquidity_drop_probability_model_params,
+                future_return_model_params,
+                action_type_model_params,
+                position_size_model_params,
             } => init_ensemble_model(
                 Some(self.prediction_tx.clone()),
-                volatility_model_params,
-                volume_model_params,
-                spread_model_params,
-                trend_strength_model_params,
-                range_model_params,
-                return_model_params,
-                return_mean_model_params,
-                return_std_model_params,
-                return_skew_model_params,
-                return_kurt_model_params,
-                action_model_params,
-                interpretator_model_params,
+                pool.clone(),
+                future_volatility_model_params,
+                future_volume_model_params,
+                future_trend_strength_model_params,
+                future_range_model_params,
+                future_return_mean_model_params,
+                future_return_std_model_params,
+                future_return_skew_model_params,
+                future_return_kurt_model_params,
+                risk_score_model_params,
+                drawdown_probability_model_params,
+                tail_event_probability_model_params,
+                liquidity_drop_probability_model_params,
+                future_return_model_params,
+                action_type_model_params,
+                position_size_model_params,
             ),
             ModelParams::Single { params } => {
                 init_single_model(params, Some(self.prediction_tx.clone()))
             }
         };
 
-        let data = select_all_candles(&pool)
+        let data = model
+            .get_standart()
+            .select_all(&pool)
             .await
             .map_err(|e| format!("Database request error: {}", e))?;
         model
             .train(data)
             .map_err(|e| format!("Model training error: {}", e))?;
 
-        let (model_actor, model_tx) = ModelActor::new(model);
+        let (model_actor, model_tx) = ModelActor::new(model, pool);
         tokio::spawn(model_actor.run());
 
         self.supervisor_tx

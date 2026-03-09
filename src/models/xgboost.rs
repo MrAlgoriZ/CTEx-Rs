@@ -3,6 +3,7 @@ use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::xgboost::{XGRegressor, XGRegressorParameters};
 use tokio::sync::mpsc;
 
+use crate::data::requests::database::consts::SQLStandart;
 use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
@@ -16,6 +17,7 @@ pub struct XGBoost {
     symbol_columns: Option<Vec<String>>,
     config: Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+    standart: SQLStandart,
     n_estimators: usize,
     max_depth: u16,
 }
@@ -24,6 +26,7 @@ impl XGBoost {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
+        standart: SQLStandart,
         n_estimators: usize,
         max_depth: u16,
     ) -> Self {
@@ -32,6 +35,7 @@ impl XGBoost {
             name: "XGBoost".to_string(),
             target_type,
             symbol_columns: None,
+            standart,
             config: load_config("config/config.yaml"),
             prediction_tx,
             n_estimators,
@@ -68,8 +72,12 @@ impl ModelDependencies for XGBoost {
         &self.symbol_columns
     }
 
-    fn get_target_index(&self) -> i32 {
-        self.target_type.get_index()
+    fn get_target_name(&self) -> &str {
+        self.target_type.get_name()
+    }
+
+    fn get_standart(&self) -> &SQLStandart {
+        &self.standart
     }
 }
 

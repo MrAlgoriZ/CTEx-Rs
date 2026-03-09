@@ -3,10 +3,10 @@ use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
 
-use crate::data::data_interfaces::{Candle, FlattenedData, Timeframe};
+use crate::data::data_interfaces::{Candle, DataMap, Timeframe};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
-use crate::data::requests::database::db_req::{insert_candle, select_all_candles};
+use crate::data::requests::database::consts::SQLStandart;
 use crate::engine::cycles::manager::{CounterCommand, CounterType, ModelCommand};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
@@ -93,16 +93,15 @@ pub trait Cycle: CycleGetters {
 pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
     async fn predict(
         &self,
-        flattened_candles: FlattenedData,
+        data: DataMap,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<f64, anyhow::Error> {
-        if !flattened_candles.is_there_a_target() {
+        if !data.has_target() {
             let (tx, rx) = oneshot::channel();
 
             model_tx
                 .send(ModelCommand::Predict {
-                    features: flattened_candles.features,
-                    symbol: flattened_candles.symbol,
+                    data,
                     respond_to: tx,
                 })
                 .await?;
@@ -154,17 +153,15 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
     async fn handle_mistake(
         &self,
-        flattened_candles: FlattenedData,
+        data: DataMap,
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), anyhow::Error> {
-        if flattened_candles.is_there_a_target() {
-            insert_candle(
-                &self.get_pool(),
-                &self.get_symbol(),
-                &flattened_candles.features,
-            )
-            .await?;
+        if data.has_target() {
+            // TODO: Вставлять только обработанные данные со всеми таргетами
+            SQLStandart::SingleModel
+                .insert_row(&self.get_pool(), data)
+                .await?;
 
             let (tx, rx) = oneshot::channel();
             let _ = counter_tx
@@ -257,14 +254,10 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         &self,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), anyhow::Error> {
-        let data = select_all_candles(self.get_pool()).await?;
         let (tx, rx) = oneshot::channel();
 
         model_tx
-            .send(ModelCommand::Train {
-                data,
-                respond_to: tx,
-            })
+            .send(ModelCommand::Train { respond_to: tx })
             .await?;
 
         rx.await??;

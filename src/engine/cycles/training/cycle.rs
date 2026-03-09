@@ -4,12 +4,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use crate::data::data_interfaces::{Candle, FlattenedData};
+use crate::data::data_interfaces::{Candle, DataMap};
 use crate::data::process::data_collection::{CollectedData, OHLCV_FETCH_LEN};
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
-use crate::data::requests::database::db_req::insert_candle;
+use crate::data::requests::database::consts::SQLStandart;
 use crate::engine::cycles::CyclePhase;
 use crate::engine::cycles::manager::{CounterCommand, CycleError, ModelCommand};
 use crate::engine::cycles::traits::{
@@ -138,17 +138,17 @@ impl TrainingCycle {
 
                     if !success {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
-                        let flattened = FlattenedData::from_collected(last_grouped, target);
-                        self.handle_mistake(flattened, counter_tx, model_tx).await?;
+                        let data = DataMap::from_collected(last_grouped, target, None);
+                        self.handle_mistake(data, counter_tx, model_tx).await?;
                     }
                 }
                 _ => {}
             }
 
             let candles_to_flattened = candles.clone();
-            let flattened_for_pred = FlattenedData::from_collected(candles_to_flattened, None);
+            let data_for_pred = DataMap::from_collected(candles_to_flattened, None, None);
 
-            prediction = Some(self.predict(flattened_for_pred, &model_tx).await.unwrap());
+            prediction = Some(self.predict(data_for_pred, &model_tx).await.unwrap());
             let restored_price: f64 = restore_price(candles_target, prediction.unwrap());
 
             phase = CyclePhase::Active;
@@ -245,10 +245,12 @@ impl TrainingCycle {
 
                     if !success && self.config.runtime.with_training {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
-                        let flattened = FlattenedData::from_collected(last_grouped, target);
+                        let data = DataMap::from_collected(last_grouped, target, None);
 
-                        if flattened.is_there_a_target() && self.config.runtime.with_saves {
-                            insert_candle(&self.pool, &self.symbol, &flattened.features).await?;
+                        if data.has_target() && self.config.runtime.with_saves {
+                            SQLStandart::SingleModel
+                                .insert_row(&self.pool, data)
+                                .await?;
                         }
                         let shifted_acc = threshold_counter.get_shifted_accuracy(3);
                         if shifted_acc.unwrap_or(0.0) == 0.0 {
@@ -260,9 +262,9 @@ impl TrainingCycle {
             }
 
             let candles_to_flattened = candles.clone();
-            let flattened_for_pred = FlattenedData::from_collected(candles_to_flattened, None);
+            let data_for_pred = DataMap::from_collected(candles_to_flattened, None, None);
 
-            prediction = Some(self.predict(flattened_for_pred, &model_tx).await?);
+            prediction = Some(self.predict(data_for_pred, &model_tx).await?);
 
             phase = CyclePhase::Active;
             self.last_grouped_candles = Some(candles);

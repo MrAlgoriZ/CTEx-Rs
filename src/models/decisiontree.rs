@@ -5,6 +5,7 @@ use smartcore::tree::decision_tree_regressor::{
 };
 use tokio::sync::mpsc;
 
+use crate::data::requests::database::consts::SQLStandart;
 use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
@@ -18,6 +19,7 @@ pub struct DecisionTree {
     symbol_columns: Option<Vec<String>>,
     config: Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+    standart: SQLStandart,
     max_depth: u16,
     min_samples_leaf: usize,
     min_samples_split: usize,
@@ -27,6 +29,7 @@ impl DecisionTree {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
+        standart: SQLStandart,
         max_depth: u16,
         min_samples_leaf: usize,
         min_samples_split: usize,
@@ -38,6 +41,7 @@ impl DecisionTree {
             symbol_columns: None,
             config: load_config("config/config.yaml"),
             prediction_tx,
+            standart,
             max_depth,
             min_samples_leaf,
             min_samples_split,
@@ -73,8 +77,12 @@ impl ModelDependencies for DecisionTree {
         &self.symbol_columns
     }
 
-    fn get_target_index(&self) -> i32 {
-        self.target_type.get_index()
+    fn get_target_name(&self) -> &str {
+        self.target_type.get_name()
+    }
+
+    fn get_standart(&self) -> &SQLStandart {
+        &self.standart
     }
 }
 
