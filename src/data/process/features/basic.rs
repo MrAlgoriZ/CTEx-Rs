@@ -1,17 +1,18 @@
 use crate::data::data_interfaces::Candle;
+use crate::data::process::features::auxiliary::safed;
 
 pub fn return_k(candles: &[Candle], k: usize) -> f64 {
     let n = candles.len();
     let close_t = candles[n - 1].close;
     let close_k = candles[n - 1 - k].close;
-    (close_t - close_k) / close_k
+    safed((close_t - close_k) / close_k)
 }
 
 pub fn log_return_k(candles: &[Candle], k: usize) -> f64 {
     let n = candles.len();
     let close_t = candles[n - 1].close;
     let close_k = candles[n - 1 - k].close;
-    (close_t / close_k).ln()
+    safed((close_t / close_k).ln())
 }
 
 pub fn vol_rolling_k(candles: &[Candle], k: usize) -> f64 {
@@ -26,19 +27,19 @@ pub fn vol_rolling_k(candles: &[Candle], k: usize) -> f64 {
     let mean: f64 = returns.iter().sum::<f64>() / k as f64;
     let var: f64 = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / k as f64;
 
-    var.sqrt()
+    safed(var.sqrt())
 }
 
 pub fn volume_change_k(candles: &[Candle], k: usize) -> f64 {
     let n = candles.len();
     let volume_t = candles[n - 1].volume;
     let volume_k = candles[n - 1 - k].volume;
-    (volume_t - volume_k) / volume_k
+    safed((volume_t - volume_k) / volume_k)
 }
 
 pub fn sma(candles: &[Candle], period: usize) -> f64 {
     let slice = &candles[candles.len() - period..];
-    slice.iter().map(|c| c.close).sum::<f64>() / period as f64
+    safed(slice.iter().map(|c| c.close).sum::<f64>() / period as f64)
 }
 
 pub fn ema(candles: &[Candle], period: usize) -> f64 {
@@ -50,7 +51,7 @@ pub fn ema(candles: &[Candle], period: usize) -> f64 {
         ema = candle.close * alpha + ema * (1.0 - alpha);
     }
 
-    ema
+    safed(ema)
 }
 
 pub fn rsi(candles: &[Candle], period: usize) -> f64 {
@@ -73,7 +74,7 @@ pub fn rsi(candles: &[Candle], period: usize) -> f64 {
     }
 
     let rs = gain / loss;
-    rs / (1.0 + rs)
+    safed(rs / (1.0 + rs))
 }
 
 pub fn macd_diff_percent(candles: &[Candle], ema_fast: f64, ema_slow: f64) -> f64 {
@@ -99,7 +100,7 @@ pub fn macd_diff_percent(candles: &[Candle], ema_fast: f64, ema_slow: f64) -> f6
         ema
     };
 
-    (macd_line - signal) / ema_slow
+    safed((macd_line - signal) / ema_slow)
 }
 
 pub fn bb_percent(candles: &[Candle], period: usize, num_std: f64) -> f64 {
@@ -120,7 +121,7 @@ pub fn bb_percent(candles: &[Candle], period: usize, num_std: f64) -> f64 {
         return 0.5;
     }
 
-    (candles[n - 1].close - lower_band) / (upper_band - lower_band)
+    safed((candles[n - 1].close - lower_band) / (upper_band - lower_band))
 }
 
 pub fn zscore_price(candles: &[Candle], period: usize) -> f64 {
@@ -134,34 +135,21 @@ pub fn zscore_price(candles: &[Candle], period: usize) -> f64 {
     let sma_val = sma(slice, period);
     let ema_long = ema(slice, period);
 
-    if ema_long.abs() < 1e-12 {
-        return 0.0;
-    }
-
-    (close - sma_val) / ema_long
+    safed((close - sma_val) / ema_long)
 }
 
 pub fn mean_reversion(candles: &[Candle]) -> f64 {
     let close = candles.last().unwrap().close;
     let ema_slow = ema(candles, 20);
 
-    if ema_slow == 0.0 {
-        return 0.0;
-    }
-
-    (close - ema_slow) / ema_slow
+    safed((close - ema_slow) / ema_slow)
 }
 
 pub fn breakout_high(candles: &[Candle], period: usize) -> f64 {
     let slice = &candles[candles.len() - period..];
 
     let close = match slice.last() {
-        Some(candle) => {
-            if candle.close.is_nan() || candle.close.is_infinite() {
-                return 0.0;
-            }
-            candle.close
-        }
+        Some(candle) => candle.close,
         None => return 0.0,
     };
 
@@ -171,33 +159,16 @@ pub fn breakout_high(candles: &[Candle], period: usize) -> f64 {
         .map(|c| c.high)
         .fold(f64::NEG_INFINITY, f64::max);
 
-    if rolling_high == f64::NEG_INFINITY {
-        return 0.0;
-    }
-
-    if rolling_high.abs() < 1e-12 {
-        return 0.0;
-    }
-
     let result = (close - rolling_high) / rolling_high;
 
-    if result.is_nan() || result.is_infinite() {
-        return 0.0;
-    }
-
-    result
+    safed(result)
 }
 
 pub fn breakout_low(candles: &[Candle], period: usize) -> f64 {
     let slice = &candles[candles.len() - period..];
 
     let close = match slice.last() {
-        Some(candle) => {
-            if candle.close.is_nan() || candle.close.is_infinite() {
-                return 0.0;
-            }
-            candle.close
-        }
+        Some(candle) => candle.close,
         None => return 0.0,
     };
 
@@ -207,19 +178,7 @@ pub fn breakout_low(candles: &[Candle], period: usize) -> f64 {
         .map(|c| c.low)
         .fold(f64::INFINITY, f64::min);
 
-    if rolling_low == f64::INFINITY {
-        return 0.0;
-    }
-
-    if rolling_low.abs() < 1e-12 {
-        return 0.0;
-    }
-
     let result = (close - rolling_low) / rolling_low;
 
-    if result.is_nan() || result.is_infinite() {
-        return 0.0;
-    }
-
-    result
+    safed(result)
 }

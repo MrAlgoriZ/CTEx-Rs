@@ -41,6 +41,7 @@ impl CandleWithTimestamp {
 }
 
 #[derive(Debug, Clone)]
+#[allow(unused)]
 pub struct Ticker {
     pub bid: f64,
     pub ask: f64,
