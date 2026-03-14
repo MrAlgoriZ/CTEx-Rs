@@ -2,7 +2,7 @@ use sqlx::{Column, Error, PgPool, Row, query};
 use std::collections::BTreeMap;
 
 use crate::data::data_interfaces::DataMap;
-use crate::data::requests::database::consts::SQLStandart;
+use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::utils::colors::Fore;
 
 impl SQLStandart {

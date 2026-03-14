@@ -5,7 +5,7 @@ use smartcore::tree::decision_tree_regressor::{
 };
 use tokio::sync::mpsc;
 
-use crate::data::requests::database::consts::SQLStandart;
+use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;

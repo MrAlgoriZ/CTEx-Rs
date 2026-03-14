@@ -10,7 +10,7 @@ use crate::data::process::target::{process_target, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::account::{Direction, DummyAccount};
 use crate::data::requests::ccxt::client::CCXTClient;
-use crate::data::requests::database::consts::SQLStandart;
+use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::CyclePhase;
 use crate::engine::cycles::manager::{CounterCommand, CycleError, ModelCommand};
 use crate::engine::cycles::traits::{

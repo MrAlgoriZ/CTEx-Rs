@@ -7,7 +7,7 @@ use crate::data::process::data_collection::{CollectedData, OHLCV_FETCH_LEN};
 use crate::data::process::target::process_target;
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
-use crate::data::requests::database::consts::SQLStandart;
+use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::CyclePhase;
 use crate::engine::cycles::manager::CycleError;
 use crate::engine::cycles::traits::{Cycle, CycleGetters};

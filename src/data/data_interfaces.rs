@@ -1,9 +1,9 @@
 use crate::data::process::data_collection::CollectedData;
-use crate::data::requests::database::consts::{
+use crate::data::requests::database::standart::{
     COLUMNS_FIRST_LAYER, COLUMNS_SECOND_LAYER, COLUMNS_THIRD_LAYER, SQLStandart,
     TARGETS_SINGLE_MODEL,
 };
-use crate::data::requests::database::consts::{
+use crate::data::requests::database::standart::{
     TARGETS_FIRST_LAYER, TARGETS_SECOND_LAYER, TARGETS_THIRD_LAYER,
 };
 

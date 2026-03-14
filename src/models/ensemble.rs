@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use tokio::sync::mpsc;
 
 use crate::CONFIG_PATH;
-use crate::data::requests::database::consts::SQLStandart;
+use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::manager::{ModelActor, ModelCommand, PredictionsCommand};
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::config::config_types::Config;
