@@ -132,12 +132,14 @@ impl DataMap {
                 SQLStandart::SecondLayer => TARGETS_SECOND_LAYER,
                 SQLStandart::ThirdLayer => TARGETS_THIRD_LAYER,
                 SQLStandart::SingleModel => TARGETS_SINGLE_MODEL,
+                SQLStandart::Dummy => &[],
             };
             let features = match standart {
                 SQLStandart::FirstLayer => COLUMNS_FIRST_LAYER,
                 SQLStandart::SecondLayer => COLUMNS_SECOND_LAYER,
                 SQLStandart::ThirdLayer => COLUMNS_THIRD_LAYER,
                 SQLStandart::SingleModel => COLUMNS_FIRST_LAYER,
+                SQLStandart::Dummy => &[],
             };
             targets
                 .iter()

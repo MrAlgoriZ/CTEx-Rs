@@ -144,6 +144,7 @@ pub enum SQLStandart {
     SecondLayer,
     ThirdLayer,
     SingleModel,
+    Dummy,
 }
 
 impl SQLStandart {
@@ -152,7 +153,8 @@ impl SQLStandart {
             SQLStandart::FirstLayer => COLUMNS_FIRST_LAYER,
             SQLStandart::SecondLayer => COLUMNS_SECOND_LAYER,
             SQLStandart::ThirdLayer => COLUMNS_THIRD_LAYER,
-            SQLStandart::SingleModel => &[],
+            SQLStandart::SingleModel => COLUMNS_FIRST_LAYER,
+            SQLStandart::Dummy => &[],
         }
     }
 
@@ -162,6 +164,7 @@ impl SQLStandart {
             SQLStandart::SecondLayer => TARGETS_SECOND_LAYER,
             SQLStandart::ThirdLayer => TARGETS_THIRD_LAYER,
             SQLStandart::SingleModel => TARGETS_SINGLE_MODEL,
+            SQLStandart::Dummy => &[],
         }
     }
 }

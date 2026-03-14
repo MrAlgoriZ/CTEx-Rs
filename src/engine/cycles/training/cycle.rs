@@ -248,9 +248,7 @@ impl TrainingCycle {
                         let data = DataMap::from_collected(last_grouped, target, None);
 
                         if data.has_target() && self.config.runtime.with_saves {
-                            SQLStandart::SingleModel
-                                .insert_row(&self.pool, data)
-                                .await?;
+                            SQLStandart::Dummy.insert_row(&self.pool, data).await?;
                         }
                         let shifted_acc = threshold_counter.get_shifted_accuracy(3);
                         if shifted_acc.unwrap_or(0.0) == 0.0 {

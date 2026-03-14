@@ -203,10 +203,10 @@ impl LoaderCycle {
     // --- Методы ---
     async fn save_data(&self, data: DataMap, pool: &PgPool) -> Result<(), anyhow::Error> {
         if data.has_target() {
-            SQLStandart::SingleModel.insert_row(pool, data).await?;
+            SQLStandart::Dummy.insert_row(pool, data).await?;
             Ok(())
         } else {
-            Err(anyhow::anyhow!("Flattened candles must have the target!"))
+            Err(anyhow::anyhow!("DataMap must has the target!"))
         }
     }
 }

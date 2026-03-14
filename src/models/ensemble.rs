@@ -220,7 +220,7 @@ impl ModelDependencies for Ensemble {
         "position_size"
     }
     fn get_standart(&self) -> &SQLStandart {
-        &SQLStandart::ThirdLayer
+        &SQLStandart::Dummy
     }
 }
 
