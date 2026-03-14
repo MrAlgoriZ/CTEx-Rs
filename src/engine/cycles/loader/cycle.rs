@@ -1,9 +1,8 @@
 use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
-use std::sync::Arc;
 
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, DataMap};
-use crate::data::process::data_collection::{CollectedData, OHLCV_FETCH_LEN};
+use crate::data::process::data_collection::OHLCV_FETCH_LEN;
 use crate::data::process::target::process_target;
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
@@ -18,7 +17,7 @@ use crate::engine::utils::config::load_env::load_env;
 
 pub struct LoaderCycle {
     pub symbol: String,
-    last_grouped_candles: Option<Arc<CollectedData>>,
+    last_grouped_candles: Option<DataMap>,
     last_candles_target: Option<f64>,
     config: Config,
     print_symbol: String,
@@ -85,7 +84,7 @@ impl LoaderCycle {
 
         loop {
             self.wait_for_next_interval().await?;
-            let candles: CollectedData = self
+            let candles = self
                 .client
                 .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
                 .await?;
@@ -111,15 +110,13 @@ impl LoaderCycle {
                     }
 
                     let last_grouped = self.last_grouped_candles.clone().unwrap();
-
-                    let data = DataMap::from_collected(last_grouped, target, None);
-                    self.save_data(data, &self.pool).await.unwrap();
+                    self.save_data(last_grouped, &self.pool).await.unwrap();
                 }
                 _ => {}
             }
 
             phase = CyclePhase::Active;
-            self.last_grouped_candles = Some(Arc::new(candles));
+            self.last_grouped_candles = Some(candles);
             self.last_candles_target = Some(candles_target);
         }
     }
@@ -158,33 +155,22 @@ impl LoaderCycle {
             let window = &all_candles[i - OHLCV_FETCH_LEN..i];
             let current_target = all_candles[i - 2].close;
 
-            let candles = match CollectedData::from_slice(
-                &self.symbol,
-                &self.config.timeframes.main_timeframe,
-                window,
-            ) {
-                Some(collected) => collected,
-                None => {
-                    return Err(CycleError::AnyhowError(anyhow::anyhow!(
-                        "Collection the data has been failed!"
-                    )));
-                }
-            };
+            let candles =
+                DataMap::from_slice(&self.symbol, &self.config.timeframes.main_timeframe, window);
 
             match phase {
                 CyclePhase::Active => {
                     let target = process_target(self.last_candles_target.unwrap(), current_target);
 
+                    // TODO: Сохранять таргеты на этом этапе
                     let last_grouped = self.last_grouped_candles.clone().unwrap();
-
-                    let data = DataMap::from_collected(last_grouped, target, None);
-                    self.save_data(data, &self.pool).await?;
+                    self.save_data(last_grouped, &self.pool).await?;
                 }
                 _ => {}
             }
 
             phase = CyclePhase::Active;
-            self.last_grouped_candles = Some(Arc::new(candles));
+            self.last_grouped_candles = Some(candles);
             self.last_candles_target = Some(current_target);
             pb.inc(1);
         }

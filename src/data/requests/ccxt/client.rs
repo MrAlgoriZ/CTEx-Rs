@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
 use crate::data::data_interfaces::*;
-use crate::data::process::data_collection::{CollectedData, OHLCV_FETCH_LEN};
+use crate::data::process::data_collection::OHLCV_FETCH_LEN;
 use crate::engine::cycles::manager::ServersCommand;
 
 pub struct CCXTClient {
@@ -180,9 +180,9 @@ impl CCXTClient {
         &self,
         symbol: &str,
         timeframe: &str,
-    ) -> Result<CollectedData, anyhow::Error> {
+    ) -> Result<DataMap, anyhow::Error> {
         let ohlcv = self.fetch_ohlcv(symbol, timeframe, OHLCV_FETCH_LEN).await?;
 
-        Ok(CollectedData::new(symbol, ohlcv, timeframe))
+        Ok(DataMap::init(symbol, ohlcv, timeframe))
     }
 }

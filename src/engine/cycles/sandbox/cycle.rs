@@ -1,11 +1,10 @@
 use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::data::data_interfaces::{Candle, DataMap};
-use crate::data::process::data_collection::{CollectedData, OHLCV_FETCH_LEN};
+use crate::data::process::data_collection::OHLCV_FETCH_LEN;
 use crate::data::process::target::{process_target, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::account::{Direction, DummyAccount};
@@ -24,7 +23,7 @@ use crate::engine::utils::config::load_env::load_env;
 
 pub struct SandboxCycle {
     pub symbol: String,
-    last_grouped_candles: Option<Arc<CollectedData>>,
+    last_grouped_candles: Option<DataMap>,
     last_candles_target: Option<f64>,
     last_order_price: Option<f64>,
     print_symbol: String,
@@ -104,11 +103,10 @@ impl SandboxCycle {
                 self.print_volatility_status(volatility);
             }
 
-            let candles = Arc::new(
-                self.get_client()
-                    .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
-                    .await?,
-            );
+            let candles = self
+                .get_client()
+                .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
+                .await?;
             let candles_target: f64 = self
                 .get_client()
                 .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
@@ -146,18 +144,15 @@ impl SandboxCycle {
 
                     if !success {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
-                        let data = DataMap::from_collected(last_grouped, target, None);
-                        self.handle_mistake(data, counter_tx, model_tx).await?;
+                        self.handle_mistake(last_grouped, counter_tx, model_tx)
+                            .await?;
                     }
                 }
                 _ => {}
             }
 
-            let candles_to_flattened = candles.clone();
-            // TODO: Сделать совместимость и с SingleModel и с Ensemble
-            let data_for_pred = DataMap::from_collected(candles_to_flattened, None, None);
-
-            prediction = Some(self.predict(data_for_pred, &model_tx).await.unwrap());
+            let candles_to_pred = candles.clone();
+            prediction = Some(self.predict(candles_to_pred, &model_tx).await.unwrap());
             let restored_price: f64 = restore_price(candles_target, prediction.unwrap());
 
             let direction = if prediction.unwrap() > 0.0 {
@@ -240,18 +235,8 @@ impl SandboxCycle {
 
             volatility = get_volatility(&to_volatility);
 
-            let candles = match CollectedData::from_slice(
-                &self.symbol,
-                &self.config.timeframes.main_timeframe,
-                window,
-            ) {
-                Some(collected) => Arc::new(collected),
-                None => {
-                    return Err(CycleError::AnyhowError(anyhow::anyhow!(
-                        "Collection the data has been failed!"
-                    )));
-                }
-            };
+            let candles =
+                DataMap::from_slice(&self.symbol, &self.config.timeframes.main_timeframe, window);
             let current_target = all_candles[i - 2].close;
 
             match phase {
@@ -268,11 +253,9 @@ impl SandboxCycle {
 
                     if !success && self.config.runtime.with_training {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
-                        let data = DataMap::from_collected(last_grouped, target, None);
-
-                        if data.has_target() && self.config.runtime.with_saves {
+                        if last_grouped.has_target() && self.config.runtime.with_saves {
                             SQLStandart::SingleModel
-                                .insert_row(&self.pool, data)
+                                .insert_row(&self.pool, last_grouped)
                                 .await?;
                         }
                         let shifted_acc = threshold_counter.get_shifted_accuracy(3);
@@ -298,10 +281,8 @@ impl SandboxCycle {
                 }
             }
 
-            let candles_to_flattened = candles.clone();
-            let data_for_pred = DataMap::from_collected(candles_to_flattened, None, None);
-
-            prediction = Some(self.predict(data_for_pred, &model_tx).await?);
+            let candles_to_pred = candles.clone();
+            prediction = Some(self.predict(candles_to_pred, &model_tx).await?);
 
             let direction = if prediction.unwrap() > 0.0 {
                 Direction::Buy

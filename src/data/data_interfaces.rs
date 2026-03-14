@@ -1,4 +1,4 @@
-use crate::data::process::data_collection::CollectedData;
+use crate::data::process::data_collection::{AddFeatures, OHLCV_LEN};
 use crate::data::requests::database::standart::{
     COLUMNS_FIRST_LAYER, COLUMNS_SECOND_LAYER, COLUMNS_THIRD_LAYER, SQLStandart,
     TARGETS_SINGLE_MODEL,
@@ -6,8 +6,9 @@ use crate::data::requests::database::standart::{
 use crate::data::requests::database::standart::{
     TARGETS_FIRST_LAYER, TARGETS_SECOND_LAYER, TARGETS_THIRD_LAYER,
 };
+use crate::data::requests::time::TimeRequest;
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Candle {
@@ -55,6 +56,12 @@ pub struct CircleTime {
     pub min_cos: f64,
 }
 
+impl CircleTime {
+    pub fn as_tuple(self) -> (f64, f64, f64, f64) {
+        (self.hour_sin, self.hour_cos, self.min_sin, self.min_cos)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DataMap {
     pub symbol: String,
@@ -62,34 +69,6 @@ pub struct DataMap {
 }
 
 impl DataMap {
-    pub fn from_collected(
-        collected: Arc<CollectedData>,
-        target: Option<f64>,
-        target_name: Option<&str>,
-    ) -> Self {
-        let mut map = BTreeMap::new();
-
-        if let Some(target) = target
-            && let Some(target_name) = target_name
-        {
-            map.insert(target_name.to_string(), target);
-        }
-        map.insert("timeframe".to_string(), collected.timeframe);
-        map.insert("hour_sin".to_string(), collected.time.hour_sin);
-        map.insert("hour_cos".to_string(), collected.time.hour_cos);
-        map.insert("minute_sin".to_string(), collected.time.min_sin);
-        map.insert("minute_cos".to_string(), collected.time.min_cos);
-
-        for (key, value) in collected.features.iter() {
-            map.insert(key.to_string(), *value);
-        }
-
-        Self {
-            symbol: collected.symbol.to_string(),
-            data: map,
-        }
-    }
-
     pub fn get_only_features(&self) -> BTreeMap<String, f64> {
         let mut map = BTreeMap::new();
         let targets = TARGETS_FIRST_LAYER
@@ -159,6 +138,44 @@ impl DataMap {
             symbol: self.symbol.clone(),
             data: map,
         }
+    }
+
+    pub fn init(symbol: &str, ohlcv: Vec<Candle>, timeframe: &str) -> Self {
+        let ohlcv_wrapped = ohlcv[..OHLCV_LEN].try_into().unwrap();
+        let timeframe = Timeframe::from_str(timeframe).unwrap().seconds().unwrap();
+        let (hour_sin, hour_cos, minute_sin, minute_cos) = TimeRequest::new().get_time().as_tuple();
+
+        let mut features = AddFeatures::new(ohlcv_wrapped).apply_features();
+
+        features.insert("timeframe".to_string(), timeframe);
+        features.insert("hour_sin".to_string(), hour_sin);
+        features.insert("hour_cos".to_string(), hour_cos);
+        features.insert("minute_sin".to_string(), minute_sin);
+        features.insert("minute_cos".to_string(), minute_cos);
+
+        DataMap {
+            symbol: symbol.to_string(),
+            data: features,
+        }
+    }
+
+    pub fn with_time(mut self, time: CircleTime) -> Self {
+        let (hour_sin, hour_cos, minute_sin, minute_cos) = time.as_tuple();
+
+        self.data.insert("hour_sin".to_string(), hour_sin);
+        self.data.insert("hour_cos".to_string(), hour_cos);
+        self.data.insert("minute_sin".to_string(), minute_sin);
+        self.data.insert("minute_cos".to_string(), minute_cos);
+
+        self
+    }
+
+    pub fn from_slice(symbol: &str, timeframe: &str, candles: &[CandleWithTimestamp]) -> Self {
+        let ohlcv: Vec<Candle> = candles.iter().map(|candle| candle.to_candle()).collect();
+        let time =
+            TimeRequest::from_timestamp(candles[(candles.len() - 1) - 1].timestamp).get_time();
+
+        Self::init(symbol, ohlcv, timeframe).with_time(time)
     }
 }
 

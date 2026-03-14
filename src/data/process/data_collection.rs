@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use crate::data::data_interfaces::*;
 use crate::data::process::features::auxiliary::{safed, vwap};
 use crate::data::process::features::basic::*;
-use crate::data::requests::time::TimeRequest;
 
 pub const OHLCV_LEN: usize = 50;
 pub const OHLCV_FETCH_LEN: usize = 51;
@@ -123,44 +122,5 @@ impl AddFeatures {
         ]);
 
         features
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CollectedData {
-    pub symbol: String,
-    pub timeframe: f64,
-    pub time: CircleTime,
-    pub features: BTreeMap<String, f64>,
-}
-
-impl CollectedData {
-    pub fn new(symbol: &str, ohlcv: Vec<Candle>, timeframe: &str) -> Self {
-        let ohlcv_wrapped = ohlcv[..OHLCV_LEN].try_into().unwrap();
-        let timeframe = Timeframe::from_str(timeframe).unwrap().seconds().unwrap();
-
-        CollectedData {
-            symbol: symbol.to_string(),
-            timeframe,
-            time: TimeRequest::new().get_time(),
-            features: AddFeatures::new(ohlcv_wrapped).apply_features(),
-        }
-    }
-
-    pub fn with_time(mut self, time: CircleTime) -> Self {
-        self.time = time;
-        self
-    }
-
-    pub fn from_slice(
-        symbol: &str,
-        timeframe: &str,
-        candles: &[CandleWithTimestamp],
-    ) -> Option<Self> {
-        let ohlcv: Vec<Candle> = candles.iter().map(|candle| candle.to_candle()).collect();
-        let time =
-            TimeRequest::from_timestamp(candles[(candles.len() - 1) - 1].timestamp).get_time();
-
-        Some(Self::new(symbol, ohlcv, timeframe).with_time(time))
     }
 }
