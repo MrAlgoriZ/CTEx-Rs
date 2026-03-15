@@ -4,8 +4,8 @@ use crate::data::data_interfaces::*;
 use crate::data::process::features::auxiliary::{safed, vwap};
 use crate::data::process::features::basic::*;
 
-pub const OHLCV_LEN: usize = 50;
-pub const OHLCV_FETCH_LEN: usize = 51;
+pub const OHLCV_LEN: usize = 48;
+pub const OHLCV_FETCH_LEN: usize = 49;
 
 pub struct AddFeatures {
     ohlcv: [Candle; OHLCV_LEN],
@@ -18,60 +18,100 @@ impl AddFeatures {
 
     pub fn apply_features(&self) -> BTreeMap<String, f64> {
         let return_1 = return_k(&self.ohlcv, 1);
-        let return_2 = return_k(&self.ohlcv, 2);
         let return_3 = return_k(&self.ohlcv, 3);
-        let return_5 = return_k(&self.ohlcv, 5);
-        let return_10 = return_k(&self.ohlcv, 10);
-        let log_return_1 = log_return_k(&self.ohlcv, 1);
+        let return_6 = return_k(&self.ohlcv, 6);
+        let return_12 = return_k(&self.ohlcv, 12);
 
-        let vol_rolling_3 = vol_rolling_k(&self.ohlcv, 3);
-        let vol_rolling_5 = vol_rolling_k(&self.ohlcv, 5);
-        let vol_rolling_10 = vol_rolling_k(&self.ohlcv, 10);
+        let log_return_1 = log_return_k(&self.ohlcv, 1);
+        let log_return_3 = log_return_k(&self.ohlcv, 3);
+        let log_return_6 = log_return_k(&self.ohlcv, 6);
+        let log_return_12 = log_return_k(&self.ohlcv, 12);
+
+        let vol_rolling_3 = vol_rolling_n(&self.ohlcv, 3);
+        let vol_rolling_6 = vol_rolling_n(&self.ohlcv, 6);
+        let vol_rolling_12 = vol_rolling_n(&self.ohlcv, 12);
 
         let volume_change_1 = volume_change_k(&self.ohlcv, 1);
         let volume_change_3 = volume_change_k(&self.ohlcv, 3);
+        let volume_change_6 = volume_change_k(&self.ohlcv, 6);
 
-        let ema_fast = ema(&self.ohlcv, 5);
-        let ema_slow = ema(&self.ohlcv, 20);
-        let ema_long = ema(&self.ohlcv, 50);
+        let ema_fast = ema(&self.ohlcv, 6);
+        let ema_slow = ema(&self.ohlcv, 24);
+        let ema_long = ema(&self.ohlcv, 48);
 
-        let rsi_7 = rsi(&self.ohlcv, 7);
-        let rsi_14 = rsi(&self.ohlcv, 14);
+        let rsi_6 = rsi(&self.ohlcv, 6);
+        let rsi_12 = rsi(&self.ohlcv, 12);
 
         let macd_diff = macd_diff_percent(&self.ohlcv, ema_fast, ema_slow);
-        let bb_percent = bb_percent(&self.ohlcv, 20, 2.0);
-        let zscore = zscore_price(&self.ohlcv, 50);
+        let bb_percent = bb_percent_n(&self.ohlcv, 24, 2.0);
+        let zscore = zscore_price_n(&self.ohlcv, 48);
         let mean_reversion = mean_reversion(&self.ohlcv);
 
-        let breakout_high = breakout_high(&self.ohlcv, 20);
-        let breakout_low = breakout_low(&self.ohlcv, 20);
+        let breakout_high_12 = breakout_high_n(&self.ohlcv, 12);
+        let breakout_low_12 = breakout_low_n(&self.ohlcv, 12);
+        let breakout_high_24 = breakout_high_n(&self.ohlcv, 24);
+        let breakout_low_24 = breakout_low_n(&self.ohlcv, 24);
 
         let return_1_over_vol = safed(return_1 / vol_rolling_3);
-        let return_5_over_vol = safed(return_5 / vol_rolling_10);
+        let return_6_over_vol = safed(return_6 / vol_rolling_12);
 
         let ema_fast_percent = safed((ema_fast - ema_slow) / ema_slow);
         let ema_slow_percent = safed((ema_slow - ema_long) / ema_long);
 
-        // TODO: Доделать все значения
         let trend_strength = ema_fast_percent.abs();
-        let trend_persistence = f64::default();
-        let volatility_regime = safed(vol_rolling_3 / vol_rolling_10);
-        let compression_ratio = f64::default();
-        let range_ratio = {
+
+        let trend_persistence_3 = trend_persistence_n(&self.ohlcv, 3);
+        let trend_persistence_6 = trend_persistence_n(&self.ohlcv, 6);
+        let trend_persistence_12 = trend_persistence_n(&self.ohlcv, 12);
+
+        let volatility_regime = safed(vol_rolling_3 / vol_rolling_12);
+
+        let compression_ratio_6 = compression_ratio_n(&self.ohlcv, 6, vol_rolling_6);
+        let compression_ratio_12 = compression_ratio_n(&self.ohlcv, 12, vol_rolling_12);
+
+        let range_ratio_6 = {
             let candle = &self.ohlcv[&self.ohlcv.len() - 6];
-            safed((candle.high - candle.low) / candle.close / vol_rolling_5)
+            safed((candle.high - candle.low) / candle.close / vol_rolling_6)
         };
+        let range_ratio_12 = {
+            let candle = &self.ohlcv[&self.ohlcv.len() - 12];
+            safed((candle.high - candle.low) / candle.close / vol_rolling_12)
+        };
+
         let volume_acceleration = volume_change_1 - volume_change_3;
-        let volume_volatility = f64::default();
-        let return_autocorr_n = f64::default();
-        let vol_autocorr_10 = f64::default();
-        let momentum_decay = safed(return_1 / return_5);
-        let trend_memory = f64::default();
-        let downside_vol = f64::default();
-        let upside_vol = f64::default();
-        let skewness_returns = f64::default();
-        let kurtosis_returns = f64::default();
-        let tail_risk_proxy = f64::default();
+
+        let volume_volatility_3 = volume_volatility_n(&self.ohlcv, 3);
+        let volume_volatility_6 = volume_volatility_n(&self.ohlcv, 6);
+        let volume_volatility_12 = volume_volatility_n(&self.ohlcv, 12);
+
+        let return_autocorr_3 = return_autocorr_n(&self.ohlcv, 3);
+        let return_autocorr_6 = return_autocorr_n(&self.ohlcv, 6);
+        let return_autocorr_12 = return_autocorr_n(&self.ohlcv, 12);
+
+        let vol_autocorr_3 = vol_autocorr_n(&self.ohlcv, 3);
+        let vol_autocorr_6 = vol_autocorr_n(&self.ohlcv, 6);
+        let vol_autocorr_12 = vol_autocorr_n(&self.ohlcv, 12);
+
+        let momentum_decay = safed(return_1 / return_6);
+
+        let trend_memory_3 = trend_memory_n(&self.ohlcv, 3);
+        let trend_memory_6 = trend_memory_n(&self.ohlcv, 6);
+        let trend_memory_12 = trend_memory_n(&self.ohlcv, 12);
+
+        let downside_vol_3 = downside_vol_n(&self.ohlcv, 3);
+        let upside_vol_3 = upside_vol_n(&self.ohlcv, 3);
+        let downside_vol_6 = downside_vol_n(&self.ohlcv, 6);
+        let upside_vol_6 = upside_vol_n(&self.ohlcv, 6);
+
+        let skewness_returns_3 = returns_skew_n(&self.ohlcv, 3);
+        let kurtosis_returns_3 = returns_kurtosis_n(&self.ohlcv, 3);
+        let skewness_returns_6 = returns_skew_n(&self.ohlcv, 6);
+        let kurtosis_returns_6 = returns_kurtosis_n(&self.ohlcv, 6);
+
+        let tail_risk_proxy_3 = tail_risk_proxy_n(&self.ohlcv, 3, vol_rolling_3);
+        let tail_risk_proxy_6 = tail_risk_proxy_n(&self.ohlcv, 6, vol_rolling_6);
+        let tail_risk_proxy_12 = tail_risk_proxy_n(&self.ohlcv, 12, vol_rolling_12);
+
         let distance_to_vwap = {
             let candle = self.ohlcv.last().unwrap();
             let vwap = vwap(candle);
@@ -80,44 +120,67 @@ impl AddFeatures {
 
         let features = BTreeMap::from([
             ("return_1".to_string(), return_1),
-            ("return_2".to_string(), return_2),
             ("return_3".to_string(), return_3),
-            ("return_5".to_string(), return_5),
-            ("return_10".to_string(), return_10),
+            ("return_6".to_string(), return_6),
+            ("return_12".to_string(), return_12),
             ("log_return_1".to_string(), log_return_1),
+            ("log_return_3".to_string(), log_return_3),
+            ("log_return_6".to_string(), log_return_6),
+            ("log_return_12".to_string(), log_return_12),
             ("vol_rolling_3".to_string(), vol_rolling_3),
-            ("vol_rolling_5".to_string(), vol_rolling_5),
-            ("vol_rolling_10".to_string(), vol_rolling_10),
+            ("vol_rolling_6".to_string(), vol_rolling_6),
+            ("vol_rolling_12".to_string(), vol_rolling_12),
             ("volume_change_1".to_string(), volume_change_1),
             ("volume_change_3".to_string(), volume_change_3),
-            ("ema_fast_percent".to_string(), ema_fast_percent),
-            ("ema_slow_percent".to_string(), ema_slow_percent),
-            ("rsi_7".to_string(), rsi_7),
-            ("rsi_14".to_string(), rsi_14),
+            ("volume_change_6".to_string(), volume_change_6),
+            ("ema_fast".to_string(), ema_fast_percent),
+            ("ema_slow".to_string(), ema_slow_percent),
+            ("rsi_6".to_string(), rsi_6),
+            ("rsi_12".to_string(), rsi_12),
             ("macd_diff".to_string(), macd_diff),
             ("bb_percent".to_string(), bb_percent),
             ("zscore".to_string(), zscore),
             ("mean_reversion".to_string(), mean_reversion),
-            ("breakout_high".to_string(), breakout_high),
-            ("breakout_low".to_string(), breakout_low),
+            ("breakout_high_12".to_string(), breakout_high_12),
+            ("breakout_low_12".to_string(), breakout_low_12),
+            ("breakout_high_24".to_string(), breakout_high_24),
+            ("breakout_low_24".to_string(), breakout_low_24),
             ("return_1_over_vol".to_string(), return_1_over_vol),
-            ("return_5_over_vol".to_string(), return_5_over_vol),
+            ("return_6_over_vol".to_string(), return_6_over_vol),
             ("trend_strength".to_string(), trend_strength),
-            ("trend_persistence".to_string(), trend_persistence),
+            ("trend_persistence_3".to_string(), trend_persistence_3),
+            ("trend_persistence_6".to_string(), trend_persistence_6),
+            ("trend_persistence_12".to_string(), trend_persistence_12),
             ("volatility_regime".to_string(), volatility_regime),
-            ("compression_ratio".to_string(), compression_ratio),
-            ("range_ratio".to_string(), range_ratio),
+            ("compression_ratio_6".to_string(), compression_ratio_6),
+            ("compression_ratio_12".to_string(), compression_ratio_12),
+            ("range_ratio_6".to_string(), range_ratio_6),
+            ("range_ratio_12".to_string(), range_ratio_12),
             ("volume_acceleration".to_string(), volume_acceleration),
-            ("volume_volatility".to_string(), volume_volatility),
-            ("return_autocorr_n".to_string(), return_autocorr_n),
-            ("vol_autocorr_10".to_string(), vol_autocorr_10),
+            ("volume_volatility_3".to_string(), volume_volatility_3),
+            ("volume_volatility_6".to_string(), volume_volatility_6),
+            ("volume_volatility_12".to_string(), volume_volatility_12),
+            ("return_autocorr_3".to_string(), return_autocorr_3),
+            ("return_autocorr_6".to_string(), return_autocorr_6),
+            ("return_autocorr_12".to_string(), return_autocorr_12),
+            ("vol_autocorr_3".to_string(), vol_autocorr_3),
+            ("vol_autocorr_6".to_string(), vol_autocorr_6),
+            ("vol_autocorr_12".to_string(), vol_autocorr_12),
             ("momentum_decay".to_string(), momentum_decay),
-            ("trend_memory".to_string(), trend_memory),
-            ("downside_vol".to_string(), downside_vol),
-            ("upside_vol".to_string(), upside_vol),
-            ("skewness_returns".to_string(), skewness_returns),
-            ("kurtosis_returns".to_string(), kurtosis_returns),
-            ("tail_risk_proxy".to_string(), tail_risk_proxy),
+            ("trend_memory_3".to_string(), trend_memory_3),
+            ("trend_memory_6".to_string(), trend_memory_6),
+            ("trend_memory_12".to_string(), trend_memory_12),
+            ("downside_vol_3".to_string(), downside_vol_3),
+            ("upside_vol_3".to_string(), upside_vol_3),
+            ("downside_vol_6".to_string(), downside_vol_6),
+            ("upside_vol_6".to_string(), upside_vol_6),
+            ("skewness_returns_3".to_string(), skewness_returns_3),
+            ("kurtosis_returns_3".to_string(), kurtosis_returns_3),
+            ("skewness_returns_6".to_string(), skewness_returns_6),
+            ("kurtosis_returns_6".to_string(), kurtosis_returns_6),
+            ("tail_risk_proxy_3".to_string(), tail_risk_proxy_3),
+            ("tail_risk_proxy_6".to_string(), tail_risk_proxy_6),
+            ("tail_risk_proxy_12".to_string(), tail_risk_proxy_12),
             ("distance_to_vwap".to_string(), distance_to_vwap),
         ]);
 

@@ -22,7 +22,7 @@ pub fn corr(x: &[f64], y: &[f64]) -> f64 {
     }
 
     let den = (den_x * den_y).sqrt();
-    if den == 0.0 { 0.0 } else { num / den }
+    if den == 0.0 { 0.0 } else { safed(num / den) }
 }
 
 pub fn skew(data: &[f64]) -> f64 {
