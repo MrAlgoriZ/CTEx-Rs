@@ -20,6 +20,7 @@ pub trait CycleGetters {
 
 pub trait CycleGettersForCycleWithModel {
     fn get_pool(&self) -> &sqlx::PgPool;
+    fn change_last_predictions(&mut self, predictions: DataMap);
 }
 
 pub trait Cycle: CycleGetters {
@@ -92,7 +93,7 @@ pub trait Cycle: CycleGetters {
 
 pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
     async fn predict(
-        &self,
+        &mut self,
         data: DataMap,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<f64, anyhow::Error> {
@@ -108,7 +109,11 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
             let pred = rx.await?;
 
-            Ok(pred)
+            self.change_last_predictions(pred.clone());
+            pred.data
+                .get("position_size")
+                .ok_or(anyhow::anyhow!("Model must predict position size!"))
+                .map(|v| *v)
         } else {
             Err(anyhow::anyhow!(
                 "FlattenedData to prediction should not have the target"
@@ -153,14 +158,15 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
     async fn handle_mistake(
         &self,
-        data: DataMap,
+        true_data: DataMap,
+        predicted_data: DataMap,
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), anyhow::Error> {
-        if data.has_target() {
+        if true_data.has_target() {
             // TODO: Вставлять только обработанные данные со всеми таргетами
-            SQLStandart::SingleModel
-                .insert_row(&self.get_pool(), data)
+            SQLStandart::Dummy
+                .insert_row(&self.get_pool(), true_data.clone())
                 .await?;
 
             let (tx, rx) = oneshot::channel();
@@ -175,7 +181,19 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
             if let Ok(shifted_acc) = rx.await {
                 if shifted_acc.unwrap_or(0.0) == 0.0 {
-                    self.train_model(model_tx).await?;
+                    let true_data = DataMap {
+                        symbol: true_data.symbol.clone(),
+                        data: true_data.get_only_targets(),
+                    };
+                    let (tx, rx) = oneshot::channel();
+                    let _ = model_tx
+                        .send(ModelCommand::HandleMistakes {
+                            true_data,
+                            predicted_data,
+                            respond_to: tx,
+                        })
+                        .await;
+                    let _ = rx.await;
                 }
             }
 

@@ -26,6 +26,7 @@ pub trait ModelDependencies {
     fn get_target_name(&self) -> &str;
     fn check_model_trained(&self) -> bool;
     fn get_standart(&self) -> &SQLStandart;
+    fn get_pool(&self) -> Option<&PgPool>;
 }
 
 #[async_trait::async_trait]
@@ -312,7 +313,15 @@ pub trait Model: ModelDependencies {
         Ok(metric)
     }
 
-    async fn predict(&self, x: Vec<f64>, symbol_name: Option<&str>) -> Result<f64, anyhow::Error> {
+    async fn predict(&self, data: DataMap) -> Result<DataMap, anyhow::Error> {
+        let symbol_name = data.symbol.clone();
+        let x = data
+            .to_standart(self.get_standart())
+            .get_only_features()
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+
         let symbol_cols = self
             .get_symbol_columns()
             .clone()
@@ -325,13 +334,11 @@ pub trait Model: ModelDependencies {
         let mut input: Vec<f64> = Vec::with_capacity(symbol_cols.len() + x.len());
 
         let mut symbol_vec = vec![0.0; symbol_cols.len()];
-        if let Some(sn) = symbol_name {
-            if let Some(idx) = symbol_cols
-                .iter()
-                .position(|col| col == &format!("symbol_name_{}", sn))
-            {
-                symbol_vec[idx] = 1.0;
-            }
+        if let Some(idx) = symbol_cols
+            .iter()
+            .position(|col| col == &format!("symbol_name_{}", symbol_name))
+        {
+            symbol_vec[idx] = 1.0;
         }
         input.extend(symbol_vec);
 
@@ -340,31 +347,36 @@ pub trait Model: ModelDependencies {
         let input_mat = DenseMatrix::new(1, input.len(), input, false)?;
         let proba = self.model_predict(&input_mat)?;
 
-        if let Some(sn) = symbol_name {
-            if let Some(ptx) = self.get_prediction_tx().clone() {
-                let (tx, rx) = oneshot::channel();
+        if let Some(ptx) = self.get_prediction_tx().clone() {
+            let (tx, rx) = oneshot::channel();
 
-                if let Err(e) = ptx
-                    .send(PredictionsCommand::AddPrediction {
-                        symbol: sn.to_string(),
-                        prediction: proba[0],
-                        respond_to: tx,
-                    })
-                    .await
-                {
-                    println!("Prediction channel closed: {}", e);
-                } else {
-                    if let Err(e) = rx.await {
-                        println!("Prediction response cancelled: {}", e);
-                    }
+            if let Err(e) = ptx
+                .send(PredictionsCommand::AddPrediction {
+                    symbol: symbol_name.to_string(),
+                    prediction: proba[0],
+                    respond_to: tx,
+                })
+                .await
+            {
+                println!("Prediction channel closed: {}", e);
+            } else {
+                if let Err(e) = rx.await {
+                    println!("Prediction response cancelled: {}", e);
                 }
             }
         }
 
-        Ok(proba[0])
+        Ok(DataMap {
+            symbol: symbol_name,
+            data: BTreeMap::from([(self.get_target_name().to_string(), proba[0])]),
+        })
     }
 
-    fn train(&mut self, data: Vec<DataMap>) -> Result<(), anyhow::Error> {
+    async fn train(&mut self) -> Result<(), anyhow::Error> {
+        let data = self
+            .get_standart()
+            .select_all(&self.get_pool().unwrap())
+            .await?;
         let (x, y_target) = self.load_data(data)?;
         let (x_train, x_val, y_train, y_val) = self.prepare_data(
             x,
@@ -376,6 +388,7 @@ pub trait Model: ModelDependencies {
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error>;
+
     fn model_fit(
         &mut self,
         x_train: &DenseMatrix<f64>,
@@ -383,6 +396,7 @@ pub trait Model: ModelDependencies {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error>;
+
     fn normalize(
         &self,
         x_train: DenseMatrix<f64>,
@@ -390,13 +404,20 @@ pub trait Model: ModelDependencies {
     ) -> (DenseMatrix<f64>, DenseMatrix<f64>) {
         (x_train, x_val)
     }
+
+    async fn handle_mistakes(
+        &mut self,
+        true_data: DataMap,
+        predicted_data: DataMap,
+    ) -> Result<(), anyhow::Error>;
 }
 
 pub fn init_single_model(
     params: SingleModelParams,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+    standart: SQLStandart,
+    pool: PgPool,
 ) -> Box<dyn Model + Send + Sync> {
-    let standart = SQLStandart::SingleModel;
     let model: Box<dyn Model + Send + Sync> = match params {
         SingleModelParams::XGBoost {
             target_type,
@@ -406,6 +427,7 @@ pub fn init_single_model(
             prediction_tx,
             target_type,
             standart,
+            pool,
             n_estimators,
             max_depth,
         )),
@@ -420,6 +442,7 @@ pub fn init_single_model(
             prediction_tx,
             target_type,
             standart,
+            pool,
             n_trees,
             max_depth,
             min_samples_leaf,
@@ -433,6 +456,7 @@ pub fn init_single_model(
             prediction_tx,
             target_type,
             standart,
+            pool,
             solver,
         )),
         SingleModelParams::Ridge {
@@ -443,6 +467,7 @@ pub fn init_single_model(
             prediction_tx,
             target_type,
             standart,
+            pool,
             solver,
             alpha,
         )),
@@ -455,6 +480,7 @@ pub fn init_single_model(
             prediction_tx,
             target_type,
             standart,
+            pool,
             max_depth,
             min_samples_leaf,
             min_samples_split,
@@ -468,6 +494,7 @@ pub fn init_single_model(
             prediction_tx,
             target_type,
             standart,
+            pool,
             algorithm,
             weight,
             k,
@@ -483,6 +510,7 @@ pub fn init_single_model(
             prediction_tx,
             target_type,
             standart,
+            pool,
             n_trees,
             max_depth,
             min_samples_leaf,
@@ -507,6 +535,7 @@ pub fn init_ensemble_model(
     risk_score_model_params: SingleModelParams,
     drawdown_probability_model_params: SingleModelParams,
     tail_event_probability_model_params: SingleModelParams,
+    volatility_spike_probability_model_params: SingleModelParams,
     liquidity_drop_probability_model_params: SingleModelParams,
     future_return_model_params: SingleModelParams,
     action_type_model_params: SingleModelParams,
@@ -519,6 +548,7 @@ pub fn init_ensemble_model(
         future_volume_model_params,
         future_trend_strength_model_params,
         future_range_model_params,
+        volatility_spike_probability_model_params,
         future_return_mean_model_params,
         future_return_std_model_params,
         future_return_skew_model_params,

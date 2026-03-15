@@ -6,8 +6,11 @@ use smartcore::linear::ridge_regression::{
     RidgeRegression, RidgeRegressionParameters, RidgeRegressionSolverName,
 };
 use smartcore::preprocessing::numerical::StandardScaler;
+use sqlx::PgPool;
 use tokio::sync::mpsc;
 
+use crate::data::data_interfaces::DataMap;
+use crate::data::process::features::auxiliary::corr;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
@@ -23,6 +26,7 @@ pub struct Ridge {
     config: Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
     standart: SQLStandart,
+    pool: PgPool,
     solver: String,
     alpha: f64,
 }
@@ -32,6 +36,7 @@ impl Ridge {
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
         standart: SQLStandart,
+        pool: PgPool,
         solver: String,
         alpha: f64,
     ) -> Self {
@@ -43,6 +48,7 @@ impl Ridge {
             config: load_config("config/config.yaml"),
             prediction_tx,
             standart,
+            pool,
             solver,
             alpha,
         }
@@ -84,8 +90,13 @@ impl ModelDependencies for Ridge {
     fn get_standart(&self) -> &SQLStandart {
         &self.standart
     }
+
+    fn get_pool(&self) -> Option<&PgPool> {
+        Some(&self.pool)
+    }
 }
 
+#[async_trait::async_trait]
 impl Model for Ridge {
     fn model_fit(
         &mut self,
@@ -238,5 +249,22 @@ impl Model for Ridge {
             .expect("Failed to create final validation matrix");
 
         (x_train_final, x_val_final)
+    }
+
+    async fn handle_mistakes(
+        &mut self,
+        true_data: DataMap,
+        predicted_data: DataMap,
+    ) -> Result<(), anyhow::Error> {
+        let true_data: Vec<f64> = true_data.data.values().map(|v| *v).collect();
+        let predicted_data: Vec<f64> = predicted_data.data.values().map(|v| *v).collect();
+        let correlation = corr(&true_data, &predicted_data);
+        println!("Corr: {}", correlation);
+
+        if correlation > self.config.behaviour.success_threshold {
+            self.train().await?;
+        }
+
+        Ok(())
     }
 }

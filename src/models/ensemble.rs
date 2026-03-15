@@ -1,8 +1,12 @@
 use anyhow::anyhow;
+use smartcore::linalg::basic::matrix::DenseMatrix;
 use sqlx::PgPool;
-use tokio::sync::mpsc;
+use std::collections::BTreeMap;
+use tokio::sync::mpsc::Sender;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::CONFIG_PATH;
+use crate::data::data_interfaces::DataMap;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::manager::{ModelActor, ModelCommand, PredictionsCommand};
 use crate::engine::state::counters::Counters;
@@ -10,7 +14,6 @@ use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::SingleModelParams;
 use crate::models::model::{Model, ModelDependencies, init_single_model};
-use smartcore::linalg::basic::matrix::DenseMatrix;
 
 pub struct Ensemble {
     future_volatility_model_tx: mpsc::Sender<ModelCommand>,
@@ -24,6 +27,7 @@ pub struct Ensemble {
     risk_score_model_tx: mpsc::Sender<ModelCommand>,
     drawdown_probability_model_tx: mpsc::Sender<ModelCommand>,
     tail_event_probability_model_tx: mpsc::Sender<ModelCommand>,
+    volatility_spike_probability_model_tx: mpsc::Sender<ModelCommand>,
     liquidity_drop_probability_model_tx: mpsc::Sender<ModelCommand>,
     future_return_model_tx: mpsc::Sender<ModelCommand>,
     action_type_model_tx: mpsc::Sender<ModelCommand>,
@@ -48,6 +52,7 @@ impl Ensemble {
         risk_score_model_tx: mpsc::Sender<ModelCommand>,
         drawdown_probability_model_tx: mpsc::Sender<ModelCommand>,
         tail_event_probability_model_tx: mpsc::Sender<ModelCommand>,
+        volatility_spike_probability_model_tx: mpsc::Sender<ModelCommand>,
         liquidity_drop_probability_model_tx: mpsc::Sender<ModelCommand>,
         future_return_model_tx: mpsc::Sender<ModelCommand>,
         action_type_model_tx: mpsc::Sender<ModelCommand>,
@@ -67,6 +72,7 @@ impl Ensemble {
             risk_score_model_tx,
             drawdown_probability_model_tx,
             tail_event_probability_model_tx,
+            volatility_spike_probability_model_tx,
             liquidity_drop_probability_model_tx,
             future_return_model_tx,
             action_type_model_tx,
@@ -92,6 +98,7 @@ impl Ensemble {
         risk_score_model_params: SingleModelParams,
         drawdown_probability_model_params: SingleModelParams,
         tail_event_probability_model_params: SingleModelParams,
+        volatility_spike_probability_model_params: SingleModelParams,
         liquidity_drop_probability_model_params: SingleModelParams,
         future_return_model_params: SingleModelParams,
         action_type_model_params: SingleModelParams,
@@ -99,82 +106,163 @@ impl Ensemble {
     ) -> Self {
         let config = load_config(CONFIG_PATH);
 
-        let future_volatility_model = init_single_model(future_volatility_model_params, None);
+        let future_volatility_model = init_single_model(
+            future_volatility_model_params,
+            None,
+            SQLStandart::FirstLayer,
+            pool.clone(),
+        );
         let (future_volatility_model_actor, future_volatility_model_tx) =
-            ModelActor::new(future_volatility_model, pool.clone());
+            ModelActor::new(future_volatility_model);
         tokio::spawn(future_volatility_model_actor.run());
 
-        let future_volume_model = init_single_model(future_volume_model_params, None);
+        let future_volume_model = init_single_model(
+            future_volume_model_params,
+            None,
+            SQLStandart::FirstLayer,
+            pool.clone(),
+        );
         let (future_volume_model_actor, future_volume_model_tx) =
-            ModelActor::new(future_volume_model, pool.clone());
+            ModelActor::new(future_volume_model);
         tokio::spawn(future_volume_model_actor.run());
 
-        let future_trend_strength_model =
-            init_single_model(future_trend_strength_model_params, None);
+        let future_trend_strength_model = init_single_model(
+            future_trend_strength_model_params,
+            None,
+            SQLStandart::FirstLayer,
+            pool.clone(),
+        );
         let (future_trend_strength_model_actor, future_trend_strength_model_tx) =
-            ModelActor::new(future_trend_strength_model, pool.clone());
+            ModelActor::new(future_trend_strength_model);
         tokio::spawn(future_trend_strength_model_actor.run());
 
-        let future_range_model = init_single_model(future_range_model_params, None);
-        let (future_range_model_actor, future_range_model_tx) =
-            ModelActor::new(future_range_model, pool.clone());
+        let future_range_model = init_single_model(
+            future_range_model_params,
+            None,
+            SQLStandart::FirstLayer,
+            pool.clone(),
+        );
+        let (future_range_model_actor, future_range_model_tx) = ModelActor::new(future_range_model);
         tokio::spawn(future_range_model_actor.run());
 
-        let future_return_mean_model = init_single_model(future_return_mean_model_params, None);
+        let future_return_mean_model = init_single_model(
+            future_return_mean_model_params,
+            None,
+            SQLStandart::FirstLayer,
+            pool.clone(),
+        );
         let (future_return_mean_model_actor, future_return_mean_model_tx) =
-            ModelActor::new(future_return_mean_model, pool.clone());
+            ModelActor::new(future_return_mean_model);
         tokio::spawn(future_return_mean_model_actor.run());
 
-        let future_return_std_model = init_single_model(future_return_std_model_params, None);
+        let future_return_std_model = init_single_model(
+            future_return_std_model_params,
+            None,
+            SQLStandart::FirstLayer,
+            pool.clone(),
+        );
         let (future_return_std_model_actor, future_return_std_model_tx) =
-            ModelActor::new(future_return_std_model, pool.clone());
+            ModelActor::new(future_return_std_model);
         tokio::spawn(future_return_std_model_actor.run());
 
-        let future_return_skew_model = init_single_model(future_return_skew_model_params, None);
+        let future_return_skew_model = init_single_model(
+            future_return_skew_model_params,
+            None,
+            SQLStandart::FirstLayer,
+            pool.clone(),
+        );
         let (future_return_skew_model_actor, future_return_skew_model_tx) =
-            ModelActor::new(future_return_skew_model, pool.clone());
+            ModelActor::new(future_return_skew_model);
         tokio::spawn(future_return_skew_model_actor.run());
 
-        let future_return_kurt_model = init_single_model(future_return_kurt_model_params, None);
+        let future_return_kurt_model = init_single_model(
+            future_return_kurt_model_params,
+            None,
+            SQLStandart::FirstLayer,
+            pool.clone(),
+        );
         let (future_return_kurt_model_actor, future_return_kurt_model_tx) =
-            ModelActor::new(future_return_kurt_model, pool.clone());
+            ModelActor::new(future_return_kurt_model);
         tokio::spawn(future_return_kurt_model_actor.run());
 
-        let risk_score_model = init_single_model(risk_score_model_params, None);
-        let (risk_score_model_actor, risk_score_model_tx) =
-            ModelActor::new(risk_score_model, pool.clone());
+        let risk_score_model = init_single_model(
+            risk_score_model_params,
+            None,
+            SQLStandart::SecondLayer,
+            pool.clone(),
+        );
+        let (risk_score_model_actor, risk_score_model_tx) = ModelActor::new(risk_score_model);
         tokio::spawn(risk_score_model_actor.run());
 
-        let drawdown_probability_model = init_single_model(drawdown_probability_model_params, None);
+        let drawdown_probability_model = init_single_model(
+            drawdown_probability_model_params,
+            None,
+            SQLStandart::SecondLayer,
+            pool.clone(),
+        );
         let (drawdown_probability_model_actor, drawdown_probability_model_tx) =
-            ModelActor::new(drawdown_probability_model, pool.clone());
+            ModelActor::new(drawdown_probability_model);
         tokio::spawn(drawdown_probability_model_actor.run());
 
-        let tail_event_probability_model =
-            init_single_model(tail_event_probability_model_params, None);
+        let tail_event_probability_model = init_single_model(
+            tail_event_probability_model_params,
+            None,
+            SQLStandart::SecondLayer,
+            pool.clone(),
+        );
         let (tail_event_probability_model_actor, tail_event_probability_model_tx) =
-            ModelActor::new(tail_event_probability_model, pool.clone());
+            ModelActor::new(tail_event_probability_model);
         tokio::spawn(tail_event_probability_model_actor.run());
 
-        let liquidity_drop_probability_model =
-            init_single_model(liquidity_drop_probability_model_params, None);
+        let volatility_spike_probability_model = init_single_model(
+            volatility_spike_probability_model_params,
+            None,
+            SQLStandart::SecondLayer,
+            pool.clone(),
+        );
+        let (volatility_spike_probability_model_actor, volatility_spike_probability_model_tx) =
+            ModelActor::new(volatility_spike_probability_model);
+        tokio::spawn(volatility_spike_probability_model_actor.run());
+
+        let liquidity_drop_probability_model = init_single_model(
+            liquidity_drop_probability_model_params,
+            None,
+            SQLStandart::SecondLayer,
+            pool.clone(),
+        );
         let (liquidity_drop_probability_model_actor, liquidity_drop_probability_model_tx) =
-            ModelActor::new(liquidity_drop_probability_model, pool.clone());
+            ModelActor::new(liquidity_drop_probability_model);
         tokio::spawn(liquidity_drop_probability_model_actor.run());
 
-        let future_return_model = init_single_model(future_return_model_params, None);
+        let future_return_model = init_single_model(
+            future_return_model_params,
+            None,
+            SQLStandart::ThirdLayer,
+            pool.clone(),
+        );
         let (future_return_model_actor, future_return_model_tx) =
-            ModelActor::new(future_return_model, pool.clone());
+            ModelActor::new(future_return_model);
         tokio::spawn(future_return_model_actor.run());
 
-        let action_type_model = init_single_model(action_type_model_params, None);
-        let (action_type_model_actor, action_type_model_tx) =
-            ModelActor::new(action_type_model, pool.clone());
+        let action_type_model = init_single_model(
+            action_type_model_params,
+            None,
+            SQLStandart::ThirdLayer,
+            pool.clone(),
+        );
+
+        // TODO: Заменить action_type на классификацию. Добавить в конфиг моделей классификацию
+        let (action_type_model_actor, action_type_model_tx) = ModelActor::new(action_type_model);
         tokio::spawn(action_type_model_actor.run());
 
-        let position_size_model = init_single_model(position_size_model_params, None);
+        let position_size_model = init_single_model(
+            position_size_model_params,
+            None,
+            SQLStandart::ThirdLayer,
+            pool.clone(),
+        );
         let (position_size_model_actor, position_size_model_tx) =
-            ModelActor::new(position_size_model, pool.clone());
+            ModelActor::new(position_size_model);
         tokio::spawn(position_size_model_actor.run());
 
         Self::new(
@@ -189,6 +277,7 @@ impl Ensemble {
             risk_score_model_tx,
             drawdown_probability_model_tx,
             tail_event_probability_model_tx,
+            volatility_spike_probability_model_tx,
             liquidity_drop_probability_model_tx,
             future_return_model_tx,
             action_type_model_tx,
@@ -196,6 +285,30 @@ impl Ensemble {
             prediction_tx,
             config,
         )
+    }
+
+    fn get_model_by_name(&self, name: &str) -> Option<Sender<ModelCommand>> {
+        match name {
+            "future_volatility" => Some(self.future_volatility_model_tx.clone()),
+            "future_volume" => Some(self.future_volume_model_tx.clone()),
+            "future_trend_strength" => Some(self.future_trend_strength_model_tx.clone()),
+            "future_range" => Some(self.future_range_model_tx.clone()),
+            "future_return_mean" => Some(self.future_return_mean_model_tx.clone()),
+            "future_return_std" => Some(self.future_return_std_model_tx.clone()),
+            "future_return_skewness" => Some(self.future_return_skew_model_tx.clone()),
+            "future_return_kurtosis" => Some(self.future_return_kurt_model_tx.clone()),
+            "risk_score" => Some(self.risk_score_model_tx.clone()),
+            "drawdown_probability" => Some(self.drawdown_probability_model_tx.clone()),
+            "tail_event_probability" => Some(self.tail_event_probability_model_tx.clone()),
+            "volatility_spike_probability" => {
+                Some(self.volatility_spike_probability_model_tx.clone())
+            }
+            "liquidity_drop_probability" => Some(self.liquidity_drop_probability_model_tx.clone()),
+            "future_return" => Some(self.future_return_model_tx.clone()),
+            "action_type" => Some(self.action_type_model_tx.clone()),
+            "position_size" => Some(self.position_size_model_tx.clone()),
+            _ => None,
+        }
     }
 }
 
@@ -222,26 +335,172 @@ impl ModelDependencies for Ensemble {
     fn get_standart(&self) -> &SQLStandart {
         &SQLStandart::Dummy
     }
+    fn get_pool(&self) -> Option<&PgPool> {
+        None
+    }
 }
 
+#[async_trait::async_trait]
 impl Model for Ensemble {
     fn model_fit(
         &mut self,
-        x_train: &DenseMatrix<f64>,
-        y_train: &Vec<f64>,
-        x_val: Option<&DenseMatrix<f64>>,
-        y_val: Option<&Vec<f64>>,
+        _: &DenseMatrix<f64>,
+        _: &Vec<f64>,
+        _: Option<&DenseMatrix<f64>>,
+        _: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error> {
-        todo!()
+        Err(anyhow!("not implemented!"))
     }
-    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
-        todo!()
+
+    fn model_predict(&self, _: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
+        Err(anyhow!("not implemented!"))
     }
-    fn normalize(
-        &self,
-        x_train: DenseMatrix<f64>,
-        x_val: DenseMatrix<f64>,
-    ) -> (DenseMatrix<f64>, DenseMatrix<f64>) {
-        (x_train, x_val)
+
+    async fn train(&mut self) -> Result<(), anyhow::Error> {
+        let txs = [
+            self.future_volatility_model_tx.clone(),
+            self.future_volume_model_tx.clone(),
+            self.future_trend_strength_model_tx.clone(),
+            self.future_range_model_tx.clone(),
+            self.future_return_mean_model_tx.clone(),
+            self.future_return_std_model_tx.clone(),
+            self.future_return_skew_model_tx.clone(),
+            self.future_return_kurt_model_tx.clone(),
+            self.risk_score_model_tx.clone(),
+            self.drawdown_probability_model_tx.clone(),
+            self.tail_event_probability_model_tx.clone(),
+            self.volatility_spike_probability_model_tx.clone(),
+            self.liquidity_drop_probability_model_tx.clone(),
+            self.future_return_model_tx.clone(),
+            self.action_type_model_tx.clone(),
+            self.position_size_model_tx.clone(),
+        ];
+
+        for model_tx in txs.iter() {
+            let (tx, rx) = oneshot::channel();
+
+            model_tx
+                .send(ModelCommand::Train { respond_to: tx })
+                .await?;
+            rx.await??;
+        }
+
+        Ok(())
+    }
+
+    async fn predict(&self, data: DataMap) -> Result<DataMap, anyhow::Error> {
+        let mut data = data.clone();
+
+        let mut predictions = DataMap {
+            symbol: data.symbol.clone(),
+            data: BTreeMap::new(),
+        };
+
+        // FIRST LAYER
+        let fl_models = [
+            self.future_volatility_model_tx.clone(),
+            self.future_volume_model_tx.clone(),
+            self.future_trend_strength_model_tx.clone(),
+            self.future_range_model_tx.clone(),
+            self.future_return_mean_model_tx.clone(),
+            self.future_return_std_model_tx.clone(),
+            self.future_return_skew_model_tx.clone(),
+            self.future_return_kurt_model_tx.clone(),
+        ];
+
+        for model_tx in fl_models.iter() {
+            let (tx, rx) = oneshot::channel();
+
+            model_tx
+                .send(ModelCommand::Predict {
+                    data: data.to_standart(&SQLStandart::FirstLayer),
+                    respond_to: tx,
+                })
+                .await?;
+            let result = rx.await?;
+            for (k, v) in result.data.clone().iter() {
+                predictions.data.entry(k.clone()).or_insert(*v);
+                data.data.insert(k.clone(), *v);
+            }
+        }
+
+        // SECOND LAYER
+        let sl_models = [
+            self.risk_score_model_tx.clone(),
+            self.drawdown_probability_model_tx.clone(),
+            self.tail_event_probability_model_tx.clone(),
+            self.volatility_spike_probability_model_tx.clone(),
+            self.liquidity_drop_probability_model_tx.clone(),
+        ];
+
+        for model_tx in sl_models.iter() {
+            let (tx, rx) = oneshot::channel();
+
+            model_tx
+                .send(ModelCommand::Predict {
+                    data: data.to_standart(&SQLStandart::SecondLayer),
+                    respond_to: tx,
+                })
+                .await?;
+            let result = rx.await?;
+            for (k, v) in result.data.clone().iter() {
+                predictions.data.entry(k.clone()).or_insert(*v);
+                data.data.insert(k.clone(), *v);
+            }
+        }
+
+        // THIRD LAYER
+        let tl_models = [
+            self.future_return_model_tx.clone(),
+            self.action_type_model_tx.clone(),
+            self.position_size_model_tx.clone(),
+        ];
+        for model_tx in tl_models.iter() {
+            let (tx, rx) = oneshot::channel();
+
+            model_tx
+                .send(ModelCommand::Predict {
+                    data: data.to_standart(&SQLStandart::ThirdLayer),
+                    respond_to: tx,
+                })
+                .await?;
+            let result = rx.await?;
+            for (k, v) in result.data.clone().iter() {
+                predictions.data.entry(k.clone()).or_insert(*v);
+                data.data.insert(k.clone(), *v);
+            }
+        }
+
+        Ok(predictions)
+    }
+
+    async fn handle_mistakes(
+        &mut self,
+        true_data: DataMap,
+        predicted_data: DataMap,
+    ) -> Result<(), anyhow::Error> {
+        for (k, v) in true_data.data.iter() {
+            if let Some(predicted) = predicted_data.data.get(k) {
+                if (v - predicted).abs() < self.config.behaviour.success_threshold {
+                    self.counters.get_mut(k).push(1);
+                } else {
+                    self.counters.get_mut(k).push(0);
+                    let model_tx = self.get_model_by_name(k).ok_or(anyhow::anyhow!(format!(
+                        "Model tx with name '{}' not found",
+                        k
+                    )))?;
+                    let (tx, rx) = oneshot::channel();
+                    model_tx
+                        .send(ModelCommand::HandleMistakes {
+                            true_data: true_data.clone(),
+                            predicted_data: predicted_data.clone(),
+                            respond_to: tx,
+                        })
+                        .await?;
+                    rx.await??;
+                }
+            }
+        }
+        Ok(())
     }
 }

@@ -24,6 +24,7 @@ pub struct TrainingCycle {
     pub symbol: String,
     last_grouped_candles: Option<DataMap>,
     last_candles_target: Option<f64>,
+    last_predictions: Option<DataMap>,
     print_symbol: String,
     client: CCXTClient,
     config: Config,
@@ -52,6 +53,9 @@ impl CycleGettersForCycleWithModel for TrainingCycle {
     fn get_pool(&self) -> &sqlx::PgPool {
         &self.pool
     }
+    fn change_last_predictions(&mut self, predictions: DataMap) {
+        self.last_predictions = Some(predictions);
+    }
 }
 
 impl Cycle for TrainingCycle {}
@@ -64,6 +68,7 @@ impl TrainingCycle {
             symbol: symbol,
             last_grouped_candles: None,
             last_candles_target: None,
+            last_predictions: None,
             config: load_config("config/config.yaml"),
             client,
             pool,
@@ -136,7 +141,8 @@ impl TrainingCycle {
 
                     if !success {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
-                        self.handle_mistake(last_grouped, counter_tx, model_tx)
+                        let last_predictions = self.last_predictions.clone().unwrap();
+                        self.handle_mistake(last_grouped, last_predictions, counter_tx, model_tx)
                             .await?;
                     }
                 }

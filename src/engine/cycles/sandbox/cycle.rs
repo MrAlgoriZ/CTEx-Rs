@@ -25,6 +25,7 @@ pub struct SandboxCycle {
     pub symbol: String,
     last_grouped_candles: Option<DataMap>,
     last_candles_target: Option<f64>,
+    last_predictions: Option<DataMap>,
     last_order_price: Option<f64>,
     print_symbol: String,
     config: Config,
@@ -56,6 +57,10 @@ impl CycleGettersForCycleWithModel for SandboxCycle {
     fn get_pool(&self) -> &sqlx::PgPool {
         &self.pool
     }
+
+    fn change_last_predictions(&mut self, predictions: DataMap) {
+        self.last_predictions = Some(predictions);
+    }
 }
 
 impl Cycle for SandboxCycle {}
@@ -68,6 +73,7 @@ impl SandboxCycle {
             symbol: symbol.clone(),
             last_grouped_candles: None,
             last_candles_target: None,
+            last_predictions: None,
             last_order_price: None,
             config: load_config("config/config.yaml"),
             pool,
@@ -144,7 +150,8 @@ impl SandboxCycle {
 
                     if !success {
                         let last_grouped = self.last_grouped_candles.clone().unwrap();
-                        self.handle_mistake(last_grouped, counter_tx, model_tx)
+                        let last_predictions = self.last_predictions.clone().unwrap();
+                        self.handle_mistake(last_grouped, last_predictions, counter_tx, model_tx)
                             .await?;
                     }
                 }

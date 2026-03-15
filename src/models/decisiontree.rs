@@ -3,8 +3,11 @@ use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::tree::decision_tree_regressor::{
     DecisionTreeRegressor, DecisionTreeRegressorParameters,
 };
+use sqlx::PgPool;
 use tokio::sync::mpsc;
 
+use crate::data::data_interfaces::DataMap;
+use crate::data::process::features::auxiliary::corr;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
@@ -20,6 +23,7 @@ pub struct DecisionTree {
     config: Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
     standart: SQLStandart,
+    pool: PgPool,
     max_depth: u16,
     min_samples_leaf: usize,
     min_samples_split: usize,
@@ -30,6 +34,7 @@ impl DecisionTree {
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         target_type: TargetType,
         standart: SQLStandart,
+        pool: PgPool,
         max_depth: u16,
         min_samples_leaf: usize,
         min_samples_split: usize,
@@ -42,6 +47,7 @@ impl DecisionTree {
             config: load_config("config/config.yaml"),
             prediction_tx,
             standart,
+            pool,
             max_depth,
             min_samples_leaf,
             min_samples_split,
@@ -84,8 +90,13 @@ impl ModelDependencies for DecisionTree {
     fn get_standart(&self) -> &SQLStandart {
         &self.standart
     }
+
+    fn get_pool(&self) -> Option<&PgPool> {
+        Some(&self.pool)
+    }
 }
 
+#[async_trait::async_trait]
 impl Model for DecisionTree {
     fn model_fit(
         &mut self,
@@ -115,5 +126,22 @@ impl Model for DecisionTree {
             .ok_or(anyhow!("Model not trained yet!"))?;
         let prediction = model.predict(values)?;
         Ok(prediction)
+    }
+
+    async fn handle_mistakes(
+        &mut self,
+        true_data: DataMap,
+        predicted_data: DataMap,
+    ) -> Result<(), anyhow::Error> {
+        let true_data: Vec<f64> = true_data.data.values().map(|v| *v).collect();
+        let predicted_data: Vec<f64> = predicted_data.data.values().map(|v| *v).collect();
+        let correlation = corr(&true_data, &predicted_data);
+        println!("Corr: {}", correlation);
+
+        if correlation > self.config.behaviour.success_threshold {
+            self.train().await?;
+        }
+
+        Ok(())
     }
 }

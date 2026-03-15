@@ -122,6 +122,7 @@ pub enum ModelParams {
         risk_score_model_params: SingleModelParams,
         drawdown_probability_model_params: SingleModelParams,
         tail_event_probability_model_params: SingleModelParams,
+        volatility_spike_probability_model_params: SingleModelParams,
         liquidity_drop_probability_model_params: SingleModelParams,
         future_return_model_params: SingleModelParams,
         action_type_model_params: SingleModelParams,

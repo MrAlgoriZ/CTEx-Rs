@@ -2,7 +2,7 @@ use anyhow::Context;
 use chrono::Utc;
 use serde::Deserialize;
 use sqlx::PgPool;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::time::{Duration, sleep};
@@ -10,6 +10,7 @@ use tokio::time::{Duration, sleep};
 use crate::CONFIG_PATH;
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, DataMap, Ticker};
 use crate::data::requests::ccxt::client::CCXTClient;
+use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::background::cycle::BackgroundCycle;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::sandbox::cycle::SandboxCycle;
@@ -415,29 +416,29 @@ impl CounterActor {
 pub enum ModelCommand {
     Predict {
         data: DataMap,
-        respond_to: oneshot::Sender<f64>,
+        respond_to: oneshot::Sender<DataMap>,
     },
     Train {
+        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+    },
+    HandleMistakes {
+        true_data: DataMap,
+        predicted_data: DataMap,
         respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
     },
 }
 
 pub struct ModelActor {
     model: Arc<Mutex<Box<dyn Model + Send + Sync>>>,
-    pool: PgPool,
     inbox: mpsc::Receiver<ModelCommand>,
 }
 
 impl ModelActor {
-    pub fn new(
-        model: Box<dyn Model + Send + Sync>,
-        pool: PgPool,
-    ) -> (Self, mpsc::Sender<ModelCommand>) {
+    pub fn new(model: Box<dyn Model + Send + Sync>) -> (Self, mpsc::Sender<ModelCommand>) {
         let (tx, rx) = mpsc::channel(10);
         (
             Self {
                 model: Arc::new(Mutex::new(model)),
-                pool,
                 inbox: rx,
             },
             tx,
@@ -451,24 +452,16 @@ impl ModelActor {
             match cmd {
                 ModelCommand::Predict { data, respond_to } => {
                     let model = self.model.clone();
-                    let locked = model.lock().await;
-
-                    let standart = locked.get_standart();
-
-                    let x = data
-                        .to_standart(standart)
-                        .get_only_features()
-                        .values()
-                        .cloned()
-                        .collect::<Vec<_>>();
-
-                    let result = locked.predict(x, Some(&data.symbol)).await;
+                    let result = model.lock().await.predict(data).await;
 
                     let prediction = match result {
                         Ok(pred) => pred,
                         Err(e) => {
                             log_error(&format!("Ошибка предсказания: {}", e));
-                            0.0
+                            DataMap {
+                                symbol: "".to_string(),
+                                data: BTreeMap::new(),
+                            }
                         }
                     };
 
@@ -478,33 +471,35 @@ impl ModelActor {
                 ModelCommand::Train { respond_to } => {
                     let result = {
                         let model = self.model.clone();
-                        let locked = model.lock().await;
-                        let standart = locked.get_standart();
 
-                        let data = standart.select_all(&self.pool).await;
+                        let mut locked = model.lock().await;
+                        locked.train().await
+                    };
 
-                        if let Err(e) = data {
-                            Ok(Err(anyhow::anyhow!("Ошибка select_all: {}", e)))
+                    let _ = respond_to.send(result);
+                }
+
+                ModelCommand::HandleMistakes {
+                    true_data,
+                    predicted_data,
+                    respond_to,
+                } => {
+                    let result = {
+                        if true_data.data.is_empty() {
+                            Err(anyhow::anyhow!("True data is empty!"))
+                        } else if predicted_data.data.is_empty() {
+                            Err(anyhow::anyhow!("Predicted data is empty!"))
+                        } else if true_data.data.len() != predicted_data.data.len() {
+                            Err(anyhow::anyhow!("Data sizes do not match!"))
                         } else {
-                            let data = data.unwrap();
+                            let model = self.model.clone();
 
-                            let model = model.clone();
-
-                            tokio::task::spawn_blocking(move || {
-                                let mut locked = model.blocking_lock();
-                                locked.train(data)
-                            })
-                            .await
+                            let mut locked = model.lock().await;
+                            locked.handle_mistakes(true_data, predicted_data).await
                         }
                     };
 
-                    let train_result = match result {
-                        Ok(Ok(())) => Ok(()),
-                        Ok(Err(e)) => Err(e),
-                        Err(e) => Err(anyhow::anyhow!(format!("Ошибка spawn_blocking: {}", e))),
-                    };
-
-                    let _ = respond_to.send(train_result);
+                    let _ = respond_to.send(result);
                 }
             }
         }
@@ -630,6 +625,7 @@ impl CycleManager {
                 risk_score_model_params,
                 drawdown_probability_model_params,
                 tail_event_probability_model_params,
+                volatility_spike_probability_model_params,
                 liquidity_drop_probability_model_params,
                 future_return_model_params,
                 action_type_model_params,
@@ -641,6 +637,7 @@ impl CycleManager {
                 future_volume_model_params,
                 future_trend_strength_model_params,
                 future_range_model_params,
+                volatility_spike_probability_model_params,
                 future_return_mean_model_params,
                 future_return_std_model_params,
                 future_return_skew_model_params,
@@ -653,21 +650,20 @@ impl CycleManager {
                 action_type_model_params,
                 position_size_model_params,
             ),
-            ModelParams::Single { params } => {
-                init_single_model(params, Some(self.prediction_tx.clone()))
-            }
+            ModelParams::Single { params } => init_single_model(
+                params,
+                Some(self.prediction_tx.clone()),
+                SQLStandart::SingleModel,
+                pool,
+            ),
         };
 
-        let data = model
-            .get_standart()
-            .select_all(&pool)
-            .await
-            .map_err(|e| format!("Database request error: {}", e))?;
         model
-            .train(data)
+            .train()
+            .await
             .map_err(|e| format!("Model training error: {}", e))?;
 
-        let (model_actor, model_tx) = ModelActor::new(model, pool);
+        let (model_actor, model_tx) = ModelActor::new(model);
         tokio::spawn(model_actor.run());
 
         self.supervisor_tx

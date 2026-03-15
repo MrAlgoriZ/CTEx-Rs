@@ -87,6 +87,24 @@ impl DataMap {
         map
     }
 
+    pub fn get_only_targets(&self) -> BTreeMap<String, f64> {
+        let mut map = BTreeMap::new();
+        let targets = TARGETS_FIRST_LAYER
+            .iter()
+            .map(|s| s.to_string())
+            .chain(TARGETS_SECOND_LAYER.iter().map(|s| s.to_string()))
+            .chain(TARGETS_THIRD_LAYER.iter().map(|s| s.to_string()))
+            .collect::<Vec<_>>();
+
+        for (key, value) in self.data.iter() {
+            if targets.contains(key) {
+                map.insert(key.to_string(), *value);
+            }
+        }
+
+        map
+    }
+
     pub fn has_target(&self) -> bool {
         let targets = TARGETS_FIRST_LAYER
             .iter()
