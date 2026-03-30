@@ -3,7 +3,7 @@ use sqlx::PgPool;
 
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, DataMap};
 use crate::data::process::data_collection::OHLCV_FETCH_LEN;
-use crate::data::process::target::process_target;
+use crate::data::process::features::auxiliary::{process_return, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
@@ -17,8 +17,8 @@ use crate::engine::utils::config::load_env::load_env;
 
 pub struct LoaderCycle {
     pub symbol: String,
-    last_grouped_candles: Option<DataMap>,
-    last_candles_target: Option<f64>,
+    last_candles: Option<DataMap>,
+    last_close: Option<f64>,
     config: Config,
     print_symbol: String,
     client: CCXTClient,
@@ -50,8 +50,8 @@ impl LoaderCycle {
         LoaderCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol,
-            last_grouped_candles: None,
-            last_candles_target: None,
+            last_candles: None,
+            last_close: None,
             config: load_config("config/config.yaml"),
             client,
             pool,
@@ -88,7 +88,7 @@ impl LoaderCycle {
                 .client
                 .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
                 .await?;
-            let candles_target: f64 = self
+            let close: f64 = self
                 .client
                 .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
                 .await?[0]
@@ -96,28 +96,27 @@ impl LoaderCycle {
 
             match phase {
                 CyclePhase::Active => {
-                    let target: Option<f64> =
-                        process_target(self.last_candles_target.unwrap(), candles_target);
-
                     if self.config.prints.cycle.target {
+                        let target = process_return(self.last_close.unwrap(), close);
+
                         println!(
                             "{}{} {}Target: {:.5}",
                             self.print_time(),
                             self.print_symbol,
                             Fore::WHITE.as_str(),
-                            target.unwrap(),
+                            target,
                         );
                     }
 
-                    let last_grouped = self.last_grouped_candles.clone().unwrap();
-                    self.save_data(last_grouped, &self.pool).await.unwrap();
+                    let last_candles = self.last_candles.clone().unwrap();
+                    self.save_data(last_candles, &self.pool).await.unwrap();
                 }
                 _ => {}
             }
 
             phase = CyclePhase::Active;
-            self.last_grouped_candles = Some(candles);
-            self.last_candles_target = Some(candles_target);
+            self.last_candles = Some(candles);
+            self.last_close = Some(close);
         }
     }
 
@@ -153,25 +152,26 @@ impl LoaderCycle {
 
         for i in OHLCV_FETCH_LEN..all_candles.len() - 1 {
             let window = &all_candles[i - OHLCV_FETCH_LEN..i];
-            let current_target = all_candles[i - 2].close;
+            let current_close = all_candles[i - 2].close;
 
             let candles =
                 DataMap::from_slice(&self.symbol, &self.config.timeframes.main_timeframe, window);
 
             match phase {
                 CyclePhase::Active => {
-                    let target = process_target(self.last_candles_target.unwrap(), current_target);
+                    let current_return = process_return(self.last_close.unwrap(), current_close);
 
-                    // TODO: Сохранять таргеты на этом этапе
-                    let last_grouped = self.last_grouped_candles.clone().unwrap();
-                    self.save_data(last_grouped, &self.pool).await?;
+                    let last_candles = self.last_candles.clone().unwrap();
+
+                    let data_to_save: DataMap = last_candles; // TODO: Добавить таргеты (через +)
+                    self.save_data(data_to_save, &self.pool).await?;
                 }
                 _ => {}
             }
 
             phase = CyclePhase::Active;
-            self.last_grouped_candles = Some(candles);
-            self.last_candles_target = Some(current_target);
+            self.last_candles = Some(candles);
+            self.last_close = Some(current_close);
             pb.inc(1);
         }
 

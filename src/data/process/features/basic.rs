@@ -5,7 +5,7 @@ pub fn return_k(candles: &[Candle], k: usize) -> f64 {
     let n = candles.len();
     let close_t = candles[n - 1].close;
     let close_k = candles[n - 1 - k].close;
-    safed((close_t - close_k) / close_k)
+    safed(process_return(close_k, close_t))
 }
 
 pub fn log_return_k(candles: &[Candle], k: usize) -> f64 {
@@ -34,7 +34,7 @@ pub fn volume_change_k(candles: &[Candle], k: usize) -> f64 {
     let len = candles.len();
     let volume_t = candles[len - 1].volume;
     let volume_k = candles[len - 1 - k].volume;
-    safed((volume_t - volume_k) / volume_k)
+    safed(process_return(volume_k, volume_t))
 }
 
 pub fn sma(candles: &[Candle], n: usize) -> f64 {

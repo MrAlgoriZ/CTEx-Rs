@@ -71,11 +71,7 @@ pub trait Model: ModelDependencies {
         let mut skipped_nan_target = 0;
 
         for row in data.iter() {
-            let target = row
-                .data
-                .get(self.get_target_name())
-                .copied()
-                .unwrap_or_default();
+            let target = row.get(self.get_target_name()).copied().unwrap_or_default();
 
             if target.is_nan() {
                 skipped_nan_target += 1;
@@ -366,10 +362,10 @@ pub trait Model: ModelDependencies {
             }
         }
 
-        Ok(DataMap {
-            symbol: symbol_name,
-            data: BTreeMap::from([(self.get_target_name().to_string(), proba[0])]),
-        })
+        Ok(DataMap::new(
+            symbol_name,
+            BTreeMap::from([(self.get_target_name().to_string(), proba[0])]),
+        ))
     }
 
     async fn train(&mut self) -> Result<(), anyhow::Error> {

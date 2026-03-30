@@ -110,8 +110,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             let pred = rx.await?;
 
             self.change_last_predictions(pred.clone());
-            pred.data
-                .get("position_size")
+            pred.get("position_size")
                 .ok_or(anyhow::anyhow!("Model must predict position size!"))
                 .map(|v| *v)
         } else {
@@ -181,10 +180,8 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
             if let Ok(shifted_acc) = rx.await {
                 if shifted_acc.unwrap_or(0.0) == 0.0 {
-                    let true_data = DataMap {
-                        symbol: true_data.symbol.clone(),
-                        data: true_data.get_only_targets(),
-                    };
+                    let true_data =
+                        DataMap::new(true_data.symbol.clone(), true_data.get_only_targets());
                     let (tx, rx) = oneshot::channel();
                     let _ = model_tx
                         .send(ModelCommand::HandleMistakes {

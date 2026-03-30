@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use crate::data::data_interfaces::{Candle, DataMap};
 use crate::data::process::data_collection::OHLCV_FETCH_LEN;
-use crate::data::process::target::{process_target, restore_price};
+use crate::data::process::features::auxiliary::{process_return, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::account::{Direction, DummyAccount};
 use crate::data::requests::ccxt::client::CCXTClient;
@@ -23,8 +23,8 @@ use crate::engine::utils::config::load_env::load_env;
 
 pub struct SandboxCycle {
     pub symbol: String,
-    last_grouped_candles: Option<DataMap>,
-    last_candles_target: Option<f64>,
+    last_candles: Option<DataMap>,
+    last_close: Option<f64>,
     last_predictions: Option<DataMap>,
     last_order_price: Option<f64>,
     print_symbol: String,
@@ -71,8 +71,8 @@ impl SandboxCycle {
         SandboxCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol.clone(),
-            last_grouped_candles: None,
-            last_candles_target: None,
+            last_candles: None,
+            last_close: None,
             last_predictions: None,
             last_order_price: None,
             config: load_config("config/config.yaml"),
@@ -113,7 +113,7 @@ impl SandboxCycle {
                 .get_client()
                 .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
                 .await?;
-            let candles_target: f64 = self
+            let close: f64 = self
                 .get_client()
                 .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
                 .await?[0]
@@ -121,10 +121,9 @@ impl SandboxCycle {
 
             match phase {
                 CyclePhase::Active => {
-                    let target: Option<f64> =
-                        process_target(self.last_candles_target.unwrap(), candles_target);
+                    let target = process_return(self.last_close.unwrap(), close);
 
-                    let diff: f64 = (prediction.unwrap() - target.unwrap()).abs();
+                    let diff: f64 = (prediction.unwrap() - target).abs();
                     let success: bool =
                         diff < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
@@ -135,23 +134,18 @@ impl SandboxCycle {
                             self.print_symbol,
                             Fore::WHITE.as_str(),
                             prediction.unwrap(),
-                            target.unwrap(),
+                            target,
                             diff
                         );
                     }
 
-                    self.update_counters(
-                        prediction.unwrap(),
-                        target.unwrap(),
-                        volatility,
-                        counter_tx,
-                    )
-                    .await;
+                    self.update_counters(prediction.unwrap(), target, volatility, counter_tx)
+                        .await;
 
                     if !success {
-                        let last_grouped = self.last_grouped_candles.clone().unwrap();
+                        let last_candles = self.last_candles.clone().unwrap();
                         let last_predictions = self.last_predictions.clone().unwrap();
-                        self.handle_mistake(last_grouped, last_predictions, counter_tx, model_tx)
+                        self.handle_mistake(last_candles, last_predictions, counter_tx, model_tx)
                             .await?;
                     }
                 }
@@ -160,7 +154,7 @@ impl SandboxCycle {
 
             let candles_to_pred = candles.clone();
             prediction = Some(self.predict(candles_to_pred, &model_tx).await.unwrap());
-            let restored_price: f64 = restore_price(candles_target, prediction.unwrap());
+            let restored_price: f64 = restore_price(close, prediction.unwrap());
 
             let direction = if prediction.unwrap() > 0.0 {
                 Direction::Buy
@@ -180,8 +174,8 @@ impl SandboxCycle {
 
             phase = CyclePhase::Active;
             self.log_prediction(prediction.unwrap(), restored_price);
-            self.last_grouped_candles = Some(candles);
-            self.last_candles_target = Some(candles_target);
+            self.last_candles = Some(candles);
+            self.last_close = Some(close);
 
             println!(
                 "Balance (USDT): ${:.3}",
@@ -244,13 +238,13 @@ impl SandboxCycle {
 
             let candles =
                 DataMap::from_slice(&self.symbol, &self.config.timeframes.main_timeframe, window);
-            let current_target = all_candles[i - 2].close;
+            let current_close = all_candles[i - 2].close;
 
             match phase {
                 CyclePhase::Active => {
-                    let target = process_target(self.last_candles_target.unwrap(), current_target);
+                    let target = process_return(self.last_close.unwrap(), current_close);
 
-                    let diff = (prediction.unwrap() - target.unwrap()).abs();
+                    let diff = (prediction.unwrap() - target).abs();
                     let success: bool =
                         diff < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
@@ -259,10 +253,10 @@ impl SandboxCycle {
                     threshold_counter.push(threshold_value);
 
                     if !success && self.config.runtime.with_training {
-                        let last_grouped = self.last_grouped_candles.clone().unwrap();
-                        if last_grouped.has_target() && self.config.runtime.with_saves {
+                        let last_candles = self.last_candles.clone().unwrap();
+                        if last_candles.has_target() && self.config.runtime.with_saves {
                             SQLStandart::SingleModel
-                                .insert_row(&self.pool, last_grouped)
+                                .insert_row(&self.pool, last_candles)
                                 .await?;
                         }
                         let shifted_acc = threshold_counter.get_shifted_accuracy(3);
@@ -306,8 +300,8 @@ impl SandboxCycle {
                 .await;
 
             phase = CyclePhase::Active;
-            self.last_grouped_candles = Some(candles);
-            self.last_candles_target = Some(current_target);
+            self.last_candles = Some(candles);
+            self.last_close = Some(current_close);
             self.last_order_price = Some(order_price);
             pb.inc(1);
         }

@@ -458,10 +458,7 @@ impl ModelActor {
                         Ok(pred) => pred,
                         Err(e) => {
                             log_error(&format!("Ошибка предсказания: {}", e));
-                            DataMap {
-                                symbol: "".to_string(),
-                                data: BTreeMap::new(),
-                            }
+                            DataMap::new("".to_string(), BTreeMap::new())
                         }
                     };
 
@@ -485,11 +482,11 @@ impl ModelActor {
                     respond_to,
                 } => {
                     let result = {
-                        if true_data.data.is_empty() {
+                        if true_data.is_empty() {
                             Err(anyhow::anyhow!("True data is empty!"))
-                        } else if predicted_data.data.is_empty() {
+                        } else if predicted_data.is_empty() {
                             Err(anyhow::anyhow!("Predicted data is empty!"))
-                        } else if true_data.data.len() != predicted_data.data.len() {
+                        } else if true_data.len() != predicted_data.len() {
                             Err(anyhow::anyhow!("Data sizes do not match!"))
                         } else {
                             let model = self.model.clone();

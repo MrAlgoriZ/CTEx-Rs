@@ -35,17 +35,14 @@ impl SQLStandart {
                 values.insert(name.to_string(), value.unwrap_or(f64::NAN));
             }
 
-            result.push(DataMap {
-                symbol,
-                data: values,
-            });
+            result.push(DataMap::new(symbol, values));
         }
 
         Ok(result)
     }
 
     pub async fn insert_row(&self, pool: &PgPool, values: DataMap) -> Result<(), anyhow::Error> {
-        let columns = values.data.keys().cloned().collect::<Vec<_>>();
+        let columns = values.get_keys();
         let columns_str = columns.join(", ");
 
         let mut placeholder_index: u128 = 1;
@@ -63,10 +60,10 @@ impl SQLStandart {
             columns_str, placeholders
         );
 
-        let mut q = query(&sql).bind(values.symbol);
+        let mut q = query(&sql).bind(values.symbol.clone());
 
         for k in columns.iter() {
-            q = q.bind(values.data.get(k).copied().unwrap_or(f64::NAN));
+            q = q.bind(values.get(k).copied().unwrap_or(f64::NAN));
         }
 
         q.execute(pool).await.map_err(|e| {

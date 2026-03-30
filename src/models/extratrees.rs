@@ -142,8 +142,8 @@ impl Model for ExtraTrees {
         true_data: DataMap,
         predicted_data: DataMap,
     ) -> Result<(), anyhow::Error> {
-        let true_data: Vec<f64> = true_data.data.values().map(|v| *v).collect();
-        let predicted_data: Vec<f64> = predicted_data.data.values().map(|v| *v).collect();
+        let true_data = true_data.to_vec();
+        let predicted_data = predicted_data.to_vec();
         let correlation = corr(&true_data, &predicted_data);
         println!("Corr: {}", correlation);
 

@@ -391,10 +391,7 @@ impl Model for Ensemble {
     async fn predict(&self, data: DataMap) -> Result<DataMap, anyhow::Error> {
         let mut data = data.clone();
 
-        let mut predictions = DataMap {
-            symbol: data.symbol.clone(),
-            data: BTreeMap::new(),
-        };
+        let mut predictions = DataMap::new(data.symbol.clone(), BTreeMap::new());
 
         // FIRST LAYER
         let fl_models = [
@@ -418,9 +415,9 @@ impl Model for Ensemble {
                 })
                 .await?;
             let result = rx.await?;
-            for (k, v) in result.data.clone().iter() {
-                predictions.data.entry(k.clone()).or_insert(*v);
-                data.data.insert(k.clone(), *v);
+            for (k, v) in result.get_data().iter() {
+                predictions.entry(k.clone()).or_insert(*v);
+                data.insert(k.clone(), *v);
             }
         }
 
@@ -443,9 +440,9 @@ impl Model for Ensemble {
                 })
                 .await?;
             let result = rx.await?;
-            for (k, v) in result.data.clone().iter() {
-                predictions.data.entry(k.clone()).or_insert(*v);
-                data.data.insert(k.clone(), *v);
+            for (k, v) in result.get_data().iter() {
+                predictions.entry(k.clone()).or_insert(*v);
+                data.insert(k.clone(), *v);
             }
         }
 
@@ -465,9 +462,9 @@ impl Model for Ensemble {
                 })
                 .await?;
             let result = rx.await?;
-            for (k, v) in result.data.clone().iter() {
-                predictions.data.entry(k.clone()).or_insert(*v);
-                data.data.insert(k.clone(), *v);
+            for (k, v) in result.get_data().iter() {
+                predictions.entry(k.clone()).or_insert(*v);
+                data.insert(k.clone(), *v);
             }
         }
 
@@ -479,8 +476,8 @@ impl Model for Ensemble {
         true_data: DataMap,
         predicted_data: DataMap,
     ) -> Result<(), anyhow::Error> {
-        for (k, v) in true_data.data.iter() {
-            if let Some(predicted) = predicted_data.data.get(k) {
+        for (k, v) in true_data.get_data().iter() {
+            if let Some(predicted) = predicted_data.get(k) {
                 if (v - predicted).abs() < self.config.behaviour.success_threshold {
                     self.counters.get_mut(k).push(1);
                 } else {
