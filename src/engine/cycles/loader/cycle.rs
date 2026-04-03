@@ -84,7 +84,7 @@ impl LoaderCycle {
 
         loop {
             self.wait_for_next_interval().await?;
-            let candles = self
+            let (candles, ohlcv) = self
                 .client
                 .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
                 .await?;

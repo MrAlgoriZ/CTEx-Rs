@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::data::data_interfaces::*;
-use crate::data::process::features::auxiliary::{safed, vwap};
+use crate::data::process::features::auxiliary::{process_return, safed, vwap};
 use crate::data::process::features::basic::*;
 
 pub const OHLCV_LEN: usize = 48;
@@ -179,5 +179,37 @@ pub fn collect_features(ohlcv: [Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
 }
 
 pub fn collect_targets(ohlcv: [Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
-    todo!()
+    let open = ohlcv[OHLCV_LEN - 1].open;
+    let high = ohlcv[OHLCV_LEN - 1].high;
+    let low = ohlcv[OHLCV_LEN - 1].low;
+    let close = ohlcv[OHLCV_LEN - 1].close;
+    let volume = ohlcv[OHLCV_LEN - 1].volume;
+
+    let future_volatility = vol_rolling_n(&ohlcv, 3);
+    let future_volume = volume;
+
+    let ema_fast = ema(&ohlcv, 6);
+    let ema_slow = ema(&ohlcv, 24);
+
+    let future_trend_strength = safed((ema_fast - ema_slow) / ema_slow).abs();
+    let future_range = safed((high - low) / close);
+
+    let future_return_mean = returns_mean_n(&ohlcv, 3);
+    let future_return_std = returns_std_n(&ohlcv, 3);
+    let future_return_skew = returns_skew_n(&ohlcv, 3);
+    let future_return_kurtosis = returns_kurtosis_n(&ohlcv, 3);
+
+    let future_return = return_k(&ohlcv, 1);
+
+    BTreeMap::from([
+        ("future_volatility".to_string(), future_volatility),
+        ("future_volume".to_string(), future_volume),
+        ("future_trend_strength".to_string(), future_trend_strength),
+        ("future_range".to_string(), future_range),
+        ("future_return_mean".to_string(), future_return_mean),
+        ("future_return_std".to_string(), future_return_std),
+        ("future_return_skew".to_string(), future_return_skew),
+        ("future_return_kurtosis".to_string(), future_return_kurtosis),
+        ("future_return".to_string(), future_return),
+    ])
 }

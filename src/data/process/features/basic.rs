@@ -344,6 +344,31 @@ pub fn returns_kurtosis_n(candles: &[Candle], n: usize) -> f64 {
     safed(kurtosis(&returns))
 }
 
+pub fn returns_mean_n(candles: &[Candle], n: usize) -> f64 {
+    let len = candles.len();
+    let mut returns = Vec::with_capacity(n);
+
+    for i in len - n..len {
+        let r = (candles[i].close - candles[i - 1].close) / candles[i - 1].close;
+        returns.push(r);
+    }
+
+    safed(returns.iter().sum::<f64>() / n as f64)
+}
+
+pub fn returns_std_n(candles: &[Candle], n: usize) -> f64 {
+    let mean = returns_mean_n(candles, n);
+    let len = candles.len();
+    let mut returns = Vec::with_capacity(n);
+
+    for i in len - n..len {
+        let r = (candles[i].close - candles[i - 1].close) / candles[i - 1].close;
+        returns.push(r - mean);
+    }
+
+    safed(returns.iter().map(|r| r * r).sum::<f64>() / n as f64).sqrt()
+}
+
 pub fn tail_risk_proxy_n(candles: &[Candle], n: usize, vol_rolling_n: f64) -> f64 {
     let len = candles.len();
     let mut count = 0;

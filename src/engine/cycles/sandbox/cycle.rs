@@ -109,7 +109,7 @@ impl SandboxCycle {
                 self.print_volatility_status(volatility);
             }
 
-            let candles = self
+            let (candles, ohlcv) = self
                 .get_client()
                 .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
                 .await?;

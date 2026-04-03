@@ -180,9 +180,9 @@ impl CCXTClient {
         &self,
         symbol: &str,
         timeframe: &str,
-    ) -> Result<DataMap, anyhow::Error> {
+    ) -> Result<(DataMap, Vec<Candle>), anyhow::Error> {
         let ohlcv = self.fetch_ohlcv(symbol, timeframe, OHLCV_FETCH_LEN).await?;
 
-        Ok(DataMap::init(symbol, ohlcv, timeframe))
+        Ok((DataMap::init(symbol, ohlcv.clone(), timeframe), ohlcv))
     }
 }

@@ -100,7 +100,7 @@ impl TrainingCycle {
                 self.print_volatility_status(volatility);
             }
 
-            let candles = self
+            let (candles, ohlcv) = self
                 .client
                 .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
                 .await?;
