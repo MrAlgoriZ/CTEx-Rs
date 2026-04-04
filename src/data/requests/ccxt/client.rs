@@ -132,6 +132,7 @@ impl CCXTClient {
         message: None,
     } */
 
+    #[allow(unused)]
     pub async fn fetch_ticker(&self, symbol: &str) -> Result<Ticker, anyhow::Error> {
         let (tx, rx) = oneshot::channel();
         let _ = self

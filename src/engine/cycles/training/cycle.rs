@@ -1,10 +1,10 @@
 use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::data::data_interfaces::{Candle, DataMap};
-use crate::data::process::data_collection::OHLCV_FETCH_LEN;
+use crate::data::process::data_collection::{OHLCV_FETCH_LEN, OHLCV_LEN, collect_targets};
 use crate::data::process::features::auxiliary::{process_return, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
@@ -137,8 +137,23 @@ impl TrainingCycle {
                         let last_candles = self.last_candles.clone().unwrap();
                         let last_predictions = self.last_predictions.clone().unwrap();
 
-                        self.handle_mistake(last_candles, last_predictions, counter_tx, model_tx)
-                            .await?;
+                        let (tx, rx) = oneshot::channel();
+                        let _ = model_tx
+                            .send(ModelCommand::GetAccuracy { respond_to: tx })
+                            .await;
+                        let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
+                        let targets = DataMap::new(
+                            self.get_symbol().to_string(),
+                            collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
+                        );
+
+                        self.handle_mistake(
+                            (last_candles + accuracy) + targets,
+                            last_predictions,
+                            counter_tx,
+                            model_tx,
+                        )
+                        .await?;
                     }
                 }
                 _ => {}
@@ -231,17 +246,42 @@ impl TrainingCycle {
                     threshold_counter.push(threshold_value);
                     direction_counter.push(direction_value);
 
-                    if !success && self.config.runtime.with_training {
-                        let last_candles = self.last_candles.clone().unwrap();
+                    let last_candles = self.last_candles.clone().unwrap();
 
-                        if last_candles.has_target() && self.config.runtime.with_saves {
-                            SQLStandart::Dummy
-                                .insert_row(&self.pool, last_candles)
-                                .await?;
-                        }
+                    let (tx, rx) = oneshot::channel();
+                    let _ = model_tx
+                        .send(ModelCommand::GetAccuracy { respond_to: tx })
+                        .await;
+                    let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
+                    let ohlcv = window[..OHLCV_LEN]
+                        .iter()
+                        .map(|candle| candle.to_candle())
+                        .collect::<Vec<Candle>>();
+
+                    let targets = DataMap::new(
+                        self.get_symbol().to_string(),
+                        collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
+                    );
+
+                    if !success && self.config.runtime.with_training {
+                        SQLStandart::Dummy
+                            .insert_row(
+                                &self.pool,
+                                last_candles.clone() + accuracy.clone() + targets.clone(),
+                            )
+                            .await?;
                         let shifted_acc = threshold_counter.get_shifted_accuracy(3);
                         if shifted_acc.unwrap_or(0.0) == 0.0 {
-                            self.train_model(model_tx).await?;
+                            let (tx, rx) = oneshot::channel();
+                            let last_predictions = self.last_predictions.clone().unwrap();
+                            let _ = model_tx
+                                .send(ModelCommand::HandleMistakes {
+                                    true_data: (last_candles + accuracy) + targets,
+                                    predicted_data: last_predictions,
+                                    respond_to: tx,
+                                })
+                                .await;
+                            let _ = rx.await;
                         }
                     }
                 }

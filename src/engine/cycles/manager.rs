@@ -14,7 +14,6 @@ use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::background::cycle::BackgroundCycle;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::loaderwm::cycle::LoaderWMCycle;
-use crate::engine::cycles::sandbox::cycle::SandboxCycle;
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::{Counters, SymbolCounters};
 use crate::engine::utils::colors::Fore;
@@ -133,10 +132,8 @@ impl CycleSupervisor {
             return Err(anyhow::anyhow!(format!("Worker {} уже запущен", symbol)));
         }
 
-        if matches!(
-            cycle_type,
-            CycleType::Training | CycleType::Sandbox | CycleType::Loaderwm
-        ) && self.model_tx.is_none()
+        if matches!(cycle_type, CycleType::Training | CycleType::Loaderwm)
+            && self.model_tx.is_none()
         {
             return Err(anyhow::anyhow!("Model не инициализирована для цикла"));
         }
@@ -281,16 +278,6 @@ impl CycleSupervisor {
                 let cycle = TrainingCycle::init(symbol.to_string(), client).await?;
                 sleep(Duration::from_secs(10)).await;
 
-                match config.runtime.runtime_type {
-                    RuntimeType::Realtime => {
-                        cycle.run(counter_tx, model_tx.as_ref().unwrap()).await?
-                    }
-                    RuntimeType::Backtest => cycle.run_backtest(model_tx.as_ref().unwrap()).await?,
-                }
-            }
-            CycleType::Sandbox => {
-                let cycle = SandboxCycle::init(symbol.to_string(), client).await?;
-                sleep(Duration::from_secs(10)).await;
                 match config.runtime.runtime_type {
                     RuntimeType::Realtime => {
                         cycle.run(counter_tx, model_tx.as_ref().unwrap()).await?
@@ -616,7 +603,7 @@ impl CycleManager {
         let needs_model = symbols.iter().any(|symbol| {
             matches!(
                 cycle_types.get(symbol).unwrap_or(&CycleType::Loader),
-                CycleType::Training | CycleType::Sandbox
+                CycleType::Training | CycleType::Loaderwm
             )
         });
 
@@ -865,6 +852,7 @@ pub enum ServersCommand {
         server: String,
         respond_to: oneshot::Sender<Result<Vec<CandleWithTimestamp>, anyhow::Error>>,
     },
+    #[allow(unused)]
     FetchTicker {
         symbol: String,
         exchange_name: String,

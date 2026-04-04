@@ -2,7 +2,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, DataMap};
-use crate::data::process::data_collection::OHLCV_FETCH_LEN;
+use crate::data::process::data_collection::{OHLCV_FETCH_LEN, OHLCV_LEN, collect_targets};
 use crate::data::process::features::auxiliary::process_return;
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
@@ -88,16 +88,21 @@ impl LoaderCycle {
                 .client
                 .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
                 .await?;
-            let close: f64 = self
-                .client
-                .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
-                .await?[0]
-                .close;
+            let close = if self.config.prints.cycle.target {
+                Some(
+                    self.client
+                        .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
+                        .await?[0]
+                        .close,
+                )
+            } else {
+                None
+            };
 
             match phase {
                 CyclePhase::Active => {
                     if self.config.prints.cycle.target {
-                        let target = process_return(self.last_close.unwrap(), close);
+                        let target = process_return(self.last_close.unwrap(), close.unwrap());
 
                         println!(
                             "{}{} {}Target: {:.5}",
@@ -109,14 +114,20 @@ impl LoaderCycle {
                     }
 
                     let last_candles = self.last_candles.clone().unwrap();
-                    self.save_data(last_candles, &self.pool).await.unwrap();
+                    let targets = DataMap::new(
+                        self.get_symbol().to_string(),
+                        collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
+                    );
+                    self.save_data(last_candles + targets, &self.pool)
+                        .await
+                        .unwrap();
                 }
                 _ => {}
             }
 
             phase = CyclePhase::Active;
             self.last_candles = Some(candles);
-            self.last_close = Some(close);
+            self.last_close = close;
         }
     }
 
@@ -159,12 +170,17 @@ impl LoaderCycle {
 
             match phase {
                 CyclePhase::Active => {
-                    let current_return = process_return(self.last_close.unwrap(), current_close);
-
+                    let ohlcv = window[..OHLCV_LEN]
+                        .iter()
+                        .map(|candle| candle.to_candle())
+                        .collect::<Vec<Candle>>();
                     let last_candles = self.last_candles.clone().unwrap();
+                    let targets = DataMap::new(
+                        self.get_symbol().to_string(),
+                        collect_targets(ohlcv.try_into().unwrap()),
+                    );
 
-                    let data_to_save: DataMap = last_candles; // TODO: Добавить таргеты (через +)
-                    self.save_data(data_to_save, &self.pool).await?;
+                    self.save_data(last_candles + targets, &self.pool).await?;
                 }
                 _ => {}
             }

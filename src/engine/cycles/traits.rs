@@ -263,20 +263,6 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             );
         }
     }
-
-    async fn train_model(
-        &self,
-        model_tx: &mpsc::Sender<ModelCommand>,
-    ) -> Result<(), anyhow::Error> {
-        let (tx, rx) = oneshot::channel();
-
-        model_tx
-            .send(ModelCommand::Train { respond_to: tx })
-            .await?;
-
-        rx.await??;
-        Ok(())
-    }
 }
 
 // TODO: pub trait CycleWithAccount

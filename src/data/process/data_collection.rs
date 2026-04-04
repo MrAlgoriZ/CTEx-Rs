@@ -184,21 +184,12 @@ pub fn collect_targets(ohlcv: [Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
     let future_low = ohlcv[OHLCV_LEN - 1].low;
     let future_volume = ohlcv[OHLCV_LEN - 1].volume;
 
-    let current_volume = ohlcv[OHLCV_LEN - 2].volume;
-
-    let future_volatility = vol_rolling_n(&ohlcv, 3);
-
-    let current_volatility = {
-        let slice = &ohlcv[..OHLCV_LEN - 1];
-        vol_rolling_n(slice, 3)
-    };
-
     let ema_fast = ema(&ohlcv, 6);
     let ema_slow = ema(&ohlcv, 24);
 
+    let future_volatility = vol_rolling_n(&ohlcv, 3);
     let future_trend_strength = safed((ema_fast - ema_slow) / ema_slow).abs();
     let future_range = safed((future_high - future_low) / future_close);
-
     let future_return_mean = returns_mean_n(&ohlcv, 3);
     let future_return_std = returns_std_n(&ohlcv, 3);
     let future_return_skew = returns_skew_n(&ohlcv, 3);
@@ -206,16 +197,12 @@ pub fn collect_targets(ohlcv: [Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
 
     let tail_risk_proxy = tail_risk_proxy_n(&ohlcv, 6, future_volatility);
     let risk_score = future_volatility * tail_risk_proxy;
-
     let drawdown_probability = drawdown_probability_n(&ohlcv, 6, 0.02);
-
     let tail_event_probability = tail_event_probability_n(&ohlcv, 6, 2.0);
-
     let volatility_spike_probability = volatility_spike_probability_n(&ohlcv, 6, 1.5);
     let liquidity_drop_probability = liquidity_drop_probability_n(&ohlcv, 6, 0.5);
 
     let future_return = return_k(&ohlcv, 1);
-
     let action_type = calculate_action_type(future_return, risk_score, 0.1);
     let position_size = calculate_position_size(future_return, risk_score, 1.0);
 
