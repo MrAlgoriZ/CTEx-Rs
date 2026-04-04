@@ -382,3 +382,96 @@ pub fn tail_risk_proxy_n(candles: &[Candle], n: usize, vol_rolling_n: f64) -> f6
 
     safed((count as f64 / len as f64) / vol_rolling_n)
 }
+
+pub fn drawdown_probability_n(candles: &[Candle], n: usize, threshold: f64) -> f64 {
+    let len = candles.len();
+    let mut count = 0;
+
+    for i in len - n..len {
+        let r = (candles[i].close - candles[i - 1].close) / candles[i - 1].close;
+        if r < -threshold {
+            count += 1;
+        }
+    }
+
+    safed(count as f64 / n as f64)
+}
+
+pub fn tail_event_probability_n(candles: &[Candle], n: usize, k: f64) -> f64 {
+    let len = candles.len();
+    let mut returns = Vec::with_capacity(n);
+
+    for i in len - n..len {
+        let r = (candles[i].close - candles[i - 1].close) / candles[i - 1].close;
+        returns.push(r);
+    }
+
+    let mean: f64 = returns.iter().sum::<f64>() / n as f64;
+    let var: f64 = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / n as f64;
+    let vol = var.sqrt();
+
+    let threshold = k * vol;
+    let count = returns.iter().filter(|&&r| r.abs() > threshold).count();
+
+    safed(count as f64 / n as f64)
+}
+
+pub fn volatility_spike_probability_n(candles: &[Candle], n: usize, k: f64) -> f64 {
+    let len = candles.len();
+    let mut volatilities = Vec::with_capacity(n);
+
+    for window in 3..=n {
+        let vol = vol_rolling_n(&candles[..len - n + window], 3.min(window - 1).max(1));
+        volatilities.push(vol);
+    }
+
+    if volatilities.len() < 2 {
+        return 0.0;
+    }
+
+    let current_vol = *volatilities.last().unwrap();
+    let threshold = k * current_vol;
+
+    let future_vols = &volatilities[1..];
+    let count = future_vols.iter().filter(|&&v| v > threshold).count();
+
+    safed(count as f64 / future_vols.len() as f64)
+}
+
+pub fn liquidity_drop_probability_n(candles: &[Candle], n: usize, k: f64) -> f64 {
+    let len = candles.len();
+    let current_volume = candles[len - 1].volume;
+    let threshold = k * current_volume;
+
+    let mut count = 0;
+    for i in len - n..len - 1 {
+        if candles[i].volume < threshold {
+            count += 1;
+        }
+    }
+
+    safed(count as f64 / (n - 1) as f64)
+}
+
+pub fn calculate_action_type(future_return: f64, risk_score: f64, threshold: f64) -> f64 {
+    if risk_score > threshold {
+        return 0.0;
+    }
+
+    if future_return > 0.001 {
+        1.0
+    } else if future_return < -0.001 {
+        2.0
+    } else {
+        0.0
+    }
+}
+
+pub fn calculate_position_size(future_return: f64, risk_score: f64, base_size: f64) -> f64 {
+    if risk_score == 0.0 {
+        return 0.0;
+    }
+
+    let size = base_size * future_return / risk_score;
+    safed(size)
+}
