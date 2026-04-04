@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::data::data_interfaces::*;
-use crate::data::process::features::auxiliary::{process_return, safed, vwap};
+use crate::data::process::features::auxiliary::{safed, vwap};
 use crate::data::process::features::basic::*;
 
 pub const OHLCV_LEN: usize = 48;

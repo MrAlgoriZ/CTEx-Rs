@@ -180,12 +180,12 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
             if let Ok(shifted_acc) = rx.await {
                 if shifted_acc.unwrap_or(0.0) == 0.0 {
-                    let true_data =
+                    let targets =
                         DataMap::new(true_data.symbol.clone(), true_data.get_only_targets());
                     let (tx, rx) = oneshot::channel();
                     let _ = model_tx
                         .send(ModelCommand::HandleMistakes {
-                            true_data,
+                            true_data: targets,
                             predicted_data,
                             respond_to: tx,
                         })
@@ -193,7 +193,6 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                     let _ = rx.await;
                 }
             }
-
             Ok(())
         } else {
             Err(anyhow::anyhow!("В поданных данных нет target!"))

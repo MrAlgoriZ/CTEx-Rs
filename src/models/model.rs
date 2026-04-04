@@ -406,6 +406,10 @@ pub trait Model: ModelDependencies {
         true_data: DataMap,
         predicted_data: DataMap,
     ) -> Result<(), anyhow::Error>;
+
+    fn get_accuracy(&self) -> DataMap {
+        DataMap::new("".to_string(), BTreeMap::new())
+    }
 }
 
 pub fn init_single_model(

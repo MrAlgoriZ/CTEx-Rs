@@ -114,6 +114,7 @@ pub struct TimeframesConfig {
 #[serde(rename_all = "snake_case")]
 pub enum CycleType {
     Loader,
+    Loaderwm,
     Training,
     Sandbox,
 }

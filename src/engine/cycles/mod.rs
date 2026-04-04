@@ -1,4 +1,5 @@
 pub mod loader;
+pub mod loaderwm;
 pub mod manager;
 // pub mod trading;
 pub mod background;

@@ -13,6 +13,7 @@ use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::background::cycle::BackgroundCycle;
 use crate::engine::cycles::loader::cycle::LoaderCycle;
+use crate::engine::cycles::loaderwm::cycle::LoaderWMCycle;
 use crate::engine::cycles::sandbox::cycle::SandboxCycle;
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::{Counters, SymbolCounters};
@@ -21,8 +22,8 @@ use crate::engine::utils::config::config_types::{CycleType, RuntimeType};
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::engine::utils::parse::parse_symbol;
-use crate::models::ModelParams;
 use crate::models::model::{Model, init_ensemble_model, init_single_model};
+use crate::models::{ModelParams, ModelType};
 
 pub enum CycleError {
     SymbolDoesNotExist,
@@ -132,7 +133,10 @@ impl CycleSupervisor {
             return Err(anyhow::anyhow!(format!("Worker {} уже запущен", symbol)));
         }
 
-        if matches!(cycle_type, CycleType::Training | CycleType::Sandbox) && self.model_tx.is_none()
+        if matches!(
+            cycle_type,
+            CycleType::Training | CycleType::Sandbox | CycleType::Loaderwm
+        ) && self.model_tx.is_none()
         {
             return Err(anyhow::anyhow!("Model не инициализирована для цикла"));
         }
@@ -236,12 +240,41 @@ impl CycleSupervisor {
 
         match cycle_type {
             CycleType::Loader => {
+                match config.model.model_type {
+                    ModelType::Ensemble => {
+                        println!(
+                            "{}ВНИМАНИЕ! LoaderCycle не предназначен для использования с типом модели Ensemble. Используйте LoaderWMCycle вместо этого.",
+                            Fore::YELLOW.as_str()
+                        );
+                    }
+                    _ => {}
+                }
                 let cycle = LoaderCycle::init(symbol.to_string(), client).await?;
                 sleep(Duration::from_secs(10)).await;
 
                 match config.runtime.runtime_type {
                     RuntimeType::Realtime => cycle.run().await?,
                     RuntimeType::Backtest => cycle.run_backtest().await?,
+                }
+            }
+            CycleType::Loaderwm => {
+                match config.model.model_type {
+                    ModelType::Single => {
+                        println!(
+                            "{}ВНИМАНИЕ! LoaderWMCycle не предназначен для использования с типом модели Single. Используйте LoaderCycle вместо этого.",
+                            Fore::YELLOW.as_str()
+                        );
+                    }
+                    _ => {}
+                }
+                let cycle = LoaderWMCycle::init(symbol.to_string(), client).await?;
+                sleep(Duration::from_secs(10)).await;
+
+                match config.runtime.runtime_type {
+                    RuntimeType::Realtime => {
+                        cycle.run(counter_tx, model_tx.as_ref().unwrap()).await?
+                    }
+                    RuntimeType::Backtest => cycle.run_backtest(model_tx.as_ref().unwrap()).await?,
                 }
             }
             CycleType::Training => {
@@ -426,6 +459,9 @@ pub enum ModelCommand {
         predicted_data: DataMap,
         respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
     },
+    GetAccuracy {
+        respond_to: oneshot::Sender<DataMap>,
+    },
 }
 
 pub struct ModelActor {
@@ -494,6 +530,16 @@ impl ModelActor {
                             let mut locked = model.lock().await;
                             locked.handle_mistakes(true_data, predicted_data).await
                         }
+                    };
+
+                    let _ = respond_to.send(result);
+                }
+
+                ModelCommand::GetAccuracy { respond_to } => {
+                    let result = {
+                        let model = self.model.clone();
+                        let locked = model.lock().await;
+                        locked.get_accuracy()
                     };
 
                     let _ = respond_to.send(result);

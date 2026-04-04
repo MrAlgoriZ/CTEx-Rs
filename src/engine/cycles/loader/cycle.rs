@@ -3,7 +3,7 @@ use sqlx::PgPool;
 
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, DataMap};
 use crate::data::process::data_collection::OHLCV_FETCH_LEN;
-use crate::data::process::features::auxiliary::{process_return, restore_price};
+use crate::data::process::features::auxiliary::process_return;
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
