@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{ModelParams, ModelType};
+use crate::models::{ModelParams, ModelStructure, TaskType};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
@@ -18,8 +18,7 @@ pub struct Config {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ModelConfig {
-    #[serde(rename = "type")]
-    pub model_type: ModelType,
+    pub model_struct: ModelStructure,
     pub params: ModelParams,
     pub train_test_split: TrainTestSplit,
     pub metric: MetricType,
@@ -38,9 +37,10 @@ pub enum MetricType {
     MSE,
     RMSE,
     R2,
+    Acc,
     Direction,
     Threshold,
-    All,
+    RAll,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -130,9 +130,10 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             model: ModelConfig {
-                model_type: ModelType::Single,
+                model_struct: ModelStructure::Single,
                 params: ModelParams::Single {
                     params: crate::models::SingleModelParams::XGBoost {
+                        task_type: TaskType::Regression,
                         target_type: crate::models::TargetType::FutureReturn,
                         n_estimators: 100,
                         max_depth: 5,

@@ -23,7 +23,7 @@ use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::engine::utils::parse::parse_symbol;
 use crate::models::model::{Model, init_ensemble_model, init_single_model};
-use crate::models::{ModelParams, ModelType};
+use crate::models::{ModelParams, ModelStructure};
 
 pub enum CycleError {
     SymbolDoesNotExist,
@@ -240,8 +240,8 @@ impl CycleSupervisor {
 
         match cycle_type {
             CycleType::Loader => {
-                match config.model.model_type {
-                    ModelType::Ensemble => {
+                match config.model.model_struct {
+                    ModelStructure::Ensemble => {
                         println!(
                             "{}ВНИМАНИЕ! LoaderCycle не предназначен для использования с типом модели Ensemble. Используйте LoaderWMCycle вместо этого.",
                             Fore::YELLOW.as_str()
@@ -258,8 +258,8 @@ impl CycleSupervisor {
                 }
             }
             CycleType::Loaderwm => {
-                match config.model.model_type {
-                    ModelType::Single => {
+                match config.model.model_struct {
+                    ModelStructure::Single => {
                         println!(
                             "{}ВНИМАНИЕ! LoaderWMCycle не предназначен для использования с типом модели Single. Используйте LoaderCycle вместо этого.",
                             Fore::YELLOW.as_str()

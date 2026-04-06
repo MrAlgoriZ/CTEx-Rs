@@ -11,10 +11,12 @@ use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::TargetType;
+use crate::models::TaskType;
 use crate::models::model::{Model, ModelDependencies};
 
 pub struct XGBoost {
     model: Option<XGRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
+    task_type: TaskType,
     name: String,
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
@@ -29,6 +31,7 @@ pub struct XGBoost {
 impl XGBoost {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+        task_type: TaskType,
         target_type: TargetType,
         standart: SQLStandart,
         pool: PgPool,
@@ -37,6 +40,7 @@ impl XGBoost {
     ) -> Self {
         Self {
             model: None,
+            task_type,
             name: "XGBoost".to_string(),
             target_type,
             symbol_columns: None,
@@ -100,12 +104,17 @@ impl Model for XGBoost {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error> {
-        let params = XGRegressorParameters::default()
-            .with_n_estimators(self.n_estimators)
-            .with_max_depth(self.max_depth)
-            .with_seed(self.get_config().model.seed);
+        match self.task_type {
+            TaskType::Regression => {
+                let params = XGRegressorParameters::default()
+                    .with_n_estimators(self.n_estimators)
+                    .with_max_depth(self.max_depth)
+                    .with_seed(self.get_config().model.seed);
 
-        self.model = Some(XGRegressor::fit(x_train, y_train, params)?);
+                self.model = Some(XGRegressor::fit(x_train, y_train, params)?);
+            }
+            _ => return Err(anyhow!("XGBoost supports only regression task type!")),
+        };
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             self.evaluate(xv, yv)?;

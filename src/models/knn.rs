@@ -5,6 +5,7 @@ use smartcore::linalg::basic::arrays::Array;
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::distance::euclidian::Euclidian;
 use smartcore::neighbors::KNNWeightFunction;
+use smartcore::neighbors::knn_classifier::{KNNClassifier, KNNClassifierParameters};
 use smartcore::neighbors::knn_regressor::{KNNRegressor, KNNRegressorParameters};
 use smartcore::preprocessing::numerical::StandardScaler;
 use sqlx::PgPool;
@@ -17,10 +18,14 @@ use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::TargetType;
+use crate::models::TaskType;
 use crate::models::model::{Model, ModelDependencies};
 
 pub struct KNN {
-    model: Option<KNNRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>, Euclidian<f64>>>,
+    regression_model: Option<KNNRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>, Euclidian<f64>>>,
+    classification_model:
+        Option<KNNClassifier<f64, i32, DenseMatrix<f64>, Vec<i32>, Euclidian<f64>>>,
+    task_type: TaskType,
     name: String,
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
@@ -36,6 +41,7 @@ pub struct KNN {
 impl KNN {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+        task_type: TaskType,
         target_type: TargetType,
         standart: SQLStandart,
         pool: PgPool,
@@ -44,7 +50,9 @@ impl KNN {
         k: usize,
     ) -> Self {
         Self {
-            model: None,
+            regression_model: None,
+            classification_model: None,
+            task_type,
             name: "KNN".to_string(),
             target_type,
             symbol_columns: None,
@@ -77,9 +85,12 @@ impl ModelDependencies for KNN {
     }
 
     fn check_model_trained(&self) -> bool {
-        match self.model.as_ref() {
+        match self.regression_model.as_ref() {
             Some(_) => return true,
-            None => return false,
+            None => match self.classification_model.as_ref() {
+                Some(_) => return true,
+                None => return false,
+            },
         }
     }
 
@@ -122,12 +133,28 @@ impl Model for KNN {
             _ => None,
         };
 
-        let params = KNNRegressorParameters::default()
-            .with_algorithm(algorithm_value.unwrap_or(KNNAlgorithmName::CoverTree))
-            .with_weight(weight_value.unwrap_or(KNNWeightFunction::Uniform))
-            .with_k(self.k);
+        match self.task_type {
+            TaskType::Regression => {
+                let params = KNNRegressorParameters::default()
+                    .with_algorithm(algorithm_value.unwrap_or(KNNAlgorithmName::CoverTree))
+                    .with_weight(weight_value.unwrap_or(KNNWeightFunction::Uniform))
+                    .with_k(self.k);
 
-        self.model = Some(KNNRegressor::fit(x_train, y_train, params)?);
+                self.regression_model = Some(KNNRegressor::fit(x_train, y_train, params)?);
+            }
+            TaskType::Classification => {
+                let params = KNNClassifierParameters::default()
+                    .with_algorithm(algorithm_value.unwrap_or(KNNAlgorithmName::CoverTree))
+                    .with_weight(weight_value.unwrap_or(KNNWeightFunction::Uniform))
+                    .with_k(self.k);
+
+                self.classification_model = Some(KNNClassifier::fit(
+                    x_train,
+                    &y_train.iter().map(|v| *v as i32).collect(),
+                    params,
+                )?);
+            }
+        }
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             self.evaluate(xv, yv)?;
@@ -137,11 +164,22 @@ impl Model for KNN {
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
-        let model = self
-            .model
-            .as_ref()
-            .ok_or(anyhow!("Model not trained yet!"))?;
-        let prediction = model.predict(values)?;
+        let prediction = match self.task_type {
+            TaskType::Regression => {
+                let model = self
+                    .regression_model
+                    .as_ref()
+                    .ok_or(anyhow!("Model not trained yet!"))?;
+                model.predict(values)?
+            }
+            TaskType::Classification => {
+                let model = self
+                    .classification_model
+                    .as_ref()
+                    .ok_or(anyhow!("Model not trained yet!"))?;
+                model.predict(values)?.iter().map(|v| *v as f64).collect()
+            }
+        };
         Ok(prediction)
     }
 

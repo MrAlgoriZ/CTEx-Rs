@@ -16,10 +16,12 @@ use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::TargetType;
+use crate::models::TaskType;
 use crate::models::model::{Model, ModelDependencies};
 
 pub struct Linear {
     model: Option<LinearRegression<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
+    task_type: TaskType,
     name: String,
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
@@ -33,6 +35,7 @@ pub struct Linear {
 impl Linear {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+        task_type: TaskType,
         target_type: TargetType,
         standart: SQLStandart,
         pool: PgPool,
@@ -40,6 +43,7 @@ impl Linear {
     ) -> Self {
         Self {
             model: None,
+            task_type,
             name: "Linear".to_string(),
             target_type,
             symbol_columns: None,
@@ -102,17 +106,21 @@ impl Model for Linear {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error> {
-        let solver: &str = &self.solver;
-        let params =
-            match solver {
-                "QR" => LinearRegressionParameters::default()
-                    .with_solver(LinearRegressionSolverName::QR),
-                "SVD" => LinearRegressionParameters::default()
-                    .with_solver(LinearRegressionSolverName::SVD),
-                _ => LinearRegressionParameters::default(),
-            };
+        match self.task_type {
+            TaskType::Regression => {
+                let solver: &str = &self.solver;
+                let params = match solver {
+                    "QR" => LinearRegressionParameters::default()
+                        .with_solver(LinearRegressionSolverName::QR),
+                    "SVD" => LinearRegressionParameters::default()
+                        .with_solver(LinearRegressionSolverName::SVD),
+                    _ => LinearRegressionParameters::default(),
+                };
 
-        self.model = Some(LinearRegression::fit(x_train, y_train, params)?);
+                self.model = Some(LinearRegression::fit(x_train, y_train, params)?);
+            }
+            _ => return Err(anyhow!("Linear supports only regression task type!")),
+        };
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             self.evaluate(xv, yv)?;

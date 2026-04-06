@@ -16,10 +16,12 @@ use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::TargetType;
+use crate::models::TaskType;
 use crate::models::model::{Model, ModelDependencies};
 
 pub struct Ridge {
     model: Option<RidgeRegression<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
+    task_type: TaskType,
     name: String,
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
@@ -34,6 +36,7 @@ pub struct Ridge {
 impl Ridge {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+        task_type: TaskType,
         target_type: TargetType,
         standart: SQLStandart,
         pool: PgPool,
@@ -42,6 +45,7 @@ impl Ridge {
     ) -> Self {
         Self {
             model: None,
+            task_type,
             name: "Ridge".to_string(),
             target_type,
             symbol_columns: None,
@@ -105,21 +109,26 @@ impl Model for Ridge {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error> {
-        let solver: &str = &self.solver;
+        match self.task_type {
+            TaskType::Regression => {
+                let solver: &str = &self.solver;
 
-        let params = match solver {
-            "Cholesky" => RidgeRegressionParameters::default()
-                .with_solver(RidgeRegressionSolverName::Cholesky)
-                .with_alpha(self.alpha)
-                .with_normalize(false),
-            "SVD" => RidgeRegressionParameters::default()
-                .with_solver(RidgeRegressionSolverName::SVD)
-                .with_alpha(self.alpha)
-                .with_normalize(false),
-            _ => RidgeRegressionParameters::default().with_alpha(self.alpha),
+                let params = match solver {
+                    "Cholesky" => RidgeRegressionParameters::default()
+                        .with_solver(RidgeRegressionSolverName::Cholesky)
+                        .with_alpha(self.alpha)
+                        .with_normalize(false),
+                    "SVD" => RidgeRegressionParameters::default()
+                        .with_solver(RidgeRegressionSolverName::SVD)
+                        .with_alpha(self.alpha)
+                        .with_normalize(false),
+                    _ => RidgeRegressionParameters::default().with_alpha(self.alpha),
+                };
+
+                self.model = Some(RidgeRegression::fit(x_train, y_train, params)?);
+            }
+            _ => return Err(anyhow!("Ridge supports only regression task type!")),
         };
-
-        self.model = Some(RidgeRegression::fit(x_train, y_train, params)?);
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             self.evaluate(xv, yv)?;

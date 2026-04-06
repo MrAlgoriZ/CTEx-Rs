@@ -12,11 +12,12 @@ use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::manager::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
-use crate::models::TargetType;
 use crate::models::model::{Model, ModelDependencies};
+use crate::models::{TargetType, TaskType};
 
 pub struct ExtraTrees {
     model: Option<ExtraTreesRegressor<f64, f64, DenseMatrix<f64>, Vec<f64>>>,
+    task_type: TaskType,
     name: String,
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
@@ -34,6 +35,7 @@ pub struct ExtraTrees {
 impl ExtraTrees {
     pub fn new(
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
+        task_type: TaskType,
         target_type: TargetType,
         standart: SQLStandart,
         pool: PgPool,
@@ -45,6 +47,7 @@ impl ExtraTrees {
     ) -> Self {
         Self {
             model: None,
+            task_type,
             name: "ExtraTrees".to_string(),
             target_type,
             symbol_columns: None,
@@ -111,16 +114,20 @@ impl Model for ExtraTrees {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error> {
-        let params = ExtraTreesRegressorParameters::default()
-            .with_n_trees(self.n_trees)
-            .with_max_depth(self.max_depth)
-            .with_seed(self.get_config().model.seed)
-            .with_min_samples_leaf(self.min_samples_leaf)
-            .with_min_samples_split(self.min_samples_split)
-            .with_m(self.m);
+        match self.task_type {
+            TaskType::Regression => {
+                let params = ExtraTreesRegressorParameters::default()
+                    .with_n_trees(self.n_trees)
+                    .with_max_depth(self.max_depth)
+                    .with_seed(self.get_config().model.seed)
+                    .with_min_samples_leaf(self.min_samples_leaf)
+                    .with_min_samples_split(self.min_samples_split)
+                    .with_m(self.m);
 
-        self.model = Some(ExtraTreesRegressor::fit(x_train, y_train, params)?);
-
+                self.model = Some(ExtraTreesRegressor::fit(x_train, y_train, params)?);
+            }
+            _ => return Err(anyhow!("ExtraTrees supports only regression task type!")),
+        };
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             self.evaluate(xv, yv)?;
         }

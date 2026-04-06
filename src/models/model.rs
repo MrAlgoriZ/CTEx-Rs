@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use chrono::Utc;
 
 use smartcore::linalg::basic::matrix::DenseMatrix;
-use smartcore::metrics::{mean_absolute_error, mean_squared_error, r2};
+use smartcore::metrics::{accuracy, mean_absolute_error, mean_squared_error, r2};
 use smartcore::model_selection::train_test_split;
 use sqlx::PgPool;
 use std::collections::{BTreeMap, BTreeSet};
@@ -166,7 +166,7 @@ pub trait Model: ModelDependencies {
         );
 
         let metric = match self.get_config().model.metric {
-            MetricType::All => {
+            MetricType::RAll => {
                 let dir_accuracy = direction_accuracy(&y_float, &proba);
                 let mae = mean_absolute_error(&y_float, &proba);
                 let mse = mean_squared_error(&y_float, &proba);
@@ -304,6 +304,22 @@ pub trait Model: ModelDependencies {
                 }
                 rmse
             }
+            MetricType::Acc => {
+                let acc = accuracy(
+                    &y_float.iter().map(|v| *v as i32).collect::<Vec<i32>>(),
+                    &proba.iter().map(|v| *v as i32).collect::<Vec<i32>>(),
+                );
+                if self.get_config().prints.model.metrics {
+                    println!(
+                        "{}[{}] Accuracy for {}: {:.3} pp",
+                        Fore::WHITE.as_str(),
+                        Utc::now().format("%H:%M:%S"),
+                        self.get_name(),
+                        acc
+                    );
+                }
+                acc
+            }
         };
 
         Ok(metric)
@@ -420,11 +436,13 @@ pub fn init_single_model(
 ) -> Box<dyn Model + Send + Sync> {
     let model: Box<dyn Model + Send + Sync> = match params {
         SingleModelParams::XGBoost {
+            task_type,
             target_type,
             n_estimators,
             max_depth,
         } => Box::new(crate::models::xgboost::XGBoost::new(
             prediction_tx,
+            task_type,
             target_type,
             standart,
             pool,
@@ -432,6 +450,7 @@ pub fn init_single_model(
             max_depth,
         )),
         SingleModelParams::RandomForest {
+            task_type,
             target_type,
             n_trees,
             max_depth,
@@ -440,6 +459,7 @@ pub fn init_single_model(
             m,
         } => Box::new(crate::models::randomforest::RandomForest::new(
             prediction_tx,
+            task_type,
             target_type,
             standart,
             pool,
@@ -450,21 +470,25 @@ pub fn init_single_model(
             m,
         )),
         SingleModelParams::Linear {
+            task_type,
             target_type,
             solver,
         } => Box::new(crate::models::linear::Linear::new(
             prediction_tx,
+            task_type,
             target_type,
             standart,
             pool,
             solver,
         )),
         SingleModelParams::Ridge {
+            task_type,
             target_type,
             alpha,
             solver,
         } => Box::new(crate::models::ridge::Ridge::new(
             prediction_tx,
+            task_type,
             target_type,
             standart,
             pool,
@@ -472,12 +496,14 @@ pub fn init_single_model(
             alpha,
         )),
         SingleModelParams::DecisionTree {
+            task_type,
             target_type,
             max_depth,
             min_samples_leaf,
             min_samples_split,
         } => Box::new(crate::models::decisiontree::DecisionTree::new(
             prediction_tx,
+            task_type,
             target_type,
             standart,
             pool,
@@ -486,12 +512,14 @@ pub fn init_single_model(
             min_samples_split,
         )),
         SingleModelParams::KNN {
+            task_type,
             target_type,
             algorithm,
             weight,
             k,
         } => Box::new(crate::models::knn::KNN::new(
             prediction_tx,
+            task_type,
             target_type,
             standart,
             pool,
@@ -500,6 +528,7 @@ pub fn init_single_model(
             k,
         )),
         SingleModelParams::ExtraTrees {
+            task_type,
             target_type,
             n_trees,
             max_depth,
@@ -508,6 +537,7 @@ pub fn init_single_model(
             m,
         } => Box::new(crate::models::extratrees::ExtraTrees::new(
             prediction_tx,
+            task_type,
             target_type,
             standart,
             pool,

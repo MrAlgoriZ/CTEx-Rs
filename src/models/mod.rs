@@ -1,19 +1,27 @@
-pub mod decisiontree;
 pub mod ensemble;
+pub mod metrics;
+pub mod model;
+
+pub mod decisiontree;
 pub mod extratrees;
 pub mod knn;
 pub mod linear;
-pub mod metrics;
-pub mod model;
 pub mod randomforest;
 pub mod ridge;
 pub mod xgboost;
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 #[serde(rename_all = "snake_case")]
-pub enum ModelType {
+pub enum ModelStructure {
     Ensemble,
     Single,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskType {
+    Regression,
+    Classification,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -64,11 +72,13 @@ impl TargetType {
 #[serde(tag = "kind")]
 pub enum SingleModelParams {
     XGBoost {
+        task_type: TaskType,
         target_type: TargetType,
         n_estimators: usize,
         max_depth: u16,
     },
     RandomForest {
+        task_type: TaskType,
         target_type: TargetType,
         n_trees: usize,
         max_depth: u16,
@@ -77,6 +87,7 @@ pub enum SingleModelParams {
         m: usize,
     },
     ExtraTrees {
+        task_type: TaskType,
         target_type: TargetType,
         n_trees: usize,
         max_depth: u16,
@@ -85,21 +96,25 @@ pub enum SingleModelParams {
         m: usize,
     },
     Linear {
+        task_type: TaskType,
         target_type: TargetType,
         solver: String,
     },
     Ridge {
+        task_type: TaskType,
         target_type: TargetType,
         alpha: f64,
         solver: String,
     },
     DecisionTree {
+        task_type: TaskType,
         target_type: TargetType,
         max_depth: u16,
         min_samples_leaf: usize,
         min_samples_split: usize,
     },
     KNN {
+        task_type: TaskType,
         target_type: TargetType,
         algorithm: String,
         weight: String,
