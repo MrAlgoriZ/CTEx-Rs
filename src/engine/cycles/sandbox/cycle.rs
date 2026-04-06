@@ -7,6 +7,7 @@ use crate::data::data_interfaces::{Candle, DataMap};
 use crate::data::process::data_collection::{OHLCV_FETCH_LEN, OHLCV_LEN, collect_targets};
 use crate::data::process::features::auxiliary::{process_return, restore_price};
 use crate::data::process::volatility::get_volatility;
+use crate::data::requests::ccxt::account::{Direction, DummyAccount};
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::CyclePhase;
@@ -20,18 +21,21 @@ use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 
-pub struct LoaderWMCycle {
+pub struct SandboxCycle {
     pub symbol: String,
     last_candles: Option<DataMap>,
     last_close: Option<f64>,
     last_predictions: Option<DataMap>,
+    last_order_price: Option<f64>,
     print_symbol: String,
-    client: CCXTClient,
     config: Config,
     pool: PgPool,
+    client: CCXTClient,
+    account: DummyAccount,
+    start_balance: Option<f64>,
 }
 
-impl CycleGetters for LoaderWMCycle {
+impl CycleGetters for SandboxCycle {
     fn get_symbol(&self) -> &str {
         &self.symbol
     }
@@ -49,35 +53,40 @@ impl CycleGetters for LoaderWMCycle {
     }
 }
 
-impl CycleGettersForCycleWithModel for LoaderWMCycle {
+impl CycleGettersForCycleWithModel for SandboxCycle {
     fn get_pool(&self) -> &sqlx::PgPool {
         &self.pool
     }
+
     fn change_last_predictions(&mut self, predictions: DataMap) {
         self.last_predictions = Some(predictions);
     }
 }
 
-impl Cycle for LoaderWMCycle {}
-impl CycleWithModel for LoaderWMCycle {}
+impl Cycle for SandboxCycle {}
+impl CycleWithModel for SandboxCycle {}
 
-impl LoaderWMCycle {
-    fn new(symbol: String, client: CCXTClient, pool: PgPool) -> Self {
-        LoaderWMCycle {
+impl SandboxCycle {
+    fn new(symbol: String, pool: PgPool, client: CCXTClient, account: DummyAccount) -> Self {
+        SandboxCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
-            symbol: symbol,
+            symbol: symbol.clone(),
             last_candles: None,
             last_close: None,
             last_predictions: None,
+            last_order_price: None,
             config: load_config("config/config.yaml"),
-            client,
             pool,
+            client,
+            account,
+            start_balance: None,
         }
     }
 
     pub async fn init(symbol: String, client: CCXTClient) -> Result<Self, anyhow::Error> {
         let pool = PgPool::connect(&load_env().database_url).await?;
-        Ok(Self::new(symbol, client, pool))
+        let account = DummyAccount::init("".to_string(), "".to_string());
+        Ok(Self::new(symbol, pool, client, account))
     }
 
     pub async fn run(
@@ -85,7 +94,7 @@ impl LoaderWMCycle {
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), CycleError> {
-        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+        if !self.get_client().test_symbol(&self.symbol).await.is_ok() {
             return Err(CycleError::SymbolDoesNotExist);
         }
         let mut volatility: f64 = 0.0;
@@ -101,11 +110,11 @@ impl LoaderWMCycle {
             }
 
             let (candles, ohlcv) = self
-                .client
+                .get_client()
                 .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
                 .await?;
             let close: f64 = self
-                .client
+                .get_client()
                 .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
                 .await?[0]
                 .close;
@@ -113,7 +122,10 @@ impl LoaderWMCycle {
             match phase {
                 CyclePhase::Active => {
                     let target = process_return(self.last_close.unwrap(), close);
+
                     let diff: f64 = (prediction.unwrap() - target).abs();
+                    let success: bool =
+                        diff < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
                     if self.config.prints.cycle.target {
                         println!(
@@ -130,39 +142,60 @@ impl LoaderWMCycle {
                     self.update_counters(prediction.unwrap(), target, volatility, counter_tx)
                         .await;
 
-                    let last_candles = self.last_candles.clone().unwrap();
-                    let last_predictions = self.last_predictions.clone().unwrap();
+                    if !success {
+                        let last_candles = self.last_candles.clone().unwrap();
+                        let last_predictions = self.last_predictions.clone().unwrap();
+                        let (tx, rx) = oneshot::channel();
+                        let _ = model_tx
+                            .send(ModelCommand::GetAccuracy { respond_to: tx })
+                            .await;
+                        let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
+                        let targets = DataMap::new(
+                            self.get_symbol().to_string(),
+                            collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
+                        );
 
-                    let (tx, rx) = oneshot::channel();
-                    let _ = model_tx
-                        .send(ModelCommand::GetAccuracy { respond_to: tx })
-                        .await;
-                    let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
-                    let targets = DataMap::new(
-                        self.get_symbol().to_string(),
-                        collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
-                    );
-
-                    self.handle_mistake(
-                        (last_candles + accuracy) + targets, // Внутри функции сохраняется всё, но модель сравнивает только targets
-                        last_predictions,
-                        counter_tx,
-                        model_tx,
-                    )
-                    .await?;
+                        self.handle_mistake(
+                            (last_candles + accuracy) + targets,
+                            last_predictions,
+                            counter_tx,
+                            model_tx,
+                        )
+                        .await?;
+                    }
                 }
                 _ => {}
             }
 
             let candles_to_pred = candles.clone();
-
             prediction = Some(self.predict(candles_to_pred, &model_tx).await.unwrap());
             let restored_price: f64 = restore_price(close, prediction.unwrap());
+
+            let direction = if prediction.unwrap() > 0.0 {
+                Direction::Buy
+            } else {
+                Direction::Sell
+            };
+            let amount = prediction.unwrap() * 0.01;
+
+            self.account
+                .create_fake_order(
+                    self.symbol.clone(),
+                    amount,
+                    direction,
+                    self.client.fetch_ticker(&self.symbol).await?.bid,
+                )
+                .await?;
 
             phase = CyclePhase::Active;
             self.log_prediction(prediction.unwrap(), restored_price);
             self.last_candles = Some(candles);
             self.last_close = Some(close);
+
+            println!(
+                "Balance (USDT): ${:.3}",
+                self.account.get_balance_usdt(&self.client).await?.unwrap()
+            ); // TODO CycleWithAccount.log_balance_usdt()
 
             if self.config.prints.cycle.accuracy {
                 self.print_accuracy(counter_tx).await;
@@ -174,12 +207,12 @@ impl LoaderWMCycle {
         mut self,
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), CycleError> {
-        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+        if !self.get_client().test_symbol(&self.symbol).await.is_ok() {
             return Err(CycleError::SymbolDoesNotExist);
         }
 
         println!(
-            "{}{} {}Бектест начался!\n",
+            "{}{} {}Бектест начался!",
             self.print_time(),
             self.print_symbol,
             Fore::YELLOW.as_str()
@@ -189,7 +222,7 @@ impl LoaderWMCycle {
         let mut prediction: Option<f64> = None;
 
         let all_candles = self
-            .client
+            .get_client()
             .fetch_ohlcv_with_timestamp(&self.symbol, &self.config.timeframes.main_timeframe, 1000)
             .await?;
 
@@ -198,7 +231,6 @@ impl LoaderWMCycle {
         let total = (all_candles.len() - 1 - OHLCV_FETCH_LEN) as u64;
 
         let mut threshold_counter: SymbolCounters<u8> = SymbolCounters::new(total as usize);
-        let mut direction_counter: SymbolCounters<u8> = SymbolCounters::new(total as usize);
 
         let pb = ProgressBar::new(total);
         pb.set_style(
@@ -232,14 +264,7 @@ impl LoaderWMCycle {
                         diff < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
                     let threshold_value: u8 = success.into();
-                    let direction_value: u8 = {
-                        let target_direction = target > 0.0;
-                        let prediction_direction = prediction.unwrap() > 0.0;
-                        (target_direction == prediction_direction).into()
-                    };
-
                     threshold_counter.push(threshold_value);
-                    direction_counter.push(direction_value);
 
                     let last_candles = self.last_candles.clone().unwrap();
 
@@ -258,16 +283,13 @@ impl LoaderWMCycle {
                         collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
                     );
 
-                    if self.config.runtime.with_saves {
+                    if !success && self.config.runtime.with_training {
                         SQLStandart::Dummy
                             .insert_row(
                                 &self.pool,
                                 last_candles.clone() + accuracy.clone() + targets.clone(),
                             )
                             .await?;
-                    }
-
-                    if self.config.runtime.with_training {
                         let shifted_acc = threshold_counter.get_shifted_accuracy(3);
                         if shifted_acc.unwrap_or(0.0) == 0.0 {
                             let (tx, rx) = oneshot::channel();
@@ -283,16 +305,44 @@ impl LoaderWMCycle {
                         }
                     }
                 }
-                _ => {}
+                CyclePhase::Warmup => {
+                    self.start_balance = Some(
+                        self.account
+                            .get_fake_balance_usdt(window.last().unwrap().open)
+                            .await?
+                            .unwrap(),
+                    );
+                    println!(
+                        "{}{} {}Start balance (USDT): ${:.3}\n",
+                        self.print_time(),
+                        self.print_symbol,
+                        Fore::GREEN.as_str(),
+                        self.start_balance.unwrap()
+                    );
+                }
             }
 
             let candles_to_pred = candles.clone();
-
             prediction = Some(self.predict(candles_to_pred, &model_tx).await?);
+
+            let direction = if prediction.unwrap() > 0.0 {
+                Direction::Buy
+            } else {
+                Direction::Sell
+            };
+            let amount = prediction.unwrap() * 0.01;
+
+            let order_price = window.last().unwrap().open;
+
+            let _ = self
+                .account
+                .create_fake_order(self.symbol.clone(), amount, direction, order_price)
+                .await;
 
             phase = CyclePhase::Active;
             self.last_candles = Some(candles);
             self.last_close = Some(current_close);
+            self.last_order_price = Some(order_price);
             pb.inc(1);
         }
 
@@ -305,20 +355,35 @@ impl LoaderWMCycle {
 
         tokio::time::sleep(Duration::from_secs(1)).await;
 
+        let end_balance = self
+            .account
+            .get_fake_balance_usdt(self.last_order_price.unwrap())
+            .await?
+            .unwrap();
+
+        let percent =
+            ((end_balance - self.start_balance.unwrap()) / self.start_balance.unwrap()) * 100.0;
+
+        let fore = if percent > 0.0 {
+            Fore::GREEN.as_str()
+        } else {
+            Fore::RED.as_str()
+        };
+
         println!(
-            "\n{}{} {}Точность по threshold составляет: {:.3}%",
+            "\n\n{}{} {}End balance (USDT): ${:.3}",
             self.print_time(),
             self.print_symbol,
-            Fore::YELLOW.as_str(),
-            threshold_counter.get_accuracy()
+            fore,
+            end_balance
         );
 
         println!(
-            "{}{} {}Точность по направлению составляет: {:.3}%",
+            "{}{} {}Модель заработала: {:.5}%",
             self.print_time(),
             self.print_symbol,
-            Fore::YELLOW.as_str(),
-            direction_counter.get_accuracy()
+            fore,
+            percent
         );
 
         Ok(())

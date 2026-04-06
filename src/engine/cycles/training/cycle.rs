@@ -276,7 +276,7 @@ impl TrainingCycle {
                             let last_predictions = self.last_predictions.clone().unwrap();
                             let _ = model_tx
                                 .send(ModelCommand::HandleMistakes {
-                                    true_data: (last_candles + accuracy) + targets,
+                                    true_data: targets,
                                     predicted_data: last_predictions,
                                     respond_to: tx,
                                 })

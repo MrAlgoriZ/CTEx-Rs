@@ -116,6 +116,7 @@ pub enum CycleType {
     Loader,
     Loaderwm,
     Training,
+    Sandbox,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
