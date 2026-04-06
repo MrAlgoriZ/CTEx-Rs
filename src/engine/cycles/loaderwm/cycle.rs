@@ -143,8 +143,16 @@ impl LoaderWMCycle {
                         collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
                     );
 
+                    let summary_data = {
+                        if let Some(acc) = accuracy {
+                            last_candles + acc + targets
+                        } else {
+                            last_candles + targets
+                        }
+                    };
+
                     self.handle_mistake(
-                        (last_candles + accuracy) + targets, // Внутри функции сохраняется всё, но модель сравнивает только targets
+                        summary_data, // Внутри функции сохраняется всё, но модель сравнивает только targets
                         last_predictions,
                         counter_tx,
                         model_tx,
@@ -258,12 +266,17 @@ impl LoaderWMCycle {
                         collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
                     );
 
+                    let summary_data = {
+                        if let Some(acc) = accuracy {
+                            last_candles.clone() + acc.clone() + targets.clone()
+                        } else {
+                            last_candles.clone() + targets.clone()
+                        }
+                    };
+
                     if self.config.runtime.with_saves {
                         SQLStandart::Dummy
-                            .insert_row(
-                                &self.pool,
-                                last_candles.clone() + accuracy.clone() + targets.clone(),
-                            )
+                            .insert_row(&self.pool, summary_data)
                             .await?;
                     }
 

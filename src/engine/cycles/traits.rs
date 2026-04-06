@@ -163,7 +163,6 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         model_tx: &mpsc::Sender<ModelCommand>,
     ) -> Result<(), anyhow::Error> {
         if true_data.has_target() {
-            // TODO: Вставлять только обработанные данные со всеми таргетами
             SQLStandart::Dummy
                 .insert_row(&self.get_pool(), true_data.clone())
                 .await?;

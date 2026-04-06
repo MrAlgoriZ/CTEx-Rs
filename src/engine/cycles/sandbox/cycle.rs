@@ -155,13 +155,16 @@ impl SandboxCycle {
                             collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
                         );
 
-                        self.handle_mistake(
-                            (last_candles + accuracy) + targets,
-                            last_predictions,
-                            counter_tx,
-                            model_tx,
-                        )
-                        .await?;
+                        let summary_data = {
+                            if let Some(acc) = accuracy {
+                                last_candles + acc + targets
+                            } else {
+                                last_candles + targets
+                            }
+                        };
+
+                        self.handle_mistake(summary_data, last_predictions, counter_tx, model_tx)
+                            .await?;
                     }
                 }
                 _ => {}
@@ -284,11 +287,16 @@ impl SandboxCycle {
                     );
 
                     if !success && self.config.runtime.with_training {
+                        let summary_data = {
+                            if let Some(acc) = accuracy {
+                                last_candles.clone() + acc.clone() + targets.clone()
+                            } else {
+                                last_candles.clone() + targets.clone()
+                            }
+                        };
+
                         SQLStandart::Dummy
-                            .insert_row(
-                                &self.pool,
-                                last_candles.clone() + accuracy.clone() + targets.clone(),
-                            )
+                            .insert_row(&self.pool, summary_data)
                             .await?;
                         let shifted_acc = threshold_counter.get_shifted_accuracy(3);
                         if shifted_acc.unwrap_or(0.0) == 0.0 {

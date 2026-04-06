@@ -7,7 +7,9 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::CONFIG_PATH;
 use crate::data::data_interfaces::DataMap;
-use crate::data::requests::database::standart::SQLStandart;
+use crate::data::requests::database::standart::{
+    SQLStandart, get_confidence_name, get_prediction_name,
+};
 use crate::engine::cycles::manager::{ModelActor, ModelCommand, PredictionsCommand};
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::config::config_types::Config;
@@ -251,7 +253,6 @@ impl Ensemble {
             pool.clone(),
         );
 
-        // TODO: Заменить action_type на классификацию. Добавить в конфиг моделей классификацию
         let (action_type_model_actor, action_type_model_tx) = ModelActor::new(action_type_model);
         tokio::spawn(action_type_model_actor.run());
 
@@ -390,7 +391,6 @@ impl Model for Ensemble {
 
     async fn predict(&self, data: DataMap) -> Result<DataMap, anyhow::Error> {
         let mut data = data.clone();
-
         let mut predictions = DataMap::new(data.symbol.clone(), BTreeMap::new());
 
         // FIRST LAYER
@@ -416,8 +416,10 @@ impl Model for Ensemble {
                 .await?;
             let result = rx.await?;
             for (k, v) in result.get_data().iter() {
-                predictions.entry(k.clone()).or_insert(*v);
-                data.insert(k.clone(), *v);
+                let key = get_prediction_name(k)
+                    .ok_or(anyhow!(format!("Prediction with name {} is not exists", k)))?;
+                predictions.entry(key.clone()).or_insert(*v);
+                data.insert(key, *v);
             }
         }
 
@@ -441,8 +443,10 @@ impl Model for Ensemble {
                 .await?;
             let result = rx.await?;
             for (k, v) in result.get_data().iter() {
-                predictions.entry(k.clone()).or_insert(*v);
-                data.insert(k.clone(), *v);
+                let key = get_prediction_name(k)
+                    .ok_or(anyhow!(format!("Prediction with name {} is not exists", k)))?;
+                predictions.entry(key.clone()).or_insert(*v); // future_*_pred
+                data.insert(key, *v);
             }
         }
 
@@ -463,8 +467,8 @@ impl Model for Ensemble {
                 .await?;
             let result = rx.await?;
             for (k, v) in result.get_data().iter() {
-                predictions.entry(k.clone()).or_insert(*v);
-                data.insert(k.clone(), *v);
+                predictions.entry(k.to_string()).or_insert(*v);
+                data.insert(k.to_string(), *v);
             }
         }
 
@@ -479,7 +483,7 @@ impl Model for Ensemble {
         for (k, v) in true_data.get_data().iter() {
             if let Some(predicted) = predicted_data.get(k) {
                 if (v - predicted).abs() < self.config.behaviour.success_threshold {
-                    self.counters.get_mut(k).push(1);
+                    self.counters.get_mut(k).push(1); // future_*
                 } else {
                     self.counters.get_mut(k).push(0);
                     let model_tx = self.get_model_by_name(k).ok_or(anyhow::anyhow!(format!(
@@ -499,5 +503,21 @@ impl Model for Ensemble {
             }
         }
         Ok(())
+    }
+
+    fn get_accuracy(&self) -> Option<DataMap> {
+        let mut accs = BTreeMap::new();
+        self.counters.symbols.iter().for_each(|model| {
+            if !matches!(
+                model.0.as_str(),
+                "future_return" | "action_type" | "position_size" // future_*
+            ) {
+                let acc = model.1.get_accuracy();
+                if let Some(conf_name) = get_confidence_name(model.0) {
+                    accs.insert(conf_name, acc); // future_*_confidence
+                }
+            }
+        });
+        Some(DataMap::new("".to_string(), accs))
     }
 }

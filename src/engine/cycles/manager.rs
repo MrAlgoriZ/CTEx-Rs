@@ -461,7 +461,7 @@ pub enum ModelCommand {
         respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
     },
     GetAccuracy {
-        respond_to: oneshot::Sender<DataMap>,
+        respond_to: oneshot::Sender<Option<DataMap>>,
     },
 }
 
