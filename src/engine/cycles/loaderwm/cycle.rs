@@ -80,7 +80,7 @@ impl LoaderWMCycle {
     pub async fn run(
         mut self,
         counter_tx: &mpsc::Sender<CounterCommand>,
-        model_tx: &mpsc::Sender<ModelCommand>,
+        model_tx: Option<&mpsc::Sender<ModelCommand>>,
     ) -> Result<(), CycleError> {
         if !self.client.test_symbol(&self.symbol).await.is_ok() {
             return Err(CycleError::SymbolDoesNotExist);
@@ -139,12 +139,13 @@ impl LoaderWMCycle {
                     let last_candles = self.last_candles.clone().unwrap();
                     let last_predictions = self.last_predictions.clone().unwrap();
 
-                    let (tx, rx) = oneshot::channel();
-                    let _ = model_tx
-                        .send(ModelCommand::GetAccuracy { respond_to: tx })
-                        .await;
-                    let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
-
+                    let accuracy = if let Some(mtx) = model_tx {
+                        let (tx, rx) = oneshot::channel();
+                        let _ = mtx.send(ModelCommand::GetAccuracy { respond_to: tx }).await;
+                        rx.await.map_err(|e| anyhow::anyhow!(e))?
+                    } else {
+                        todo!()
+                    };
                     let summary_data = {
                         if let Some(acc) = accuracy {
                             last_candles + acc + targets
@@ -166,10 +167,15 @@ impl LoaderWMCycle {
 
             let candles_to_pred = candles.clone();
 
-            prediction = Some(self.predict(candles_to_pred, &model_tx).await.unwrap());
-
+            prediction = if let Some(mtx) = model_tx {
+                Some(self.predict(candles_to_pred, &mtx).await.unwrap())
+            } else {
+                None
+            };
             phase = CyclePhase::Active;
-            self.log_prediction(prediction.unwrap());
+            if let Some(pred) = prediction {
+                self.log_prediction(pred);
+            }
             self.last_candles = Some(candles);
 
             if self.config.prints.cycle.accuracy {
@@ -180,7 +186,7 @@ impl LoaderWMCycle {
 
     pub async fn run_backtest(
         mut self,
-        model_tx: &mpsc::Sender<ModelCommand>,
+        model_tx: Option<&mpsc::Sender<ModelCommand>>,
     ) -> Result<(), CycleError> {
         if !self.client.test_symbol(&self.symbol).await.is_ok() {
             return Err(CycleError::SymbolDoesNotExist);
@@ -233,11 +239,13 @@ impl LoaderWMCycle {
                 CyclePhase::Active => {
                     let last_candles = self.last_candles.clone().unwrap();
 
-                    let (tx, rx) = oneshot::channel();
-                    let _ = model_tx
-                        .send(ModelCommand::GetAccuracy { respond_to: tx })
-                        .await;
-                    let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
+                    let accuracy = if let Some(mtx) = model_tx {
+                        let (tx, rx) = oneshot::channel();
+                        let _ = mtx.send(ModelCommand::GetAccuracy { respond_to: tx }).await;
+                        rx.await.map_err(|e| anyhow::anyhow!(e))?
+                    } else {
+                        Some(DataMap::generate_accuracy())
+                    };
                     let ohlcv = window[..OHLCV_LEN]
                         .iter()
                         .map(|candle| candle.to_candle())
@@ -249,23 +257,35 @@ impl LoaderWMCycle {
                     );
 
                     let target = targets.get("position_size").unwrap();
-                    let ratio = if target != &0.0 {
-                        (prediction.unwrap() - target).abs() / (target).abs()
-                    } else {
-                        100_000.0
-                    };
-                    let success: bool =
-                        ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
-
-                    let threshold_value: u8 = success.into();
-                    threshold_counter.push(threshold_value);
-
-                    let summary_data = {
-                        if let Some(acc) = accuracy {
-                            last_candles.clone() + acc.clone() + targets.clone()
+                    if let Some(pred) = prediction {
+                        let ratio = if target != &0.0 {
+                            (pred - target).abs() / (target).abs()
                         } else {
-                            last_candles.clone() + targets.clone()
+                            100_000.0
+                        };
+                        let success: bool =
+                            ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
+
+                        let threshold_value: u8 = success.into();
+                        threshold_counter.push(threshold_value);
+                    }
+                    let summary_data = {
+                        let mut base = last_candles.clone() + targets.clone();
+                        if let Some(acc) = accuracy {
+                            base = base + acc;
                         }
+                        if let Some(preds) = self.last_predictions.clone() {
+                            base = base
+                                + DataMap::new(
+                                    "".to_string(),
+                                    preds
+                                        .to_standart(&SQLStandart::ThirdLayer)
+                                        .get_only_features(),
+                                )
+                        } else {
+                            base = base + DataMap::generate_predictions(targets.clone())
+                        }
+                        base
                     };
 
                     if self.config.runtime.with_saves {
@@ -275,18 +295,20 @@ impl LoaderWMCycle {
                     }
 
                     if self.config.runtime.with_training {
-                        let shifted_acc = threshold_counter.get_shifted_accuracy(3);
-                        if shifted_acc.unwrap_or(0.0) == 0.0 {
-                            let (tx, rx) = oneshot::channel();
-                            let last_predictions = self.last_predictions.clone().unwrap();
-                            let _ = model_tx
-                                .send(ModelCommand::HandleMistakes {
-                                    true_data: targets,
-                                    predicted_data: last_predictions,
-                                    respond_to: tx,
-                                })
-                                .await;
-                            let _ = rx.await;
+                        if let Some(mtx) = model_tx {
+                            let shifted_acc = threshold_counter.get_shifted_accuracy(3);
+                            if shifted_acc.unwrap_or(0.0) == 0.0 {
+                                let (tx, rx) = oneshot::channel();
+                                let last_predictions = self.last_predictions.clone().unwrap();
+                                let _ = mtx
+                                    .send(ModelCommand::HandleMistakes {
+                                        true_data: targets,
+                                        predicted_data: last_predictions,
+                                        respond_to: tx,
+                                    })
+                                    .await;
+                                let _ = rx.await;
+                            }
                         }
                     }
                 }
@@ -295,7 +317,11 @@ impl LoaderWMCycle {
 
             let candles_to_pred = candles.clone();
 
-            prediction = Some(self.predict(candles_to_pred, &model_tx).await?);
+            prediction = if let Some(mtx) = model_tx {
+                Some(self.predict(candles_to_pred, &mtx).await.unwrap())
+            } else {
+                None
+            };
 
             phase = CyclePhase::Active;
             self.last_candles = Some(candles);

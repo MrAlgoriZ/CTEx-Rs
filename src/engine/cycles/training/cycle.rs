@@ -158,8 +158,13 @@ impl TrainingCycle {
                             }
                         };
 
-                        self.handle_mistake(summary_data, last_predictions, counter_tx, model_tx)
-                            .await?;
+                        self.handle_mistake(
+                            summary_data,
+                            last_predictions,
+                            counter_tx,
+                            Some(model_tx),
+                        )
+                        .await?;
                     }
                 }
                 _ => {}

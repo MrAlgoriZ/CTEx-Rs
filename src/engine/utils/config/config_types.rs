@@ -98,6 +98,7 @@ pub struct RuntimeConfig {
     pub runtime_type: RuntimeType,
     pub with_training: bool,
     pub with_saves: bool,
+    pub with_model: bool,
     pub cycle_type: CycleType,
 }
 
@@ -176,6 +177,7 @@ impl Default for Config {
             runtime: RuntimeConfig {
                 runtime_type: RuntimeType::Realtime,
                 with_training: false,
+                with_model: false,
                 with_saves: true,
                 cycle_type: CycleType::Loader,
             },

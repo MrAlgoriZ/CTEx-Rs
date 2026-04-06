@@ -18,7 +18,7 @@ use crate::engine::cycles::sandbox::cycle::SandboxCycle;
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::state::counters::{Counters, SymbolCounters};
 use crate::engine::utils::colors::Fore;
-use crate::engine::utils::config::config_types::{CycleType, RuntimeType};
+use crate::engine::utils::config::config_types::{Config, CycleType, RuntimeType};
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::engine::utils::parse::parse_symbol;
@@ -271,10 +271,8 @@ impl CycleSupervisor {
                 sleep(Duration::from_secs(10)).await;
 
                 match config.runtime.runtime_type {
-                    RuntimeType::Realtime => {
-                        cycle.run(counter_tx, model_tx.as_ref().unwrap()).await?
-                    }
-                    RuntimeType::Backtest => cycle.run_backtest(model_tx.as_ref().unwrap()).await?,
+                    RuntimeType::Realtime => cycle.run(counter_tx, model_tx.as_ref()).await?,
+                    RuntimeType::Backtest => cycle.run_backtest(model_tx.as_ref()).await?,
                 }
             }
             CycleType::Training => {
@@ -513,6 +511,7 @@ impl WorkerHandle {
 }
 
 pub struct CycleManager {
+    config: Config,
     supervisor_tx: mpsc::Sender<SupervisorCommand>,
     counter_tx: mpsc::Sender<CounterCommand>,
     prediction_tx: mpsc::Sender<PredictionsCommand>,
@@ -524,9 +523,9 @@ pub struct CycleManager {
 
 impl CycleManager {
     pub async fn new() -> Self {
-        let config = load_config(CONFIG_PATH).behaviour;
-        let counter_capacity = config.accuracy_capacity;
-        let prediction_capacity = config.predictions_capacity;
+        let config = load_config(CONFIG_PATH);
+        let counter_capacity = config.behaviour.accuracy_capacity;
+        let prediction_capacity = config.behaviour.predictions_capacity;
 
         let (servers_actor, servers_tx) = ServersActor::new().await;
         let servers_task = tokio::spawn(servers_actor.run());
@@ -545,6 +544,7 @@ impl CycleManager {
         let _ = tokio::spawn(background_cycle.run());
 
         Self {
+            config,
             supervisor_tx,
             counter_tx,
             prediction_tx,
@@ -563,8 +563,11 @@ impl CycleManager {
         let needs_model = symbols.iter().any(|symbol| {
             matches!(
                 cycle_types.get(symbol).unwrap_or(&CycleType::Loader),
-                CycleType::Training | CycleType::Loaderwm | CycleType::Sandbox
-            )
+                CycleType::Training | CycleType::Sandbox
+            ) | (matches!(
+                cycle_types.get(symbol).unwrap_or(&CycleType::Loader),
+                CycleType::Loaderwm
+            ) && self.config.runtime.with_model)
         });
 
         if needs_model {

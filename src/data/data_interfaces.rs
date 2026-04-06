@@ -200,6 +200,87 @@ impl DataMap {
 
         Self::init(symbol, ohlcv, timeframe).with_time(time)
     }
+
+    pub fn generate_accuracy() -> Self {
+        Self {
+            symbol: "".to_string(),
+            data: BTreeMap::from([
+                ("future_volatility_confidence".to_string(), 100.0),
+                ("future_volume_confidence".to_string(), 100.0),
+                ("future_trend_strength_confidence".to_string(), 100.0),
+                ("future_range_confidence".to_string(), 100.0),
+                ("future_return_mean_confidence".to_string(), 100.0),
+                ("future_return_std_confidence".to_string(), 100.0),
+                ("future_return_skewness_confidence".to_string(), 100.0),
+                ("future_return_kurtosis_confidence".to_string(), 100.0),
+                ("risk_score_confidence".to_string(), 100.0),
+                ("drawdown_probability_confidence".to_string(), 100.0),
+                ("tail_event_probability_confidence".to_string(), 100.0),
+                ("volatility_spike_probability_confidence".to_string(), 100.0),
+                ("liquidity_drop_probability_confidence".to_string(), 100.0),
+            ]),
+        }
+    }
+
+    pub fn generate_predictions(targets: DataMap) -> Self {
+        Self {
+            symbol: "".to_string(),
+            data: BTreeMap::from([
+                (
+                    "future_volatility_pred".to_string(),
+                    targets.get("future_volatility").unwrap().clone(),
+                ),
+                (
+                    "future_volume_pred".to_string(),
+                    targets.get("future_volume").unwrap().clone(),
+                ),
+                (
+                    "future_trend_strength_pred".to_string(),
+                    targets.get("future_trend_strength").unwrap().clone(),
+                ),
+                (
+                    "future_range_pred".to_string(),
+                    targets.get("future_range").unwrap().clone(),
+                ),
+                (
+                    "future_return_mean_pred".to_string(),
+                    targets.get("future_return_mean").unwrap().clone(),
+                ),
+                (
+                    "future_return_std_pred".to_string(),
+                    targets.get("future_return_std").unwrap().clone(),
+                ),
+                (
+                    "future_return_skewness_pred".to_string(),
+                    targets.get("future_return_skewness").unwrap().clone(),
+                ),
+                (
+                    "future_return_kurtosis_pred".to_string(),
+                    targets.get("future_return_kurtosis").unwrap().clone(),
+                ),
+                (
+                    "risk_score_pred".to_string(),
+                    targets.get("risk_score").unwrap().clone(),
+                ),
+                (
+                    "drawdown_probability_pred".to_string(),
+                    targets.get("drawdown_probability").unwrap().clone(),
+                ),
+                (
+                    "tail_event_probability_pred".to_string(),
+                    targets.get("tail_event_probability").unwrap().clone(),
+                ),
+                (
+                    "volatility_spike_probability_pred".to_string(),
+                    targets.get("volatility_spike_probability").unwrap().clone(),
+                ),
+                (
+                    "liquidity_drop_probability_pred".to_string(),
+                    targets.get("liquidity_drop_probability").unwrap().clone(),
+                ),
+            ]),
+        }
+    }
 }
 
 impl DataMap {

@@ -404,3 +404,4 @@
   - Сервис ccxt_python_service добавлен в репозиторий CTEx-Rs
   - Для вычисления ошибок diff заменен на ratio
   - Direction accuracy удален
+  - Созданы методы generate_accuracy и generate_predictions для создания первичного датасета Ensemble

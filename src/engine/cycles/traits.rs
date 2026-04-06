@@ -151,7 +151,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         true_data: DataMap,
         predicted_data: DataMap,
         counter_tx: &mpsc::Sender<CounterCommand>,
-        model_tx: &mpsc::Sender<ModelCommand>,
+        model_tx: Option<&mpsc::Sender<ModelCommand>>,
     ) -> Result<(), anyhow::Error> {
         if true_data.has_target() {
             SQLStandart::Dummy
@@ -167,19 +167,21 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                 })
                 .await;
 
-            if let Ok(shifted_acc) = rx.await {
-                if shifted_acc.unwrap_or(0.0) == 0.0 {
-                    let targets =
-                        DataMap::new(true_data.symbol.clone(), true_data.get_only_targets());
-                    let (tx, rx) = oneshot::channel();
-                    let _ = model_tx
-                        .send(ModelCommand::HandleMistakes {
-                            true_data: targets,
-                            predicted_data,
-                            respond_to: tx,
-                        })
-                        .await;
-                    let _ = rx.await;
+            if let Some(mtx) = model_tx {
+                if let Ok(shifted_acc) = rx.await {
+                    if shifted_acc.unwrap_or(0.0) == 0.0 {
+                        let targets =
+                            DataMap::new(true_data.symbol.clone(), true_data.get_only_targets());
+                        let (tx, rx) = oneshot::channel();
+                        let _ = mtx
+                            .send(ModelCommand::HandleMistakes {
+                                true_data: targets,
+                                predicted_data,
+                                respond_to: tx,
+                            })
+                            .await;
+                        let _ = rx.await;
+                    }
                 }
             }
             Ok(())

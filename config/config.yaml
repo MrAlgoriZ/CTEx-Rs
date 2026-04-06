@@ -1,5 +1,5 @@
 model:
-  type: "ensemble"
+  type: "single"
   params:
     kind: "RandomForest"
     task_type: "regression"
@@ -50,7 +50,7 @@ runtime:
   type: "backtest"
   with_training: false
   with_saves: false
-  cycle_type: "sandbox"
+  cycle_type: "loaderwm"
 
 main_exchange: "binance"
 
