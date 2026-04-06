@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use crate::CONFIG_PATH;
 use crate::backend::structure::{ApiState, ApiStructure};
-use crate::engine::cycles::manager::{
-    CounterCommand, CounterType, PredictionsCommand, SupervisorCommand,
-};
+use crate::engine::cycles::manager::{CounterCommand, PredictionsCommand, SupervisorCommand};
 use crate::engine::utils::config::config_types::CycleType;
 use crate::engine::utils::config::load_config::load_config;
 
@@ -229,7 +227,6 @@ pub async fn accuracy_total(
         .counter_handle
         .send(CounterCommand::GetTotalShiftedAccuracy {
             window: query.window,
-            counter_type: CounterType::from_str(&query.counter_type.to_lowercase()),
             respond_to: tx,
         })
         .await
@@ -255,7 +252,6 @@ pub async fn accuracy_token(
         .send(CounterCommand::GetShiftedAccuracy {
             symbol: symbol.to_uppercase(),
             window: query.window,
-            counter_type: CounterType::from_str(&query.counter_type.to_lowercase()),
             respond_to: tx,
         })
         .await
@@ -296,7 +292,6 @@ pub async fn accuracy_all_tokens(
             .send(CounterCommand::GetShiftedAccuracy {
                 symbol: symbol.to_uppercase(),
                 window: query.window,
-                counter_type: CounterType::from_str(&query.counter_type.to_lowercase()),
                 respond_to: tx,
             })
             .await;

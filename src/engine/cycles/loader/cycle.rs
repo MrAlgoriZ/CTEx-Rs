@@ -3,7 +3,6 @@ use sqlx::PgPool;
 
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, DataMap};
 use crate::data::process::data_collection::{OHLCV_FETCH_LEN, OHLCV_LEN, collect_targets};
-use crate::data::process::features::auxiliary::process_return;
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
@@ -101,11 +100,17 @@ impl LoaderCycle {
 
             match phase {
                 CyclePhase::Active => {
+                    let last_candles = self.last_candles.clone().unwrap();
+                    let targets = DataMap::new(
+                        self.get_symbol().to_string(),
+                        collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
+                    );
+
                     if self.config.prints.cycle.target {
-                        let target = process_return(self.last_close.unwrap(), close.unwrap());
+                        let target = targets.get("position_size").unwrap();
 
                         println!(
-                            "{}{} {}Target: {:.5}",
+                            "{}{} {}Position size: {:.5}",
                             self.print_time(),
                             self.print_symbol,
                             Fore::WHITE.as_str(),
@@ -113,11 +118,6 @@ impl LoaderCycle {
                         );
                     }
 
-                    let last_candles = self.last_candles.clone().unwrap();
-                    let targets = DataMap::new(
-                        self.get_symbol().to_string(),
-                        collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
-                    );
                     self.save_data(last_candles + targets, &self.pool)
                         .await
                         .unwrap();

@@ -7,7 +7,7 @@ use crate::data::data_interfaces::{Candle, DataMap, Timeframe};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
-use crate::engine::cycles::manager::{CounterCommand, CounterType, ModelCommand};
+use crate::engine::cycles::manager::{CounterCommand, ModelCommand};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 
@@ -127,30 +127,21 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         volatility: f64,
         counter_tx: &mpsc::Sender<CounterCommand>,
     ) {
-        let diff: f64 = (prediction - target).abs();
+        let ratio = if target != 0.0 {
+            (prediction - target).abs() / (target).abs()
+        } else {
+            100_000.0
+        };
+
         let success_threshold: f64 =
             self.get_config().behaviour.success_threshold * 100.0 * volatility;
 
-        let threshold_value: u8 = (diff < success_threshold).into();
-        let direction_value: u8 = {
-            let target_direction = target > 0.0;
-            let prediction_direction = prediction > 0.0;
-            (target_direction == prediction_direction).into()
-        };
+        let threshold_value: u8 = (ratio < success_threshold).into();
 
         let _ = counter_tx
             .send(CounterCommand::Increment {
                 symbol: self.get_symbol().to_uppercase(),
-                counter_type: CounterType::Threshold,
                 value: threshold_value,
-            })
-            .await;
-
-        let _ = counter_tx
-            .send(CounterCommand::Increment {
-                symbol: self.get_symbol().to_uppercase(),
-                counter_type: CounterType::Direction,
-                value: direction_value,
             })
             .await;
     }
@@ -172,7 +163,6 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                 .send(CounterCommand::GetShiftedAccuracy {
                     symbol: self.get_symbol().to_string(),
                     window: 3,
-                    counter_type: CounterType::Threshold,
                     respond_to: tx,
                 })
                 .await;
@@ -198,7 +188,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         }
     }
 
-    fn log_prediction(&self, prediction: f64, price: f64) {
+    fn log_prediction(&self, prediction: f64) {
         if self.get_config().prints.cycle.prediction {
             let str_prediction: String;
             if prediction > 0.0 {
@@ -222,15 +212,6 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                 str_prediction
             );
         }
-
-        if self.get_config().prints.cycle.price {
-            println!(
-                "{}{} Предполагаемая цена: {:.7}",
-                self.print_time(),
-                self.get_print_symbol(),
-                price
-            );
-        }
     }
 
     async fn print_accuracy(&self, counter_tx: &mpsc::Sender<CounterCommand>) {
@@ -239,7 +220,6 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             .send(CounterCommand::GetAccuracy {
                 symbol: self.get_symbol().to_uppercase(),
                 respond_to: tx_local,
-                counter_type: CounterType::Threshold,
             })
             .await;
 
@@ -247,7 +227,6 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         let _ = counter_tx
             .send(CounterCommand::GetTotalAccuracy {
                 respond_to: tx_global,
-                counter_type: CounterType::Threshold,
             })
             .await;
 

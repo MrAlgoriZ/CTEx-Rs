@@ -87,6 +87,6 @@ pub fn process_return(close_1: f64, close_2: f64) -> f64 {
     return_ * 100.0
 }
 
-pub fn restore_price(close: f64, target: f64) -> f64 {
-    close * (1.0 + (target / 100.0))
-}
+// pub fn restore_price(close: f64, target: f64) -> f64 {
+//     close * (1.0 + (target / 100.0))
+// }

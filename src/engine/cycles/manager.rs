@@ -305,53 +305,31 @@ impl CycleSupervisor {
 }
 
 #[derive(Debug)]
-pub enum CounterType {
-    Threshold,
-    Direction,
-}
-
-impl CounterType {
-    pub fn from_str(counter_type: &str) -> Self {
-        match counter_type {
-            "threshold" => CounterType::Threshold,
-            "direction" => CounterType::Direction,
-            _ => panic!("Counter type must be 'threshold' or 'direction'"),
-        }
-    }
-}
-
-#[derive(Debug)]
 pub enum CounterCommand {
     Increment {
         symbol: String,
-        counter_type: CounterType,
         value: u8,
     },
     GetAccuracy {
         symbol: String,
-        counter_type: CounterType,
         respond_to: oneshot::Sender<Option<f64>>,
     },
     GetShiftedAccuracy {
         symbol: String,
         window: usize,
-        counter_type: CounterType,
         respond_to: oneshot::Sender<Option<f64>>,
     },
     GetTotalAccuracy {
-        counter_type: CounterType,
         respond_to: oneshot::Sender<f64>,
     },
     GetTotalShiftedAccuracy {
         window: usize,
-        counter_type: CounterType,
         respond_to: oneshot::Sender<Option<f64>>,
     },
 }
 
 pub struct CounterActor {
-    threshold_counters: Counters,
-    direction_counters: Counters,
+    counters: Counters,
     inbox: mpsc::Receiver<CounterCommand>,
 }
 
@@ -360,8 +338,7 @@ impl CounterActor {
         let (tx, rx) = mpsc::channel(10);
         (
             Self {
-                threshold_counters: Counters::new(capacity),
-                direction_counters: Counters::new(capacity),
+                counters: Counters::new(capacity),
                 inbox: rx,
             },
             tx,
@@ -373,28 +350,14 @@ impl CounterActor {
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
-                CounterCommand::Increment {
-                    symbol,
-                    counter_type,
-                    value,
-                } => {
-                    let counter = match counter_type {
-                        CounterType::Threshold => &mut self.threshold_counters,
-                        CounterType::Direction => &mut self.direction_counters,
-                    };
+                CounterCommand::Increment { symbol, value } => {
+                    let counter = &mut self.counters;
                     counter.get_mut(&symbol.to_uppercase()).push(value);
                 }
 
-                CounterCommand::GetAccuracy {
-                    symbol,
-                    counter_type,
-                    respond_to,
-                } => {
-                    let counters = match counter_type {
-                        CounterType::Threshold => &self.threshold_counters,
-                        CounterType::Direction => &self.direction_counters,
-                    };
-                    let acc = counters
+                CounterCommand::GetAccuracy { symbol, respond_to } => {
+                    let acc = self
+                        .counters
                         .get_option(&symbol.to_uppercase())
                         .map(|c| c.get_accuracy());
                     let _ = respond_to.send(acc);
@@ -403,40 +366,23 @@ impl CounterActor {
                 CounterCommand::GetShiftedAccuracy {
                     symbol,
                     window,
-                    counter_type,
                     respond_to,
                 } => {
-                    let counters = match counter_type {
-                        CounterType::Threshold => &self.threshold_counters,
-                        CounterType::Direction => &self.direction_counters,
-                    };
-                    let acc = counters
+                    let acc = self
+                        .counters
                         .get_option(&symbol.to_uppercase())
                         .and_then(|c| c.get_shifted_accuracy(window));
                     let _ = respond_to.send(acc);
                 }
 
-                CounterCommand::GetTotalAccuracy {
-                    counter_type,
-                    respond_to,
-                } => {
-                    let values = match counter_type {
-                        CounterType::Threshold => self.threshold_counters.symbols.values(),
-                        CounterType::Direction => self.direction_counters.symbols.values(),
-                    };
+                CounterCommand::GetTotalAccuracy { respond_to } => {
+                    let values = self.counters.symbols.values();
                     let acc = calculate_average_accuracy(values);
                     let _ = respond_to.send(acc);
                 }
 
-                CounterCommand::GetTotalShiftedAccuracy {
-                    window,
-                    counter_type,
-                    respond_to,
-                } => {
-                    let values = match counter_type {
-                        CounterType::Threshold => self.threshold_counters.symbols.values(),
-                        CounterType::Direction => self.direction_counters.symbols.values(),
-                    };
+                CounterCommand::GetTotalShiftedAccuracy { window, respond_to } => {
+                    let values = self.counters.symbols.values();
                     let acc = calculate_average_shifted_accuracy(values, window);
                     let _ = respond_to.send(Some(acc));
                 }

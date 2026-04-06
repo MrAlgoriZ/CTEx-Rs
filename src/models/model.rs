@@ -167,7 +167,6 @@ pub trait Model: ModelDependencies {
 
         let metric = match self.get_config().model.metric {
             MetricType::RAll => {
-                let dir_accuracy = direction_accuracy(&y_float, &proba);
                 let mae = mean_absolute_error(&y_float, &proba);
                 let mse = mean_squared_error(&y_float, &proba);
                 let r2_score = r2(&y_float, &proba);
@@ -205,13 +204,6 @@ pub trait Model: ModelDependencies {
                         thr_accuracy * 100.0
                     );
                     println!(
-                        "{}[{}] Acc on direction for {}: {:.3}%",
-                        Fore::WHITE.as_str(),
-                        Utc::now().format("%H:%M:%S"),
-                        self.get_name(),
-                        dir_accuracy * 100.0
-                    );
-                    println!(
                         "{}[{}] RMSE for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
@@ -220,19 +212,6 @@ pub trait Model: ModelDependencies {
                     );
                 }
                 thr_accuracy
-            }
-            MetricType::Direction => {
-                let dir_accuracy = direction_accuracy(&y_float, &proba);
-                if self.get_config().prints.model.metrics {
-                    println!(
-                        "{}[{}] Acc on direction for {}: {:.3}%",
-                        Fore::WHITE.as_str(),
-                        Utc::now().format("%H:%M:%S"),
-                        self.get_name(),
-                        dir_accuracy * 100.0
-                    );
-                }
-                dir_accuracy
             }
             MetricType::Threshold => {
                 let thr_accuracy = threshold_accuracy(

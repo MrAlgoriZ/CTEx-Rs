@@ -38,7 +38,6 @@ pub enum MetricType {
     RMSE,
     R2,
     Acc,
-    Direction,
     Threshold,
     RAll,
 }

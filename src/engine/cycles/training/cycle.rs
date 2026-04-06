@@ -5,7 +5,6 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::data::data_interfaces::{Candle, DataMap};
 use crate::data::process::data_collection::{OHLCV_FETCH_LEN, OHLCV_LEN, collect_targets};
-use crate::data::process::features::auxiliary::{process_return, restore_price};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
@@ -23,7 +22,6 @@ use crate::engine::utils::config::load_env::load_env;
 pub struct TrainingCycle {
     pub symbol: String,
     last_candles: Option<DataMap>,
-    last_close: Option<f64>,
     last_predictions: Option<DataMap>,
     print_symbol: String,
     client: CCXTClient,
@@ -67,7 +65,6 @@ impl TrainingCycle {
             print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
             symbol: symbol,
             last_candles: None,
-            last_close: None,
             last_predictions: None,
             config: load_config("config/config.yaml"),
             client,
@@ -104,34 +101,44 @@ impl TrainingCycle {
                 .client
                 .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
                 .await?;
-            let close: f64 = self
-                .client
-                .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
-                .await?[0]
-                .close;
 
             match phase {
                 CyclePhase::Active => {
-                    let target = process_return(self.last_close.unwrap(), close);
+                    let targets = DataMap::new(
+                        self.get_symbol().to_string(),
+                        collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
+                    );
 
-                    let diff: f64 = (prediction.unwrap() - target).abs();
+                    let target = targets.get("position_size").unwrap();
+
+                    let ratio = if target != &0.0 {
+                        (prediction.unwrap() - target).abs() / (target).abs()
+                    } else {
+                        100_000.0
+                    };
+
                     let success: bool =
-                        diff < (self.config.behaviour.success_threshold * 100.0 * volatility);
+                        ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
                     if self.config.prints.cycle.target {
                         println!(
-                            "{}{} {}Pred: {:.5} | Target: {:.5} | Diff {:.5}",
+                            "{}{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
                             self.print_time(),
                             self.print_symbol,
                             Fore::WHITE.as_str(),
                             prediction.unwrap(),
                             target,
-                            diff
+                            ratio
                         );
                     }
 
-                    self.update_counters(prediction.unwrap(), target, volatility, counter_tx)
-                        .await;
+                    self.update_counters(
+                        prediction.unwrap(),
+                        target.clone(),
+                        volatility,
+                        counter_tx,
+                    )
+                    .await;
 
                     if !success {
                         let last_candles = self.last_candles.clone().unwrap();
@@ -142,10 +149,6 @@ impl TrainingCycle {
                             .send(ModelCommand::GetAccuracy { respond_to: tx })
                             .await;
                         let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
-                        let targets = DataMap::new(
-                            self.get_symbol().to_string(),
-                            collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
-                        );
 
                         let summary_data = {
                             if let Some(acc) = accuracy {
@@ -163,14 +166,11 @@ impl TrainingCycle {
             }
 
             let candles_to_pred = candles.clone();
-
             prediction = Some(self.predict(candles_to_pred, &model_tx).await.unwrap());
-            let restored_price: f64 = restore_price(close, prediction.unwrap());
 
             phase = CyclePhase::Active;
-            self.log_prediction(prediction.unwrap(), restored_price);
+            self.log_prediction(prediction.unwrap());
             self.last_candles = Some(candles);
-            self.last_close = Some(close);
 
             if self.config.prints.cycle.accuracy {
                 self.print_accuracy(counter_tx).await;
@@ -206,7 +206,6 @@ impl TrainingCycle {
         let total = (all_candles.len() - 1 - OHLCV_FETCH_LEN) as u64;
 
         let mut threshold_counter: SymbolCounters<u8> = SymbolCounters::new(total as usize);
-        let mut direction_counter: SymbolCounters<u8> = SymbolCounters::new(total as usize);
 
         let pb = ProgressBar::new(total);
         pb.set_style(
@@ -229,33 +228,9 @@ impl TrainingCycle {
 
             let candles =
                 DataMap::from_slice(&self.symbol, &self.config.timeframes.main_timeframe, window);
-            let current_close = all_candles[i - 2].close;
 
             match phase {
                 CyclePhase::Active => {
-                    let target = process_return(self.last_close.unwrap(), current_close);
-
-                    let diff = (prediction.unwrap() - target).abs();
-                    let success: bool =
-                        diff < (self.config.behaviour.success_threshold * 100.0 * volatility);
-
-                    let threshold_value: u8 = success.into();
-                    let direction_value: u8 = {
-                        let target_direction = target > 0.0;
-                        let prediction_direction = prediction.unwrap() > 0.0;
-                        (target_direction == prediction_direction).into()
-                    };
-
-                    threshold_counter.push(threshold_value);
-                    direction_counter.push(direction_value);
-
-                    let last_candles = self.last_candles.clone().unwrap();
-
-                    let (tx, rx) = oneshot::channel();
-                    let _ = model_tx
-                        .send(ModelCommand::GetAccuracy { respond_to: tx })
-                        .await;
-                    let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
                     let ohlcv = window[..OHLCV_LEN]
                         .iter()
                         .map(|candle| candle.to_candle())
@@ -266,7 +241,29 @@ impl TrainingCycle {
                         collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
                     );
 
+                    let target = targets.get("position_size").unwrap();
+
+                    let ratio = if target != &0.0 {
+                        (prediction.unwrap() - target).abs() / (target).abs()
+                    } else {
+                        100_000.0
+                    };
+
+                    let success: bool =
+                        ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
+
+                    let threshold_value: u8 = success.into();
+                    threshold_counter.push(threshold_value);
+
                     if !success && self.config.runtime.with_training {
+                        let last_candles = self.last_candles.clone().unwrap();
+
+                        let (tx, rx) = oneshot::channel();
+                        let _ = model_tx
+                            .send(ModelCommand::GetAccuracy { respond_to: tx })
+                            .await;
+                        let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
+
                         let summary_data = {
                             if let Some(acc) = accuracy {
                                 last_candles.clone() + acc.clone() + targets.clone()
@@ -302,7 +299,6 @@ impl TrainingCycle {
 
             phase = CyclePhase::Active;
             self.last_candles = Some(candles);
-            self.last_close = Some(current_close);
             pb.inc(1);
         }
 
@@ -321,14 +317,6 @@ impl TrainingCycle {
             self.print_symbol,
             Fore::YELLOW.as_str(),
             threshold_counter.get_accuracy()
-        );
-
-        println!(
-            "{}{} {}Точность по направлению составляет: {:.3}%",
-            self.print_time(),
-            self.print_symbol,
-            Fore::YELLOW.as_str(),
-            direction_counter.get_accuracy()
         );
 
         Ok(())
