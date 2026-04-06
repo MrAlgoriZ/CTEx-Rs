@@ -33,8 +33,8 @@ pub enum TargetType {
     FutureRange,
     FutureReturnMean,
     FutureReturnStd,
-    FutureReturnSkew,
-    FutureReturnKurt,
+    FutureReturnSkewness,
+    FutureReturnKurtosis,
     RiskScore,
     DrawdownProbability,
     TailEventProbability,
@@ -54,8 +54,8 @@ impl TargetType {
             TargetType::FutureRange => "future_range",
             TargetType::FutureReturnMean => "future_return_mean",
             TargetType::FutureReturnStd => "future_return_std",
-            TargetType::FutureReturnSkew => "future_return_skewness",
-            TargetType::FutureReturnKurt => "future_return_kurtosis",
+            TargetType::FutureReturnSkewness => "future_return_skewness",
+            TargetType::FutureReturnKurtosis => "future_return_kurtosis",
             TargetType::RiskScore => "risk_score",
             TargetType::DrawdownProbability => "drawdown_probability",
             TargetType::TailEventProbability => "tail_event_probability",
@@ -123,7 +123,7 @@ pub enum SingleModelParams {
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ModelParams {
     Ensemble {
         future_volatility_model_params: SingleModelParams,

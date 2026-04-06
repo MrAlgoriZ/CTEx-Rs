@@ -17,7 +17,7 @@ impl SQLStandart {
             .collect::<Vec<_>>();
 
         let rows = sqlx::query(&format!(
-            "SELECT symbol, {} FROM new_candles",
+            "SELECT symbol, {} FROM dataset",
             all_columns.join(", ")
         ))
         .fetch_all(pool)
@@ -56,7 +56,7 @@ impl SQLStandart {
             .join(", ");
 
         let sql = format!(
-            "INSERT INTO new_candles (symbol, {}) VALUES ($1, {})",
+            "INSERT INTO dataset (symbol, {}) VALUES ($1, {})",
             columns_str, placeholders
         );
 

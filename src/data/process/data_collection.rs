@@ -213,7 +213,7 @@ pub fn collect_targets(ohlcv: [Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
         ("future_range".to_string(), future_range),
         ("future_return_mean".to_string(), future_return_mean),
         ("future_return_std".to_string(), future_return_std),
-        ("future_return_skew".to_string(), future_return_skew),
+        ("future_return_skewness".to_string(), future_return_skew),
         ("future_return_kurtosis".to_string(), future_return_kurtosis),
         ("risk_score".to_string(), risk_score),
         ("drawdown_probability".to_string(), drawdown_probability),

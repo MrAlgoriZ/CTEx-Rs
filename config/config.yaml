@@ -1,36 +1,119 @@
 model:
-  type: "single"
+  model_struct: ensemble
   params:
-    kind: "RandomForest"
-    task_type: "regression"
-    target_type: "position_size"
-    n_trees: 50
-    max_depth: 5
-    min_samples_leaf: 8
-    min_samples_split: 2
-    m: 3
-
+    type: ensemble
+    future_volatility_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: future_volatility
+      n_estimators: 100
+      max_depth: 5
+    future_volume_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: future_volume
+      n_estimators: 100
+      max_depth: 5
+    future_trend_strength_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: future_trend_strength
+      n_estimators: 100
+      max_depth: 5
+    future_range_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: future_range
+      n_estimators: 100
+      max_depth: 5
+    future_return_mean_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: future_return_mean
+      n_estimators: 100
+      max_depth: 5
+    future_return_std_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: future_return_std
+      n_estimators: 100
+      max_depth: 5
+    future_return_skew_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: future_return_skewness
+      n_estimators: 100
+      max_depth: 5
+    future_return_kurt_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: future_return_kurtosis
+      n_estimators: 100
+      max_depth: 5
+    risk_score_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: risk_score
+      n_estimators: 100
+      max_depth: 5
+    drawdown_probability_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: drawdown_probability
+      n_estimators: 100
+      max_depth: 5
+    tail_event_probability_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: tail_event_probability
+      n_estimators: 100
+      max_depth: 5
+    volatility_spike_probability_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: volatility_spike_probability
+      n_estimators: 100
+      max_depth: 5
+    liquidity_drop_probability_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: liquidity_drop_probability
+      n_estimators: 100
+      max_depth: 5
+    future_return_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: future_return
+      n_estimators: 100
+      max_depth: 5
+    action_type_model_params:
+      kind: RandomForest
+      task_type: classification
+      target_type: action_type
+      n_trees: 100
+      max_depth: 5
+      min_samples_leaf: 1
+      min_samples_split: 1
+      m: 1
+    position_size_model_params:
+      kind: XGBoost
+      task_type: regression
+      target_type: position_size
+      n_estimators: 100
+      max_depth: 5
   train_test_split:
     train_ratio: 0.8
-  metric: "ALL"
+  metric: R2
   seed: 42
-
 backend:
-  enabled: false
-  listener: "0.0.0.0:3000"
+  enabled: true
+  listener: 0.0.0.0:3000
   admin_password: "123"
-
 servers:
-  - "127.0.0.1:3737"
-
-behaviour:
-  success_threshold: 0.3
-  accuracy_capacity: 192
-  predictions_capacity: 96
-
+  - 127.0.0.1:3737
 prints:
   model:
-    skipped_values: false
+    skipped_values: true
     metrics: false
   cycle:
     volatility: true
@@ -42,19 +125,20 @@ prints:
   manager:
     manager_init: true
     additional_manager_prints: true
-
-symbols:
-  - SOLUSDT
-
+behaviour:
+  success_threshold: 0.125
+  accuracy_capacity: 192
+  predictions_capacity: 96
 runtime:
-  type: "backtest"
-  with_training: false
-  with_saves: false
-  cycle_type: "loaderwm"
-
-main_exchange: "binance"
-
+  type: backtest
+  with_training: true
+  with_saves: true
+  with_model: true
+  cycle_type: loaderwm
+symbols:
+  - BTCUSDT
+main_exchange: binance
 timeframes:
-  main: "1h"
-  background: "1m"
-mode: "print"
+  main: 1h
+  background: 1m
+mode: print

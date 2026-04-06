@@ -133,10 +133,7 @@ impl CycleSupervisor {
             return Err(anyhow::anyhow!(format!("Worker {} уже запущен", symbol)));
         }
 
-        if matches!(
-            cycle_type,
-            CycleType::Training | CycleType::Loaderwm | CycleType::Sandbox
-        ) && self.model_tx.is_none()
+        if matches!(cycle_type, CycleType::Training | CycleType::Sandbox) && self.model_tx.is_none()
         {
             return Err(anyhow::anyhow!("Model не инициализирована для цикла"));
         }
@@ -630,7 +627,6 @@ impl CycleManager {
                 future_volume_model_params,
                 future_trend_strength_model_params,
                 future_range_model_params,
-                volatility_spike_probability_model_params,
                 future_return_mean_model_params,
                 future_return_std_model_params,
                 future_return_skew_model_params,
@@ -638,6 +634,7 @@ impl CycleManager {
                 risk_score_model_params,
                 drawdown_probability_model_params,
                 tail_event_probability_model_params,
+                volatility_spike_probability_model_params,
                 liquidity_drop_probability_model_params,
                 future_return_model_params,
                 action_type_model_params,

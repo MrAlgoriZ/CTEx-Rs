@@ -167,7 +167,7 @@ impl CCXTClient {
         let _ = self
             .server_tx
             .send(ServersCommand::TestSymbol {
-                symbol: symbol.to_string(),
+                symbol: symbol.to_uppercase(),
                 exchange_name: self.exchange_name.clone(),
                 server: server.to_string(),
                 respond_to: tx,
