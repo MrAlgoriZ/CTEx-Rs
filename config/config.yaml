@@ -2,7 +2,8 @@ model:
   type: "ensemble"
   params:
     kind: "RandomForest"
-    target_type: "FutureReturnStd"
+    task_type: "regression"
+    target_type: "position_size"
     n_trees: 50
     max_depth: 5
     min_samples_leaf: 8
