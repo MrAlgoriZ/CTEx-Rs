@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use log::info;
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use sqlx::PgPool;
 use std::collections::BTreeMap;
@@ -377,15 +378,72 @@ impl Model for Ensemble {
             self.position_size_model_tx.clone(),
         ];
 
-        for model_tx in txs.iter() {
+        let model_names = [
+            "future_volatility",
+            "future_volume",
+            "future_trend_strength",
+            "future_range",
+            "future_return_mean",
+            "future_return_std",
+            "future_return_skew",
+            "future_return_kurt",
+            "risk_score",
+            "drawdown_probability",
+            "tail_event_probability",
+            "volatility_spike_probability",
+            "liquidity_drop_probability",
+            "future_return",
+            "action_type",
+            "position_size",
+        ];
+
+        for (i, model_tx) in txs.iter().enumerate() {
+            info!(
+                "[Ensemble::train] Sending Train to model: {}",
+                model_names[i]
+            );
             let (tx, rx) = oneshot::channel();
 
             model_tx
                 .send(ModelCommand::Train { respond_to: tx })
-                .await?;
-            rx.await??;
+                .await
+                .map_err(|e| {
+                    anyhow!(
+                        "[Ensemble::train] Failed to send Train to {}: {}",
+                        model_names[i],
+                        e
+                    )
+                })?;
+            info!(
+                "[Ensemble::train] Waiting for response from model: {}",
+                model_names[i]
+            );
+            let result = rx.await.map_err(|e| {
+                anyhow!(
+                    "[Ensemble::train] Channel closed for model {} (recv error: {})",
+                    model_names[i],
+                    e
+                )
+            })?;
+            info!(
+                "[Ensemble::train] Model {} train result: {:?}",
+                model_names[i],
+                result.is_ok()
+            );
+            result.map_err(|e| {
+                anyhow!(
+                    "[Ensemble::train] Model {} training failed: {}",
+                    model_names[i],
+                    e
+                )
+            })?;
+            info!(
+                "[Ensemble::train] Model {} trained successfully",
+                model_names[i]
+            );
         }
 
+        info!("[Ensemble::train] All models trained successfully");
         Ok(())
     }
 
@@ -413,11 +471,13 @@ impl Model for Ensemble {
                     data: data.to_standart(&SQLStandart::FirstLayer),
                     respond_to: tx,
                 })
-                .await?;
-            let result = rx.await?;
+                .await
+                .map_err(|e| anyhow!("[Ensemble::predict] Failed to send Predict to first layer model: {}", e))?;
+            let result = rx.await
+                .map_err(|e| anyhow!("[Ensemble::predict] Channel closed for first layer model (recv error: {})", e))?;
             for (k, v) in result.get_data().iter() {
                 let key = get_prediction_name(k)
-                    .ok_or(anyhow!(format!("Prediction with name {} is not exists", k)))?;
+                    .ok_or_else(|| anyhow!("Prediction with name {} is not exists", k))?;
                 predictions.entry(key.clone()).or_insert(*v);
                 data.insert(key, *v);
             }
@@ -440,11 +500,13 @@ impl Model for Ensemble {
                     data: data.to_standart(&SQLStandart::SecondLayer),
                     respond_to: tx,
                 })
-                .await?;
-            let result = rx.await?;
+                .await
+                .map_err(|e| anyhow!("[Ensemble::predict] Failed to send Predict to second layer model: {}", e))?;
+            let result = rx.await
+                .map_err(|e| anyhow!("[Ensemble::predict] Channel closed for second layer model (recv error: {})", e))?;
             for (k, v) in result.get_data().iter() {
                 let key = get_prediction_name(k)
-                    .ok_or(anyhow!(format!("Prediction with name {} is not exists", k)))?;
+                    .ok_or_else(|| anyhow!("Prediction with name {} is not exists", k))?;
                 predictions.entry(key.clone()).or_insert(*v); // future_*_pred
                 data.insert(key, *v);
             }
@@ -464,8 +526,10 @@ impl Model for Ensemble {
                     data: data.to_standart(&SQLStandart::ThirdLayer),
                     respond_to: tx,
                 })
-                .await?;
-            let result = rx.await?;
+                .await
+                .map_err(|e| anyhow!("[Ensemble::predict] Failed to send Predict to third layer model: {}", e))?;
+            let result = rx.await
+                .map_err(|e| anyhow!("[Ensemble::predict] Channel closed for third layer model (recv error: {})", e))?;
             for (k, v) in result.get_data().iter() {
                 predictions.entry(k.to_string()).or_insert(*v);
                 data.insert(k.to_string(), *v);
@@ -486,10 +550,8 @@ impl Model for Ensemble {
                     self.counters.get_mut(k).push(1); // future_*
                 } else {
                     self.counters.get_mut(k).push(0);
-                    let model_tx = self.get_model_by_name(k).ok_or(anyhow::anyhow!(format!(
-                        "Model tx with name '{}' not found",
-                        k
-                    )))?;
+                    let model_tx = self.get_model_by_name(k)
+                        .ok_or_else(|| anyhow!("Model tx with name '{}' not found", k))?;
                     let (tx, rx) = oneshot::channel();
                     model_tx
                         .send(ModelCommand::HandleMistakes {
@@ -497,8 +559,20 @@ impl Model for Ensemble {
                             predicted_data: predicted_data.clone(),
                             respond_to: tx,
                         })
-                        .await?;
-                    rx.await??;
+                        .await
+                        .map_err(|e| anyhow!(
+                            "[Ensemble::handle_mistakes] Failed to send HandleMistakes to model '{}': {}",
+                            k, e
+                        ))?;
+                    let rx_result = rx.await
+                        .map_err(|e| anyhow!(
+                            "[Ensemble::handle_mistakes] Channel closed for model '{}' (recv error: {})",
+                            k, e
+                        ))?;
+                    rx_result.map_err(|e| anyhow!(
+                        "[Ensemble::handle_mistakes] Model '{}' HandleMistakes failed: {}",
+                        k, e
+                    ))?;
                 }
             }
         }

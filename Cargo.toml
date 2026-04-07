@@ -18,3 +18,5 @@ rayon = "1.7"
 reqwest = { version = "0.12", features = ["json"] }
 indicatif = "0.17"
 async-trait = "0.1"
+log = "0.4"
+env_logger = "0.11"

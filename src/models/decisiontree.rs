@@ -124,7 +124,10 @@ impl Model for DecisionTree {
                     .with_min_samples_leaf(self.min_samples_leaf)
                     .with_min_samples_split(self.min_samples_split);
 
-                self.regression_model = Some(DecisionTreeRegressor::fit(x_train, y_train, params)?);
+                self.regression_model = Some(
+                    DecisionTreeRegressor::fit(x_train, y_train, params)
+                        .map_err(|e| anyhow!("Failed to fit DecisionTreeRegressor: {}", e))?,
+                );
             }
             TaskType::Classification => {
                 let params = DecisionTreeClassifierParameters::default()
@@ -132,15 +135,17 @@ impl Model for DecisionTree {
                     .with_min_samples_leaf(self.min_samples_leaf)
                     .with_min_samples_split(self.min_samples_split);
 
-                self.classification_model = Some(DecisionTreeClassifier::fit(
-                    x_train,
-                    &y_train.iter().map(|v| *v as i32).collect(),
-                    params,
-                )?);
+                self.classification_model = Some(
+                    DecisionTreeClassifier::fit(x_train, &y_train.iter().map(|v| *v as i32).collect(), params)
+                        .map_err(|e| anyhow!("Failed to fit DecisionTreeClassifier: {}", e))?,
+                );
             }
         }
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
-            self.evaluate(xv, yv)?;
+            match self.evaluate(xv, yv) {
+                Ok(_) => {}
+                Err(e) => eprintln!("Failed to evaluate DecisionTree model: {}", e),
+            }
         }
 
         Ok(())
@@ -149,18 +154,17 @@ impl Model for DecisionTree {
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
         let prediction = match self.task_type {
             TaskType::Regression => {
-                let model = self
-                    .regression_model
-                    .as_ref()
-                    .ok_or(anyhow!("Model not trained yet!"))?;
-                model.predict(values)?
+                let model = self.regression_model.as_ref()
+                    .ok_or_else(|| anyhow!("DecisionTree regression model not trained yet!"))?;
+                model.predict(values)
+                    .map_err(|e| anyhow!("Failed to predict with DecisionTreeRegressor: {}", e))?
             }
             TaskType::Classification => {
-                let model = self
-                    .classification_model
-                    .as_ref()
-                    .ok_or(anyhow!("Model not trained yet!"))?;
-                model.predict(values)?.iter().map(|v| *v as f64).collect()
+                let model = self.classification_model.as_ref()
+                    .ok_or_else(|| anyhow!("DecisionTree classification model not trained yet!"))?;
+                model.predict(values)
+                    .map_err(|e| anyhow!("Failed to predict with DecisionTreeClassifier: {}", e))?
+                    .iter().map(|v| *v as f64).collect()
             }
         };
         Ok(prediction)
@@ -177,7 +181,8 @@ impl Model for DecisionTree {
         println!("Corr: {}", correlation);
 
         if correlation > self.config.behaviour.success_threshold {
-            self.train().await?;
+            self.train().await
+                .map_err(|e| anyhow!("Failed to retrain DecisionTree model: {}", e))?;
         }
 
         Ok(())

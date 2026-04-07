@@ -111,24 +111,23 @@ impl Model for XGBoost {
                     .with_max_depth(self.max_depth)
                     .with_seed(self.get_config().model.seed);
 
-                self.model = Some(XGRegressor::fit(x_train, y_train, params)?);
+                self.model = Some(match XGRegressor::fit(x_train, y_train, params) { Ok(v) => v, Err(e) => return Err(anyhow!("Failed to fit XGRegressor: {}", e)) });
             }
             _ => return Err(anyhow!("XGBoost supports only regression task type!")),
         };
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
-            self.evaluate(xv, yv)?;
+            match self.evaluate(xv, yv) { Ok(_) => {}, Err(e) => return Err(e) }
         }
 
         Ok(())
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
-        let model = self
-            .model
-            .as_ref()
-            .ok_or(anyhow!("Model not trained yet!"))?;
-        let prediction = model.predict(values)?;
+        let model = self.model.as_ref()
+            .ok_or_else(|| anyhow!("XGBoost model not trained yet!"))?;
+        let prediction = model.predict(values)
+            .map_err(|e| anyhow!("Failed to predict with XGRegressor: {}", e))?;
         Ok(prediction)
     }
 
@@ -143,7 +142,8 @@ impl Model for XGBoost {
         println!("Corr: {}", correlation);
 
         if correlation > self.config.behaviour.success_threshold {
-            self.train().await?;
+            self.train().await
+                .map_err(|e| anyhow!("Failed to retrain XGBoost model: {}", e))?;
         }
 
         Ok(())

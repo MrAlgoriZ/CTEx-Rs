@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use chrono::Utc;
 
+use log::debug;
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::{accuracy, mean_absolute_error, mean_squared_error, r2};
 use smartcore::model_selection::train_test_split;
@@ -129,7 +130,8 @@ pub trait Model: ModelDependencies {
             flat_x.extend(row);
         }
 
-        let x = DenseMatrix::new(x_rows.len(), n_features, flat_x, false)?;
+        let x = DenseMatrix::new(x_rows.len(), n_features, flat_x, false)
+            .map_err(|e| anyhow!("Failed to create DenseMatrix for features: {}", e))?;
 
         Ok((x, y_target))
     }
@@ -156,7 +158,9 @@ pub trait Model: ModelDependencies {
         if !self.check_model_trained() {
             return Err(anyhow!("Model not trained yet"));
         }
-        let proba = self.model_predict(x_val)?;
+        let proba = self
+            .model_predict(x_val)
+            .map_err(|e| anyhow!("Model prediction failed during evaluation: {}", e))?;
         let y_float: Vec<f64> = y_val.to_vec();
 
         let thr_accuracy = threshold_accuracy(
@@ -316,7 +320,7 @@ pub trait Model: ModelDependencies {
         let symbol_cols = self
             .get_symbol_columns()
             .clone()
-            .ok_or(anyhow!("No symbol columns defined"))?;
+            .ok_or_else(|| anyhow!("No symbol columns defined"))?;
 
         if !self.check_model_trained() {
             return Err(anyhow!("Model not trained yet"));
@@ -335,8 +339,11 @@ pub trait Model: ModelDependencies {
 
         input.extend(x);
 
-        let input_mat = DenseMatrix::new(1, input.len(), input, false)?;
-        let proba = self.model_predict(&input_mat)?;
+        let input_mat = DenseMatrix::new(1, input.len(), input, false)
+            .map_err(|e| anyhow!("Failed to create DenseMatrix for prediction input: {}", e))?;
+        let proba = self
+            .model_predict(&input_mat)
+            .map_err(|e| anyhow!("Model prediction failed: {}", e))?;
 
         if let Some(ptx) = self.get_prediction_tx().clone() {
             let (tx, rx) = oneshot::channel();
@@ -364,17 +371,34 @@ pub trait Model: ModelDependencies {
     }
 
     async fn train(&mut self) -> Result<(), anyhow::Error> {
+        let pool = self
+            .get_pool()
+            .ok_or_else(|| anyhow!("Pool is not available"))?;
         let data = self
             .get_standart()
-            .select_all(&self.get_pool().unwrap())
-            .await?;
-        let (x, y_target) = self.load_data(data)?;
-        let (x_train, x_val, y_train, y_val) = self.prepare_data(
-            x,
-            y_target,
-            self.get_config().model.train_test_split.train_ratio,
-        )?;
-        self.model_fit(&x_train, &y_train, Some(&x_val), Some(&y_val))?;
+            .select_all(pool)
+            .await
+            .map_err(|e| anyhow!("Failed to select data from database: {}", e))?;
+        debug!(
+            "Data for train: {:#?}\nStandart: {:?}",
+            &data[0],
+            self.get_standart()
+        );
+        let (x, y_target) = self
+            .load_data(data)
+            .map_err(|e| anyhow!("Failed to load data: {}", e))?;
+        debug!("Data successfully loaded");
+        let (x_train, x_val, y_train, y_val) = self
+            .prepare_data(
+                x,
+                y_target,
+                self.get_config().model.train_test_split.train_ratio,
+            )
+            .map_err(|e| anyhow!("Failed to prepare data: {}", e))?;
+        debug!("Data successfully prepared");
+        self.model_fit(&x_train, &y_train, Some(&x_val), Some(&y_val))
+            .map_err(|e| anyhow!("Model fitting failed: {}", e))?;
+        debug!("Model trained successfully");
         Ok(())
     }
 

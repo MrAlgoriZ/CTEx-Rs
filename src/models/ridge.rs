@@ -125,24 +125,29 @@ impl Model for Ridge {
                     _ => RidgeRegressionParameters::default().with_alpha(self.alpha),
                 };
 
-                self.model = Some(RidgeRegression::fit(x_train, y_train, params)?);
+                self.model = Some(
+                    RidgeRegression::fit(x_train, y_train, params)
+                        .map_err(|e| anyhow!("Failed to fit RidgeRegression: {}", e))?,
+                );
             }
             _ => return Err(anyhow!("Ridge supports only regression task type!")),
         };
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
-            self.evaluate(xv, yv)?;
+            match self.evaluate(xv, yv) {
+                Ok(_) => {}
+                Err(e) => eprintln!("Failed to evaluate Ridge model: {}", e),
+            }
         }
 
         Ok(())
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
-        let model = self
-            .model
-            .as_ref()
-            .ok_or(anyhow!("Model not trained yet!"))?;
-        let prediction = model.predict(values)?;
+        let model = self.model.as_ref()
+            .ok_or_else(|| anyhow!("Ridge model not trained yet!"))?;
+        let prediction = model.predict(values)
+            .map_err(|e| anyhow!("Failed to predict with RidgeRegression: {}", e))?;
         Ok(prediction)
     }
 
@@ -271,7 +276,8 @@ impl Model for Ridge {
         println!("Corr: {}", correlation);
 
         if correlation > self.config.behaviour.success_threshold {
-            self.train().await?;
+            self.train().await
+                .map_err(|e| anyhow!("Failed to retrain Ridge model: {}", e))?;
         }
 
         Ok(())

@@ -1,5 +1,5 @@
-use anyhow::Context;
 use chrono::Utc;
+use log::{debug, error, info, warn};
 use serde::Deserialize;
 use sqlx::PgPool;
 use std::collections::{BTreeMap, HashMap};
@@ -165,7 +165,7 @@ impl CycleSupervisor {
             },
         );
 
-        log_success(&format!("Worker {} запущен ({:?})", symbol, cycle_type));
+        log_debug(&format!("Worker {} запущен ({:?})", symbol, cycle_type));
         Ok(())
     }
 
@@ -204,7 +204,7 @@ impl CycleSupervisor {
                 result = Self::run_cycle_once(&symbol, cycle_type, &counter_tx, &server_tx, &model_tx, ) => {
                     match result {
                         Ok(_) => {
-                            log_success(&format!("Worker {} завершился нормально", symbol));
+                            log_debug(&format!("Worker {} завершился нормально", symbol));
                             break;
                         }
                         Err(e) => {
@@ -246,12 +246,16 @@ impl CycleSupervisor {
                     }
                     _ => {}
                 }
-                let cycle = LoaderCycle::init(symbol.to_string(), client).await?;
+                let cycle = LoaderCycle::init(symbol.to_string(), client)
+                    .await
+                    .map_err(CycleError::from)?;
                 sleep(Duration::from_secs(10)).await;
 
                 match config.runtime.runtime_type {
-                    RuntimeType::Realtime => cycle.run().await?,
-                    RuntimeType::Backtest => cycle.run_backtest().await?,
+                    RuntimeType::Realtime => cycle.run().await.map_err(CycleError::from)?,
+                    RuntimeType::Backtest => {
+                        cycle.run_backtest().await.map_err(CycleError::from)?
+                    }
                 }
             }
             CycleType::Loaderwm => {
@@ -264,34 +268,62 @@ impl CycleSupervisor {
                     }
                     _ => {}
                 }
-                let cycle = LoaderWMCycle::init(symbol.to_string(), client).await?;
+                let cycle = LoaderWMCycle::init(symbol.to_string(), client)
+                    .await
+                    .map_err(CycleError::from)?;
                 sleep(Duration::from_secs(10)).await;
 
                 match config.runtime.runtime_type {
-                    RuntimeType::Realtime => cycle.run(counter_tx, model_tx.as_ref()).await?,
-                    RuntimeType::Backtest => cycle.run_backtest(model_tx.as_ref()).await?,
+                    RuntimeType::Realtime => cycle
+                        .run(counter_tx, model_tx.as_ref())
+                        .await
+                        .map_err(CycleError::from)?,
+                    RuntimeType::Backtest => cycle
+                        .run_backtest(model_tx.as_ref())
+                        .await
+                        .map_err(CycleError::from)?,
                 }
             }
             CycleType::Training => {
-                let cycle = TrainingCycle::init(symbol.to_string(), client).await?;
+                let cycle = TrainingCycle::init(symbol.to_string(), client)
+                    .await
+                    .map_err(CycleError::from)?;
                 sleep(Duration::from_secs(10)).await;
 
+                let model = model_tx.as_ref().ok_or_else(|| {
+                    CycleError::AnyhowError(anyhow::anyhow!(
+                        "Model not initialized for Training cycle"
+                    ))
+                })?;
                 match config.runtime.runtime_type {
-                    RuntimeType::Realtime => {
-                        cycle.run(counter_tx, model_tx.as_ref().unwrap()).await?
+                    RuntimeType::Realtime => cycle
+                        .run(counter_tx, model)
+                        .await
+                        .map_err(CycleError::from)?,
+                    RuntimeType::Backtest => {
+                        cycle.run_backtest(model).await.map_err(CycleError::from)?
                     }
-                    RuntimeType::Backtest => cycle.run_backtest(model_tx.as_ref().unwrap()).await?,
                 }
             }
             CycleType::Sandbox => {
-                let cycle = SandboxCycle::init(symbol.to_string(), client).await?;
+                let cycle = SandboxCycle::init(symbol.to_string(), client)
+                    .await
+                    .map_err(CycleError::from)?;
                 sleep(Duration::from_secs(10)).await;
 
+                let model = model_tx.as_ref().ok_or_else(|| {
+                    CycleError::AnyhowError(anyhow::anyhow!(
+                        "Model not initialized for Sandbox cycle"
+                    ))
+                })?;
                 match config.runtime.runtime_type {
-                    RuntimeType::Realtime => {
-                        cycle.run(counter_tx, model_tx.as_ref().unwrap()).await?
+                    RuntimeType::Realtime => cycle
+                        .run(counter_tx, model)
+                        .await
+                        .map_err(CycleError::from)?,
+                    RuntimeType::Backtest => {
+                        cycle.run_backtest(model).await.map_err(CycleError::from)?
                     }
-                    RuntimeType::Backtest => cycle.run_backtest(model_tx.as_ref().unwrap()).await?,
                 }
             }
         }
@@ -424,11 +456,12 @@ impl ModelActor {
     }
 
     pub async fn run(mut self) {
-        log_info("ModelActor запущен");
+        log_debug("ModelActor запущен");
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
                 ModelCommand::Predict { data, respond_to } => {
+                    log_debug(format!("{:#?}", &data).as_str());
                     let model = self.model.clone();
                     let result = model.lock().await.predict(data).await;
 
@@ -568,10 +601,9 @@ impl CycleManager {
         });
 
         if needs_model {
-            match self.initialize_model().await {
-                Ok(()) => (),
-                Err(e) => return Err(anyhow::anyhow!(e)),
-            };
+            self.initialize_model()
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
         }
 
         for symbol in &symbols {
@@ -1037,7 +1069,7 @@ impl ServersActor {
             {
                 Ok(ohlcv) => ohlcv,
                 Err(e) => {
-                    eprintln!("{}", e);
+                    log_error(format!("{}", e).as_str());
                     self.mark_server_inactive(&current_server);
 
                     current_server = self
@@ -1048,7 +1080,10 @@ impl ServersActor {
                 }
             };
 
-            let body: ApiResponse<serde_json::Value> = res.json().await?;
+            let body: ApiResponse<serde_json::Value> = res
+                .json()
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to parse JSON response: {}", e))?;
             self.add_workload(current_server.clone(), limit as u8)?;
             if !body.success {
                 return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
@@ -1060,21 +1095,33 @@ impl ServersActor {
 
             let candles = raw_ohlcv
                 .as_array()
-                .context("ohlcv is not an array")?
+                .ok_or_else(|| anyhow::anyhow!("ohlcv is not an array"))?
                 .iter()
                 .map(|item| {
-                    let arr = item.as_array().context("ohlcv item is not an array")?;
+                    let arr = item
+                        .as_array()
+                        .ok_or_else(|| anyhow::anyhow!("ohlcv item is not an array"))?;
 
                     if arr.len() < 6 {
                         return Err(anyhow::anyhow!("ohlcv item has less than 6 elements"));
                     }
 
                     Ok(Candle {
-                        open: arr[1].as_f64().context("open is not a number")?,
-                        high: arr[2].as_f64().context("high is not a number")?,
-                        low: arr[3].as_f64().context("low is not a number")?,
-                        close: arr[4].as_f64().context("close is not a number")?,
-                        volume: arr[5].as_f64().context("volume is not a number")?,
+                        open: arr[1]
+                            .as_f64()
+                            .ok_or_else(|| anyhow::anyhow!("open is not a number"))?,
+                        high: arr[2]
+                            .as_f64()
+                            .ok_or_else(|| anyhow::anyhow!("high is not a number"))?,
+                        low: arr[3]
+                            .as_f64()
+                            .ok_or_else(|| anyhow::anyhow!("low is not a number"))?,
+                        close: arr[4]
+                            .as_f64()
+                            .ok_or_else(|| anyhow::anyhow!("close is not a number"))?,
+                        volume: arr[5]
+                            .as_f64()
+                            .ok_or_else(|| anyhow::anyhow!("volume is not a number"))?,
                     })
                 })
                 .collect::<Result<Vec<_>, anyhow::Error>>()?;
@@ -1109,7 +1156,7 @@ impl ServersActor {
             {
                 Ok(response) => response,
                 Err(e) => {
-                    eprintln!("{}", e);
+                    log_error(format!("{}", e).as_str());
                     self.mark_server_inactive(&current_server);
 
                     current_server = self
@@ -1120,7 +1167,10 @@ impl ServersActor {
                 }
             };
 
-            let body: ApiResponse<serde_json::Value> = res.json().await?;
+            let body: ApiResponse<serde_json::Value> = res
+                .json()
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to parse JSON response: {}", e))?;
             self.add_workload(current_server.clone(), limit as u8)?;
             if !body.success {
                 return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
@@ -1132,22 +1182,36 @@ impl ServersActor {
 
             let candles = raw_ohlcv
                 .as_array()
-                .context("ohlcv is not an array")?
+                .ok_or_else(|| anyhow::anyhow!("ohlcv is not an array"))?
                 .iter()
                 .map(|item| {
-                    let arr = item.as_array().context("ohlcv item is not an array")?;
+                    let arr = item
+                        .as_array()
+                        .ok_or_else(|| anyhow::anyhow!("ohlcv item is not an array"))?;
 
                     if arr.len() < 6 {
                         return Err(anyhow::anyhow!("ohlcv item has less than 6 elements"));
                     }
 
                     Ok(CandleWithTimestamp {
-                        timestamp: arr[0].as_u64().context("timestamp is nor a number")?,
-                        open: arr[1].as_f64().context("open is not a number")?,
-                        high: arr[2].as_f64().context("high is not a number")?,
-                        low: arr[3].as_f64().context("low is not a number")?,
-                        close: arr[4].as_f64().context("close is not a number")?,
-                        volume: arr[5].as_f64().context("volume is not a number")?,
+                        timestamp: arr[0]
+                            .as_u64()
+                            .ok_or_else(|| anyhow::anyhow!("timestamp is not a number"))?,
+                        open: arr[1]
+                            .as_f64()
+                            .ok_or_else(|| anyhow::anyhow!("open is not a number"))?,
+                        high: arr[2]
+                            .as_f64()
+                            .ok_or_else(|| anyhow::anyhow!("high is not a number"))?,
+                        low: arr[3]
+                            .as_f64()
+                            .ok_or_else(|| anyhow::anyhow!("low is not a number"))?,
+                        close: arr[4]
+                            .as_f64()
+                            .ok_or_else(|| anyhow::anyhow!("close is not a number"))?,
+                        volume: arr[5]
+                            .as_f64()
+                            .ok_or_else(|| anyhow::anyhow!("volume is not a number"))?,
                     })
                 })
                 .collect::<Result<Vec<_>, anyhow::Error>>()?;
@@ -1189,27 +1253,28 @@ impl ServersActor {
                 }
             };
 
-            let body: ApiResponse<serde_json::Value> = res.json().await?;
+            let body: ApiResponse<serde_json::Value> = res
+                .json()
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to parse JSON response: {}", e))?;
             self.add_workload(current_server.clone(), 1)?;
             if !body.success {
                 return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
             }
-            let bid = body
+            let data = body
                 .data
-                .clone()
-                .unwrap()
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Response data is None!"))?;
+            let bid = data
                 .get("bid")
-                .unwrap()
+                .ok_or_else(|| anyhow::anyhow!("bid field is missing"))?
                 .as_f64()
-                .unwrap();
-            let ask = body
-                .data
-                .clone()
-                .unwrap()
+                .ok_or_else(|| anyhow::anyhow!("bid is not a number"))?;
+            let ask = data
                 .get("ask")
-                .unwrap()
+                .ok_or_else(|| anyhow::anyhow!("ask field is missing"))?
                 .as_f64()
-                .unwrap();
+                .ok_or_else(|| anyhow::anyhow!("ask is not a number"))?;
 
             return Ok(Ticker { bid, ask });
         }
@@ -1230,17 +1295,21 @@ impl ServersActor {
             .post(format!("http://{}/exchange/fetch/ticker", server))
             .json(&payload)
             .send()
-            .await?;
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to send request: {}", e))?;
         self.add_workload(server.to_string(), 1)?;
-        let body: ApiResponse<serde_json::Value> = res.json().await?;
+        let body: ApiResponse<serde_json::Value> = res
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to parse JSON response: {}", e))?;
 
         if !body.success {
             return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
         }
-        if !body.data.clone().is_none() {
+        if body.data.is_some() {
             Ok(())
         } else {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+            Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())))
         }
     }
 }
@@ -1282,7 +1351,7 @@ fn log_info(msg: &str) {
         .manager
         .additional_manager_prints
     {
-        println!(
+        info!(
             "{}[{}] {}{}",
             Fore::WHITE.as_str(),
             Utc::now().format("%H:%M:%S"),
@@ -1292,13 +1361,13 @@ fn log_info(msg: &str) {
     }
 }
 
-fn log_success(msg: &str) {
+fn log_debug(msg: &str) {
     if load_config(CONFIG_PATH).prints.manager.manager_init {
-        println!(
+        debug!(
             "{}[{}] {}{}",
             Fore::WHITE.as_str(),
             Utc::now().format("%H:%M:%S"),
-            Fore::GREEN.as_str(),
+            Fore::CYAN.as_str(),
             msg
         );
     }
@@ -1306,7 +1375,7 @@ fn log_success(msg: &str) {
 
 fn log_warning(msg: &str) {
     if load_config(CONFIG_PATH).prints.manager.manager_init {
-        println!(
+        warn!(
             "{}[{}] {}{}",
             Fore::WHITE.as_str(),
             Utc::now().format("%H:%M:%S"),
@@ -1317,5 +1386,5 @@ fn log_warning(msg: &str) {
 }
 
 fn log_error(msg: &str) {
-    eprintln!("{}{}", Fore::RED.as_str(), msg);
+    error!("{}{}", Fore::RED.as_str(), msg);
 }
