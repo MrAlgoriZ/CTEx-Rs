@@ -1,4 +1,5 @@
 use indicatif::{ProgressBar, ProgressStyle};
+use log::debug;
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -263,6 +264,7 @@ impl LoaderWMCycle {
                         } else {
                             100_000.0
                         };
+                        debug!("{}", ratio);
                         let success: bool =
                             ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
 

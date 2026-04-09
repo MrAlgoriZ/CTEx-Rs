@@ -7,6 +7,7 @@ use crate::backend::app::Api;
 use crate::engine::cycles::manager::CycleManager;
 use crate::engine::utils::config::load_config::{ensure_config_exists, load_config};
 
+use dotenvy::dotenv;
 use env_logger;
 use std::collections::HashMap;
 
@@ -15,6 +16,7 @@ const CONFIG_PATH: &'static str = "config/config.yaml";
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     ensure_config_exists(CONFIG_PATH);
+    dotenv().ok();
     env_logger::init();
     let config = load_config(CONFIG_PATH);
     let symbols = config.symbols;

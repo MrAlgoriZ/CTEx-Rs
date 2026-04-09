@@ -451,6 +451,8 @@ impl Model for Ensemble {
         let mut data = data.clone();
         let mut predictions = DataMap::new(data.symbol.clone(), BTreeMap::new());
 
+        // TODO: Доставать accuracy и загружать как confidence
+
         // FIRST LAYER
         let fl_models = [
             self.future_volatility_model_tx.clone(),
@@ -472,14 +474,33 @@ impl Model for Ensemble {
                     respond_to: tx,
                 })
                 .await
-                .map_err(|e| anyhow!("[Ensemble::predict] Failed to send Predict to first layer model: {}", e))?;
-            let result = rx.await
-                .map_err(|e| anyhow!("[Ensemble::predict] Channel closed for first layer model (recv error: {})", e))?;
+                .map_err(|e| {
+                    anyhow!(
+                        "[Ensemble::predict] Failed to send Predict to first layer model: {}",
+                        e
+                    )
+                })?;
+            let result = rx.await.map_err(|e| {
+                anyhow!(
+                    "[Ensemble::predict] Channel closed for first layer model (recv error: {})",
+                    e
+                )
+            })?;
             for (k, v) in result.get_data().iter() {
                 let key = get_prediction_name(k)
                     .ok_or_else(|| anyhow!("Prediction with name {} is not exists", k))?;
                 predictions.entry(key.clone()).or_insert(*v);
                 data.insert(key, *v);
+
+                let confidence = match self.counters.get_option(k) {
+                    Some(counter) => counter.get_accuracy(),
+                    None => 100.0,
+                };
+                data.insert(
+                    get_confidence_name(k)
+                        .ok_or_else(|| anyhow!("Confidence with name {} is not exists", k))?,
+                    confidence,
+                );
             }
         }
 
@@ -501,14 +522,33 @@ impl Model for Ensemble {
                     respond_to: tx,
                 })
                 .await
-                .map_err(|e| anyhow!("[Ensemble::predict] Failed to send Predict to second layer model: {}", e))?;
-            let result = rx.await
-                .map_err(|e| anyhow!("[Ensemble::predict] Channel closed for second layer model (recv error: {})", e))?;
+                .map_err(|e| {
+                    anyhow!(
+                        "[Ensemble::predict] Failed to send Predict to second layer model: {}",
+                        e
+                    )
+                })?;
+            let result = rx.await.map_err(|e| {
+                anyhow!(
+                    "[Ensemble::predict] Channel closed for second layer model (recv error: {})",
+                    e
+                )
+            })?;
             for (k, v) in result.get_data().iter() {
                 let key = get_prediction_name(k)
                     .ok_or_else(|| anyhow!("Prediction with name {} is not exists", k))?;
                 predictions.entry(key.clone()).or_insert(*v); // future_*_pred
                 data.insert(key, *v);
+
+                let confidence = match self.counters.get_option(k) {
+                    Some(counter) => counter.get_accuracy(),
+                    None => 100.0,
+                };
+                data.insert(
+                    get_confidence_name(k)
+                        .ok_or_else(|| anyhow!("Confidence with name {} is not exists", k))?,
+                    confidence,
+                );
             }
         }
 
@@ -527,9 +567,18 @@ impl Model for Ensemble {
                     respond_to: tx,
                 })
                 .await
-                .map_err(|e| anyhow!("[Ensemble::predict] Failed to send Predict to third layer model: {}", e))?;
-            let result = rx.await
-                .map_err(|e| anyhow!("[Ensemble::predict] Channel closed for third layer model (recv error: {})", e))?;
+                .map_err(|e| {
+                    anyhow!(
+                        "[Ensemble::predict] Failed to send Predict to third layer model: {}",
+                        e
+                    )
+                })?;
+            let result = rx.await.map_err(|e| {
+                anyhow!(
+                    "[Ensemble::predict] Channel closed for third layer model (recv error: {})",
+                    e
+                )
+            })?;
             for (k, v) in result.get_data().iter() {
                 predictions.entry(k.to_string()).or_insert(*v);
                 data.insert(k.to_string(), *v);
@@ -550,7 +599,8 @@ impl Model for Ensemble {
                     self.counters.get_mut(k).push(1); // future_*
                 } else {
                     self.counters.get_mut(k).push(0);
-                    let model_tx = self.get_model_by_name(k)
+                    let model_tx = self
+                        .get_model_by_name(k)
                         .ok_or_else(|| anyhow!("Model tx with name '{}' not found", k))?;
                     let (tx, rx) = oneshot::channel();
                     model_tx
@@ -569,10 +619,13 @@ impl Model for Ensemble {
                             "[Ensemble::handle_mistakes] Channel closed for model '{}' (recv error: {})",
                             k, e
                         ))?;
-                    rx_result.map_err(|e| anyhow!(
-                        "[Ensemble::handle_mistakes] Model '{}' HandleMistakes failed: {}",
-                        k, e
-                    ))?;
+                    rx_result.map_err(|e| {
+                        anyhow!(
+                            "[Ensemble::handle_mistakes] Model '{}' HandleMistakes failed: {}",
+                            k,
+                            e
+                        )
+                    })?;
                 }
             }
         }

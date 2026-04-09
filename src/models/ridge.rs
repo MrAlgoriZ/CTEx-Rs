@@ -144,9 +144,12 @@ impl Model for Ridge {
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
-        let model = self.model.as_ref()
+        let model = self
+            .model
+            .as_ref()
             .ok_or_else(|| anyhow!("Ridge model not trained yet!"))?;
-        let prediction = model.predict(values)
+        let prediction = model
+            .predict(values)
             .map_err(|e| anyhow!("Failed to predict with RidgeRegression: {}", e))?;
         Ok(prediction)
     }
@@ -276,7 +279,8 @@ impl Model for Ridge {
         println!("Corr: {}", correlation);
 
         if correlation > self.config.behaviour.success_threshold {
-            self.train().await
+            self.train()
+                .await
                 .map_err(|e| anyhow!("Failed to retrain Ridge model: {}", e))?;
         }
 

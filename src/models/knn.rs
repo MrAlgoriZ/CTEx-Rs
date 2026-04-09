@@ -152,8 +152,12 @@ impl Model for KNN {
                     .with_k(self.k);
 
                 self.classification_model = Some(
-                    KNNClassifier::fit(x_train, &y_train.iter().map(|v| *v as i32).collect(), params)
-                        .map_err(|e| anyhow!("Failed to fit KNNClassifier: {}", e))?,
+                    KNNClassifier::fit(
+                        x_train,
+                        &y_train.iter().map(|v| *v as i32).collect(),
+                        params,
+                    )
+                    .map_err(|e| anyhow!("Failed to fit KNNClassifier: {}", e))?,
                 );
             }
         }
@@ -171,17 +175,25 @@ impl Model for KNN {
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
         let prediction = match self.task_type {
             TaskType::Regression => {
-                let model = self.regression_model.as_ref()
+                let model = self
+                    .regression_model
+                    .as_ref()
                     .ok_or_else(|| anyhow!("KNN regression model not trained yet!"))?;
-                model.predict(values)
+                model
+                    .predict(values)
                     .map_err(|e| anyhow!("Failed to predict with KNNRegressor: {}", e))?
             }
             TaskType::Classification => {
-                let model = self.classification_model.as_ref()
+                let model = self
+                    .classification_model
+                    .as_ref()
                     .ok_or_else(|| anyhow!("KNN classification model not trained yet!"))?;
-                model.predict(values)
+                model
+                    .predict(values)
                     .map_err(|e| anyhow!("Failed to predict with KNNClassifier: {}", e))?
-                    .iter().map(|v| *v as f64).collect()
+                    .iter()
+                    .map(|v| *v as f64)
+                    .collect()
             }
         };
         Ok(prediction)
@@ -312,7 +324,8 @@ impl Model for KNN {
         println!("Corr: {}", correlation);
 
         if correlation > self.config.behaviour.success_threshold {
-            self.train().await
+            self.train()
+                .await
                 .map_err(|e| anyhow!("Failed to retrain KNN model: {}", e))?;
         }
 

@@ -142,9 +142,12 @@ impl Model for ExtraTrees {
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
-        let model = self.model.as_ref()
+        let model = self
+            .model
+            .as_ref()
             .ok_or_else(|| anyhow!("ExtraTrees model not trained yet!"))?;
-        let prediction = model.predict(values)
+        let prediction = model
+            .predict(values)
             .map_err(|e| anyhow!("Failed to predict with ExtraTreesRegressor: {}", e))?;
         Ok(prediction)
     }
@@ -160,7 +163,8 @@ impl Model for ExtraTrees {
         println!("Corr: {}", correlation);
 
         if correlation > self.config.behaviour.success_threshold {
-            self.train().await
+            self.train()
+                .await
                 .map_err(|e| anyhow!("Failed to retrain ExtraTrees model: {}", e))?;
         }
 

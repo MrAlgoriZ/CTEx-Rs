@@ -126,7 +126,7 @@ prints:
     manager_init: true
     additional_manager_prints: true
 behaviour:
-  success_threshold: 0.125
+  success_threshold: 0.9
   accuracy_capacity: 192
   predictions_capacity: 96
 runtime:
@@ -136,8 +136,8 @@ runtime:
   with_model: true
   cycle_type: loaderwm
 symbols:
-  - BTCUSDT
-main_exchange: mexc
+  - ETHUSDT
+main_exchange: bybit
 timeframes:
   main: 1h
   background: 1m

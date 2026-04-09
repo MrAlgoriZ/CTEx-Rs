@@ -127,7 +127,7 @@ impl Model for Linear {
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             match self.evaluate(xv, yv) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => return Err(e),
             }
         }
@@ -136,9 +136,12 @@ impl Model for Linear {
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
-        let model = self.model.as_ref()
+        let model = self
+            .model
+            .as_ref()
             .ok_or_else(|| anyhow!("Linear model not trained yet!"))?;
-        let prediction = model.predict(values)
+        let prediction = model
+            .predict(values)
             .map_err(|e| anyhow!("Failed to predict with LinearRegression: {}", e))?;
         Ok(prediction)
     }
@@ -268,7 +271,8 @@ impl Model for Linear {
         println!("Corr: {}", correlation);
 
         if correlation > self.config.behaviour.success_threshold {
-            self.train().await
+            self.train()
+                .await
                 .map_err(|e| anyhow!("Failed to retrain Linear model: {}", e))?;
         }
 
