@@ -37,11 +37,13 @@ pub trait Model: ModelDependencies {
         data: Vec<DataMap>,
     ) -> Result<(DenseMatrix<f64>, Vec<f64>), anyhow::Error> {
         let n_samples = data.len();
+        debug!("n_samples: {}", &n_samples);
         if n_samples == 0 {
             return Err(anyhow!("No data provided"));
         }
 
         let feature_len = data[0].get_only_features().iter().len();
+        debug!("feature_len: {}", &feature_len);
 
         let symbols: Vec<&str> = data.iter().map(|d| d.symbol.as_str()).collect();
         let unique_symbols: Vec<&str> = {
@@ -52,7 +54,7 @@ pub trait Model: ModelDependencies {
             set.into_iter().collect()
         };
         let n_symbols = unique_symbols.len();
-
+        debug!("usymbols: {:?}, len: {}", &unique_symbols, &n_symbols);
         let symbol_to_idx: BTreeMap<&str, usize> = unique_symbols
             .iter()
             .enumerate()
@@ -73,7 +75,7 @@ pub trait Model: ModelDependencies {
 
         for row in data.iter() {
             let target = row.get(self.get_target_name()).copied().unwrap_or_default();
-
+            debug!("target: {} = {}", self.get_target_name(), &target);
             if target.is_nan() {
                 skipped_nan_target += 1;
                 continue;
@@ -98,6 +100,7 @@ pub trait Model: ModelDependencies {
             for (i, val) in row.get_only_features().values().enumerate() {
                 full_row[n_symbols + i] = *val;
             }
+            debug!("full_row: {:?}", &full_row);
 
             x_rows.push(full_row);
             y_target.push(target);
@@ -125,10 +128,12 @@ pub trait Model: ModelDependencies {
         }
 
         let n_features = n_symbols + feature_len;
+        debug!("n_features: {}", &n_features);
         let mut flat_x = Vec::with_capacity(x_rows.len() * n_features);
         for row in x_rows.iter() {
             flat_x.extend(row);
         }
+        debug!("flat_x: {:?}", &flat_x);
 
         let x = DenseMatrix::new(x_rows.len(), n_features, flat_x, false)
             .map_err(|e| anyhow!("Failed to create DenseMatrix for features: {}", e))?;

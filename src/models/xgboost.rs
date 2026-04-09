@@ -1,4 +1,6 @@
 use anyhow::anyhow;
+use log::{debug, warn};
+use smartcore::linalg::basic::arrays::Array;
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::xgboost::{XGRegressor, XGRegressorParameters};
 use sqlx::PgPool;
@@ -104,29 +106,52 @@ impl Model for XGBoost {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error> {
+        debug!("tx len: {:?}", x_train);
+        debug!("ty len: {:?}", y_train.len());
+
         match self.task_type {
             TaskType::Regression => {
+                let safe_max_depth = if x_train.shape().0 < 50 {
+                    warn!(
+                        "Small dataset ({} samples), reducing max_depth from {} to 3",
+                        x_train.shape().0,
+                        self.max_depth
+                    );
+                    3
+                } else {
+                    self.max_depth
+                };
+
                 let params = XGRegressorParameters::default()
                     .with_n_estimators(self.n_estimators)
-                    .with_max_depth(self.max_depth)
+                    .with_max_depth(safe_max_depth)
                     .with_seed(self.get_config().model.seed);
 
-                self.model = Some(match XGRegressor::fit(x_train, y_train, params) { Ok(v) => v, Err(e) => return Err(anyhow!("Failed to fit XGRegressor: {}", e)) });
+                self.model = Some(match XGRegressor::fit(x_train, y_train, params) {
+                    Ok(v) => v,
+                    Err(e) => return Err(anyhow!("Failed to fit XGRegressor: {}", e)),
+                });
             }
             _ => return Err(anyhow!("XGBoost supports only regression task type!")),
         };
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
-            match self.evaluate(xv, yv) { Ok(_) => {}, Err(e) => return Err(e) }
+            match self.evaluate(xv, yv) {
+                Ok(_) => {}
+                Err(e) => return Err(e),
+            }
         }
 
         Ok(())
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
-        let model = self.model.as_ref()
+        let model = self
+            .model
+            .as_ref()
             .ok_or_else(|| anyhow!("XGBoost model not trained yet!"))?;
-        let prediction = model.predict(values)
+        let prediction = model
+            .predict(values)
             .map_err(|e| anyhow!("Failed to predict with XGRegressor: {}", e))?;
         Ok(prediction)
     }
@@ -142,7 +167,8 @@ impl Model for XGBoost {
         println!("Corr: {}", correlation);
 
         if correlation > self.config.behaviour.success_threshold {
-            self.train().await
+            self.train()
+                .await
                 .map_err(|e| anyhow!("Failed to retrain XGBoost model: {}", e))?;
         }
 
