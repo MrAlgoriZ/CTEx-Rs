@@ -321,9 +321,8 @@ impl Model for KNN {
         let true_data = true_data.to_vec();
         let predicted_data = predicted_data.to_vec();
         let correlation = corr(&true_data, &predicted_data);
-        println!("Corr: {}", correlation);
 
-        if correlation > self.config.behaviour.success_threshold {
+        if correlation < self.config.behaviour.success_threshold {
             self.train()
                 .await
                 .map_err(|e| anyhow!("Failed to retrain KNN model: {}", e))?;

@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use log::info;
+use log::{debug, info};
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use sqlx::PgPool;
 use std::collections::BTreeMap;
@@ -340,6 +340,23 @@ impl ModelDependencies for Ensemble {
     fn get_pool(&self) -> Option<&PgPool> {
         None
     }
+
+    fn get_accuracy(&self) -> Option<DataMap> {
+        let mut accs = BTreeMap::new();
+        self.counters.symbols.iter().for_each(|model| {
+            debug!("acc: {}", model.0.as_str());
+            if !matches!(
+                model.0.as_str(),
+                "future_return" | "action_type" | "position_size" // future_*
+            ) {
+                let acc = model.1.get_accuracy();
+                if let Some(conf_name) = get_confidence_name(model.0) {
+                    accs.insert(conf_name, acc); // future_*_confidence
+                }
+            }
+        });
+        Some(DataMap::new("".to_string(), accs))
+    }
 }
 
 #[async_trait::async_trait]
@@ -630,21 +647,5 @@ impl Model for Ensemble {
             }
         }
         Ok(())
-    }
-
-    fn get_accuracy(&self) -> Option<DataMap> {
-        let mut accs = BTreeMap::new();
-        self.counters.symbols.iter().for_each(|model| {
-            if !matches!(
-                model.0.as_str(),
-                "future_return" | "action_type" | "position_size" // future_*
-            ) {
-                let acc = model.1.get_accuracy();
-                if let Some(conf_name) = get_confidence_name(model.0) {
-                    accs.insert(conf_name, acc); // future_*_confidence
-                }
-            }
-        });
-        Some(DataMap::new("".to_string(), accs))
     }
 }

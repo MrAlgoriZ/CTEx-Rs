@@ -113,7 +113,7 @@ servers:
   - 127.0.0.1:3737
 prints:
   model:
-    skipped_values: true
+    skipped_values: false
     metrics: false
   cycle:
     volatility: true
@@ -134,10 +134,10 @@ runtime:
   with_training: true
   with_saves: true
   with_model: true
-  cycle_type: loaderwm
+  cycle_type: sandbox
 symbols:
-  - ETHUSDT
-main_exchange: bybit
+  - ADAUSDT
+main_exchange: binance
 timeframes:
   main: 1h
   background: 1m

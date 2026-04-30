@@ -72,7 +72,7 @@ impl BackgroundCycle {
         sleep(Duration::from_secs(2)).await;
 
         if self.config.prints.cycle.cycle_start {
-            println!("{} Фоновый цикл запустился", self.print_time());
+            println!("{}Фоновый цикл запустился", self.print_time());
         }
 
         Ok(())

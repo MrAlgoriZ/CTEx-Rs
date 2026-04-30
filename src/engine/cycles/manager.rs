@@ -461,7 +461,7 @@ impl ModelActor {
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
                 ModelCommand::Predict { data, respond_to } => {
-                    log_debug(format!("{:#?}", &data).as_str());
+                    // log_debug(format!("{:#?}", &data).as_str());
                     let model = self.model.clone();
                     let result = model.lock().await.predict(data).await;
 

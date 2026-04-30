@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use log::debug;
+
 use crate::data::data_interfaces::*;
 use crate::data::process::features::auxiliary::{safed, vwap};
 use crate::data::process::features::basic::*;
@@ -203,8 +205,13 @@ pub fn collect_targets(ohlcv: [Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
     let liquidity_drop_probability = liquidity_drop_probability_n(&ohlcv, 6, 0.5);
 
     let future_return = return_k(&ohlcv, 1);
-    let action_type = calculate_action_type(future_return, risk_score, 0.1);
+    let action_type = calculate_action_type(future_return, risk_score, 0.05);
     let position_size = calculate_position_size(future_return, risk_score, 1.0);
+
+    debug!(
+        "trp: {}, rs: {}, ps: {}",
+        tail_risk_proxy, risk_score, position_size
+    );
 
     BTreeMap::from([
         ("future_volatility".to_string(), future_volatility),

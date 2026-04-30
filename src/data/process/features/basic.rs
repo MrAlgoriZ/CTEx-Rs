@@ -375,12 +375,12 @@ pub fn tail_risk_proxy_n(candles: &[Candle], n: usize, vol_rolling_n: f64) -> f6
 
     for i in len - n..len {
         let r = (candles[i].close - candles[i - 1].close) / candles[i - 1].close;
-        if r > 0.05 {
+        if r > 0.01 {
             count += 1;
         };
     }
 
-    safed((count as f64 / len as f64) / vol_rolling_n)
+    safed((count as f64 / n as f64) / vol_rolling_n)
 }
 
 pub fn drawdown_probability_n(candles: &[Candle], n: usize, threshold: f64) -> f64 {

@@ -191,7 +191,7 @@ impl Model for DecisionTree {
         let predicted_data = predicted_data.to_vec();
         let correlation = corr(&true_data, &predicted_data);
 
-        if correlation > self.config.behaviour.success_threshold {
+        if correlation < self.config.behaviour.success_threshold {
             self.train()
                 .await
                 .map_err(|e| anyhow!("Failed to retrain DecisionTree model: {}", e))?;

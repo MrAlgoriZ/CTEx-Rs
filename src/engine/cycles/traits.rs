@@ -1,5 +1,5 @@
 use chrono::Utc;
-use log::debug;
+// use log::debug;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
@@ -110,7 +110,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
             let pred = rx.await?;
 
-            debug!("pred: {:#?}", &pred);
+            // debug!("pred: {:#?}", &pred);
 
             self.change_last_predictions(pred.clone());
             pred.get("position_size")

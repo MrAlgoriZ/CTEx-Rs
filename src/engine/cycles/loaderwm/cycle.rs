@@ -262,7 +262,7 @@ impl LoaderWMCycle {
                         let ratio = if target != &0.0 {
                             (pred - target).abs() / (target).abs()
                         } else {
-                            100_000.0
+                            0.0
                         };
                         debug!("{}", ratio);
                         let success: bool =
@@ -324,6 +324,7 @@ impl LoaderWMCycle {
             } else {
                 None
             };
+            // debug!("prediction: {:?}", prediction);
 
             phase = CyclePhase::Active;
             self.last_candles = Some(candles);

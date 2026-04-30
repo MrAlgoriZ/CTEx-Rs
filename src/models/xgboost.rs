@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use log::{debug, warn};
+use log::warn;
 use smartcore::linalg::basic::arrays::Array;
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::xgboost::{XGRegressor, XGRegressorParameters};
@@ -106,8 +106,8 @@ impl Model for XGBoost {
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
     ) -> Result<(), anyhow::Error> {
-        debug!("tx len: {:?}", x_train);
-        debug!("ty len: {:?}", y_train.len());
+        // debug!("tx len: {:?}", x_train);
+        // debug!("ty len: {:?}", y_train.len());
 
         match self.task_type {
             TaskType::Regression => {
@@ -164,9 +164,8 @@ impl Model for XGBoost {
         let true_data = true_data.to_vec();
         let predicted_data = predicted_data.to_vec();
         let correlation = corr(&true_data, &predicted_data);
-        println!("Corr: {}", correlation);
 
-        if correlation > self.config.behaviour.success_threshold {
+        if correlation < self.config.behaviour.success_threshold {
             self.train()
                 .await
                 .map_err(|e| anyhow!("Failed to retrain XGBoost model: {}", e))?;

@@ -28,6 +28,9 @@ pub trait ModelDependencies {
     fn check_model_trained(&self) -> bool;
     fn get_standart(&self) -> &SQLStandart;
     fn get_pool(&self) -> Option<&PgPool>;
+    fn get_accuracy(&self) -> Option<DataMap> {
+        None
+    }
 }
 
 #[async_trait::async_trait]
@@ -75,7 +78,7 @@ pub trait Model: ModelDependencies {
 
         for row in data.iter() {
             let target = row.get(self.get_target_name()).copied().unwrap_or_default();
-            debug!("target: {} = {}", self.get_target_name(), &target);
+            // debug!("target: {} = {}", self.get_target_name(), &target);
             if target.is_nan() {
                 skipped_nan_target += 1;
                 continue;
@@ -100,7 +103,6 @@ pub trait Model: ModelDependencies {
             for (i, val) in row.get_only_features().values().enumerate() {
                 full_row[n_symbols + i] = *val;
             }
-            debug!("full_row: {:?}", &full_row);
 
             x_rows.push(full_row);
             y_target.push(target);
@@ -133,7 +135,6 @@ pub trait Model: ModelDependencies {
         for row in x_rows.iter() {
             flat_x.extend(row);
         }
-        debug!("flat_x: {:?}", &flat_x);
 
         let x = DenseMatrix::new(x_rows.len(), n_features, flat_x, false)
             .map_err(|e| anyhow!("Failed to create DenseMatrix for features: {}", e))?;
@@ -384,11 +385,11 @@ pub trait Model: ModelDependencies {
             .select_all(pool)
             .await
             .map_err(|e| anyhow!("Failed to select data from database: {}", e))?;
-        debug!(
-            "Data for train: {:#?}\nStandart: {:?}",
-            &data[0],
-            self.get_standart()
-        );
+        // debug!(
+        //     "Data for train: {:#?}\nStandart: {:?}",
+        //     &data[0],
+        //     self.get_standart()
+        // );
         let (x, y_target) = self
             .load_data(data)
             .map_err(|e| anyhow!("Failed to load data: {}", e))?;
@@ -430,10 +431,6 @@ pub trait Model: ModelDependencies {
         true_data: DataMap,
         predicted_data: DataMap,
     ) -> Result<(), anyhow::Error>;
-
-    fn get_accuracy(&self) -> Option<DataMap> {
-        None
-    }
 }
 
 pub fn init_single_model(
