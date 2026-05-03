@@ -114,7 +114,7 @@ impl LoaderWMCycle {
                     let ratio = if target != &0.0 {
                         (prediction.unwrap() - target).abs() / (target).abs()
                     } else {
-                        100_000.0
+                        0.0
                     };
 
                     if self.config.prints.cycle.target {

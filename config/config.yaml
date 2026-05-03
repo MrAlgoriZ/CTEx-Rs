@@ -104,9 +104,10 @@ model:
   train_test_split:
     train_ratio: 0.8
   metric: R2
+  save_metrics: true
   seed: 42
 backend:
-  enabled: true
+  enabled: false
   listener: 0.0.0.0:3000
   admin_password: "123"
 servers:

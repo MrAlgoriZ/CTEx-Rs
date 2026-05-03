@@ -157,7 +157,7 @@ pub const TARGETS_SECOND_LAYER: &[&str] = &[
 pub const TARGETS_THIRD_LAYER: &[&str] = &["future_return", "action_type", "position_size"];
 pub const TARGETS_SINGLE_MODEL: &[&str] = &["position_size"];
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum SQLStandart {
     FirstLayer,
     SecondLayer,

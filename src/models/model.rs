@@ -599,55 +599,134 @@ pub fn init_ensemble_model(
     Box::new(model)
 }
 
+#[tokio::test]
+async fn test_training() -> Result<(), anyhow::Error> {
+    let pool =
+        sqlx::PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
+            .await
+            .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
+    let params = crate::engine::utils::config::load_config::load_config(crate::CONFIG_PATH)
+        .model
+        .params;
+
+    match params {
+        crate::models::ModelParams::Ensemble {
+            future_volatility_model_params,
+            future_volume_model_params,
+            future_trend_strength_model_params,
+            future_range_model_params,
+            future_return_mean_model_params,
+            future_return_std_model_params,
+            future_return_skew_model_params,
+            future_return_kurt_model_params,
+            risk_score_model_params,
+            drawdown_probability_model_params,
+            tail_event_probability_model_params,
+            volatility_spike_probability_model_params,
+            liquidity_drop_probability_model_params,
+            future_return_model_params,
+            action_type_model_params,
+            position_size_model_params,
+        } => {
+            let mut model = init_ensemble_model(
+                None,
+                pool,
+                future_volatility_model_params,
+                future_volume_model_params,
+                future_trend_strength_model_params,
+                future_range_model_params,
+                future_return_mean_model_params,
+                future_return_std_model_params,
+                future_return_skew_model_params,
+                future_return_kurt_model_params,
+                risk_score_model_params,
+                drawdown_probability_model_params,
+                tail_event_probability_model_params,
+                volatility_spike_probability_model_params,
+                liquidity_drop_probability_model_params,
+                future_return_model_params,
+                action_type_model_params,
+                position_size_model_params,
+            );
+            model.train().await?;
+        }
+        crate::models::ModelParams::Single { params } => {
+            let mut model = init_single_model(params, None, SQLStandart::SingleModel, pool);
+            model.train().await?;
+        }
+    }
+
+    Ok(())
+}
+
 // #[tokio::test]
-// async fn test_training() -> Result<(), anyhow::Error> {
-//     let pool =
-//         sqlx::PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
-//             .await
-//             .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
-//     let params = crate::engine::utils::config::load_config::load_config(crate::CONFIG_PATH)
-//         .model
-//         .params;
+#[allow(unused)]
+async fn find_best_model_config() -> Result<(), anyhow::Error> {
+    use crate::models::TargetType;
 
-//     match params {
-//         crate::models::ModelParams::Ensemble {
-//             volatility_model_params,
-//             volume_model_params,
-//             spread_model_params,
-//             trend_strength_model_params,
-//             range_model_params,
-//             return_model_params,
-//             return_mean_model_params,
-//             return_std_model_params,
-//             return_skew_model_params,
-//             return_kurt_model_params,
-//             action_model_params,
-//             interpretator_model_params,
-//         } => {
-//             let mut model = init_ensemble_model(
-//                 None,
-//                 volatility_model_params,
-//                 volume_model_params,
-//                 spread_model_params,
-//                 trend_strength_model_params,
-//                 range_model_params,
-//                 return_model_params,
-//                 return_mean_model_params,
-//                 return_std_model_params,
-//                 return_skew_model_params,
-//                 return_kurt_model_params,
-//                 action_model_params,
-//                 interpretator_model_params,
-//             );
-//             let data = crate::data::requests::database::requests::select_all_candles(&pool).await?;
-//             model.train(data)?;
-//         }
-//         crate::models::ModelParams::Single { params } => {
-//             let mut model = init_single_model(params, None);
-//             let data = crate::data::requests::database::requests::select_all_candles(&pool).await?;
-//             model.train(data)?;
-//         }
-//     }
+    let pool =
+        sqlx::PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
+            .await
+            .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
 
-//     Ok(())
-// }
+    let targets = [
+        (TargetType::FutureVolatility, SQLStandart::FirstLayer),
+        (TargetType::FutureVolume, SQLStandart::FirstLayer),
+        (TargetType::FutureTrendStrength, SQLStandart::FirstLayer),
+        (TargetType::FutureRange, SQLStandart::FirstLayer),
+        (TargetType::FutureReturnMean, SQLStandart::FirstLayer),
+        (TargetType::FutureReturnStd, SQLStandart::FirstLayer),
+        (TargetType::FutureReturnSkewness, SQLStandart::FirstLayer),
+        (TargetType::FutureReturnKurtosis, SQLStandart::FirstLayer),
+        (TargetType::RiskScore, SQLStandart::SecondLayer),
+        (TargetType::DrawdownProbability, SQLStandart::SecondLayer),
+        (TargetType::TailEventProbability, SQLStandart::SecondLayer),
+        (
+            TargetType::VolatilitySpikeProbability,
+            SQLStandart::SecondLayer,
+        ),
+        (
+            TargetType::LiquidityDropProbability,
+            SQLStandart::SecondLayer,
+        ),
+        (TargetType::FutureReturn, SQLStandart::ThirdLayer),
+        (TargetType::ActionType, SQLStandart::ThirdLayer),
+        (TargetType::PositionSize, SQLStandart::ThirdLayer),
+    ];
+
+    for target in targets {
+        // XGBoost
+        {
+            let n_estimators_arr = [10, 25, 50, 100, 150];
+            let max_depth_arr = [1, 2, 3, 4, 5];
+
+            for n_estimators in n_estimators_arr.into_iter() {
+                for max_depth in max_depth_arr.into_iter() {
+                    let mut xgboost = match target.clone().0 {
+                        TargetType::ActionType => crate::models::xgboost::XGBoost::new(
+                            None,
+                            crate::models::TaskType::Classification,
+                            target.0,
+                            target.1,
+                            pool.clone(),
+                            n_estimators,
+                            max_depth,
+                        ),
+                        _ => crate::models::xgboost::XGBoost::new(
+                            None,
+                            crate::models::TaskType::Regression,
+                            target.0,
+                            target.1,
+                            pool.clone(),
+                            n_estimators,
+                            max_depth,
+                        ),
+                    };
+                    xgboost.train().await?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}

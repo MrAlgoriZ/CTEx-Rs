@@ -123,7 +123,7 @@ impl SandboxCycle {
                     let ratio = if target != &0.0 {
                         (prediction.unwrap() - target).abs() / (target).abs()
                     } else {
-                        100_000.0
+                        0.0
                     };
 
                     let success: bool =
@@ -280,7 +280,7 @@ impl SandboxCycle {
                     let ratio = if target != &0.0 {
                         (prediction.unwrap() - target).abs() / (target).abs()
                     } else {
-                        100_000.0
+                        0.0
                     };
 
                     let success: bool =

@@ -24,7 +24,7 @@ pub enum TaskType {
     Classification,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum TargetType {
     FutureVolatility,

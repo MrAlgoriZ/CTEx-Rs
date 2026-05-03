@@ -22,6 +22,7 @@ pub struct ModelConfig {
     pub params: ModelParams,
     pub train_test_split: TrainTestSplit,
     pub metric: MetricType,
+    pub save_metrics: bool,
     pub seed: u64,
 }
 
@@ -141,6 +142,7 @@ impl Default for Config {
                 },
                 train_test_split: TrainTestSplit { train_ratio: 0.8 },
                 metric: MetricType::R2,
+                save_metrics: false,
                 seed: 42,
             },
             backend: BackendConfig {

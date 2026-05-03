@@ -114,7 +114,7 @@ impl TrainingCycle {
                     let ratio = if target != &0.0 {
                         (prediction.unwrap() - target).abs() / (target).abs()
                     } else {
-                        100_000.0
+                        0.0
                     };
 
                     let success: bool =
@@ -251,7 +251,7 @@ impl TrainingCycle {
                     let ratio = if target != &0.0 {
                         (prediction.unwrap() - target).abs() / (target).abs()
                     } else {
-                        100_000.0
+                        0.0
                     };
 
                     let success: bool =
