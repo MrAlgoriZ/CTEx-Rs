@@ -1,3 +1,4 @@
+use log::error;
 use sqlx::{Column, Error, PgPool, Row, query};
 use std::collections::BTreeMap;
 
@@ -67,7 +68,7 @@ impl SQLStandart {
         }
 
         q.execute(pool).await.map_err(|e| {
-            println!("{}Данные не загрузились в бд: {:?}", Fore::RED.as_str(), e);
+            error!("{}Data not saved to database: {:?}", Fore::RED.as_str(), e);
             anyhow::anyhow!(format!("{e}"))
         })?;
 

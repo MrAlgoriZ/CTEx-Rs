@@ -9,10 +9,11 @@ use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::cycles::CyclePhase;
-use crate::engine::cycles::manager::{CounterCommand, CycleError, ModelCommand};
+use crate::engine::cycles::manager::{ChainCommand, CounterCommand, CycleError, ModelCommand};
 use crate::engine::cycles::traits::{
     Cycle, CycleGetters, CycleGettersForCycleWithModel, CycleWithModel,
 };
+use crate::engine::state::chain::Block;
 use crate::engine::state::counters::SymbolCounters;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
@@ -81,6 +82,7 @@ impl TrainingCycle {
         mut self,
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: &mpsc::Sender<ModelCommand>,
+        chain_tx: Option<&mpsc::Sender<ChainCommand>>,
     ) -> Result<(), CycleError> {
         if !self.client.test_symbol(&self.symbol).await.is_ok() {
             return Err(CycleError::SymbolDoesNotExist);
@@ -152,9 +154,9 @@ impl TrainingCycle {
 
                         let summary_data = {
                             if let Some(acc) = accuracy {
-                                last_candles + acc + targets
+                                last_candles + acc + targets.clone()
                             } else {
-                                last_candles + targets
+                                last_candles + targets.clone()
                             }
                         };
 
@@ -165,6 +167,22 @@ impl TrainingCycle {
                             Some(model_tx),
                         )
                         .await?;
+
+                        if let Some(ctx) = chain_tx {
+                            let (tx, rx) = oneshot::channel();
+                            let _ = ctx
+                                .send(ChainCommand::AddBlock {
+                                    symbol: self.get_symbol().to_string(),
+                                    block: Block::new(
+                                        self.last_predictions.clone().unwrap().to_hashmap(),
+                                        targets.clone().to_hashmap(),
+                                        ohlcv.last().unwrap().clone(),
+                                    ),
+                                    respond_to: tx,
+                                })
+                                .await;
+                            let _ = rx.await;
+                        }
                     }
                 }
                 _ => {}
@@ -186,6 +204,7 @@ impl TrainingCycle {
     pub async fn run_backtest(
         mut self,
         model_tx: &mpsc::Sender<ModelCommand>,
+        chain_tx: Option<&mpsc::Sender<ChainCommand>>,
     ) -> Result<(), CycleError> {
         if !self.client.test_symbol(&self.symbol).await.is_ok() {
             return Err(CycleError::SymbolDoesNotExist);
@@ -243,7 +262,7 @@ impl TrainingCycle {
 
                     let targets = DataMap::new(
                         self.get_symbol().to_string(),
-                        collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
+                        collect_targets(ohlcv.clone()[..OHLCV_LEN].try_into().unwrap()),
                     );
 
                     let target = targets.get("position_size").unwrap();
@@ -286,13 +305,29 @@ impl TrainingCycle {
                             let last_predictions = self.last_predictions.clone().unwrap();
                             let _ = model_tx
                                 .send(ModelCommand::HandleMistakes {
-                                    true_data: targets,
+                                    true_data: targets.clone(),
                                     predicted_data: last_predictions,
                                     respond_to: tx,
                                 })
                                 .await;
                             let _ = rx.await;
                         }
+                    }
+
+                    if let Some(ctx) = chain_tx {
+                        let (tx, rx) = oneshot::channel();
+                        let _ = ctx
+                            .send(ChainCommand::AddBlock {
+                                symbol: self.get_symbol().to_string(),
+                                block: Block::new(
+                                    self.last_predictions.clone().unwrap().to_hashmap(),
+                                    targets.clone().to_hashmap(),
+                                    ohlcv.last().unwrap().clone(),
+                                ),
+                                respond_to: tx,
+                            })
+                            .await;
+                        let _ = rx.await;
                     }
                 }
                 _ => {}

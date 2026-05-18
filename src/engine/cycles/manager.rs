@@ -16,6 +16,7 @@ use crate::engine::cycles::loader::cycle::LoaderCycle;
 use crate::engine::cycles::loaderwm::cycle::LoaderWMCycle;
 use crate::engine::cycles::sandbox::cycle::SandboxCycle;
 use crate::engine::cycles::training::cycle::TrainingCycle;
+use crate::engine::state::chain::{Block, Chain};
 use crate::engine::state::counters::{Counters, SymbolCounters};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::{Config, CycleType, RuntimeType};
@@ -56,11 +57,15 @@ pub enum SupervisorCommand {
     SetModel {
         model_tx: mpsc::Sender<ModelCommand>,
     },
+    SetChain {
+        chain_tx: mpsc::Sender<ChainCommand>,
+    },
 }
 
 struct CycleSupervisor {
     workers: HashMap<String, WorkerHandle>,
     model_tx: Option<mpsc::Sender<ModelCommand>>,
+    chain_tx: Option<mpsc::Sender<ChainCommand>>,
     counter_tx: mpsc::Sender<CounterCommand>,
     server_tx: mpsc::Sender<ServersCommand>,
     inbox: mpsc::Receiver<SupervisorCommand>,
@@ -77,6 +82,7 @@ impl CycleSupervisor {
             Self {
                 workers: HashMap::new(),
                 model_tx: None,
+                chain_tx: None,
                 counter_tx,
                 server_tx,
                 inbox: rx,
@@ -118,6 +124,11 @@ impl CycleSupervisor {
                     self.model_tx = Some(model_tx);
                     log_info("Model установлена в Supervisor");
                 }
+
+                SupervisorCommand::SetChain { chain_tx } => {
+                    self.chain_tx = Some(chain_tx);
+                    log_info("Chain установлена в Supervisor");
+                }
             }
         }
 
@@ -142,6 +153,7 @@ impl CycleSupervisor {
         let model_tx = self.model_tx.clone();
         let counter_tx = self.counter_tx.clone();
         let server_tx = self.server_tx.clone();
+        let chain_tx = self.chain_tx.clone();
         let symbol_clone = symbol.clone();
 
         let task = tokio::spawn(async move {
@@ -151,6 +163,7 @@ impl CycleSupervisor {
                 counter_tx,
                 server_tx,
                 model_tx,
+                chain_tx,
                 shutdown_rx,
             )
             .await;
@@ -192,6 +205,7 @@ impl CycleSupervisor {
         counter_tx: mpsc::Sender<CounterCommand>,
         server_tx: mpsc::Sender<ServersCommand>,
         model_tx: Option<mpsc::Sender<ModelCommand>>,
+        chain_tx: Option<mpsc::Sender<ChainCommand>>,
         mut shutdown_rx: mpsc::Receiver<()>,
     ) {
         loop {
@@ -201,16 +215,36 @@ impl CycleSupervisor {
                     break;
                 }
 
-                result = Self::run_cycle_once(&symbol, cycle_type, &counter_tx, &server_tx, &model_tx, ) => {
+                result = Self::run_cycle_once(&symbol, cycle_type, &counter_tx, &server_tx, &model_tx, &chain_tx) => {
                     match result {
                         Ok(_) => {
                             log_debug(&format!("Worker {} завершился нормально", symbol));
+                            if let Some(ctx) = &chain_tx {
+                                let (tx, rx) = oneshot::channel();
+                                let _ = ctx
+                                    .send(ChainCommand::DeleteChain {
+                                        symbol: symbol.clone(),
+                                        respond_to: tx,
+                                    })
+                                    .await;
+                                let _ = rx.await;
+                            }
                             break;
                         }
                         Err(e) => {
                             match e {
                                 CycleError::AnyhowError(err) => {
                                     log_error(&format!("Worker {} упал: {}, рестарт через 5 сек", symbol, err));
+                                    if let Some(ctx) = &chain_tx {
+                                        let (tx, rx) = oneshot::channel();
+                                        let _ = ctx
+                                            .send(ChainCommand::DeleteChain {
+                                                symbol: symbol.clone(),
+                                                respond_to: tx,
+                                            })
+                                            .await;
+                                        let _ = rx.await;
+                                    }
                                     sleep(Duration::from_secs(5)).await;
                                 }
                                 CycleError::SymbolDoesNotExist => {
@@ -231,6 +265,7 @@ impl CycleSupervisor {
         counter_tx: &mpsc::Sender<CounterCommand>,
         server_tx: &mpsc::Sender<ServersCommand>,
         model_tx: &Option<mpsc::Sender<ModelCommand>>,
+        chain_tx: &Option<mpsc::Sender<ChainCommand>>,
     ) -> Result<(), CycleError> {
         let config = load_config(CONFIG_PATH);
         let client = CCXTClient::new(&config.main_exchange, server_tx.clone());
@@ -275,11 +310,11 @@ impl CycleSupervisor {
 
                 match config.runtime.runtime_type {
                     RuntimeType::Realtime => cycle
-                        .run(counter_tx, model_tx.as_ref())
+                        .run(counter_tx, model_tx.as_ref(), chain_tx.as_ref())
                         .await
                         .map_err(CycleError::from)?,
                     RuntimeType::Backtest => cycle
-                        .run_backtest(model_tx.as_ref())
+                        .run_backtest(model_tx.as_ref(), chain_tx.as_ref())
                         .await
                         .map_err(CycleError::from)?,
                 }
@@ -297,12 +332,13 @@ impl CycleSupervisor {
                 })?;
                 match config.runtime.runtime_type {
                     RuntimeType::Realtime => cycle
-                        .run(counter_tx, model)
+                        .run(counter_tx, model, chain_tx.as_ref())
                         .await
                         .map_err(CycleError::from)?,
-                    RuntimeType::Backtest => {
-                        cycle.run_backtest(model).await.map_err(CycleError::from)?
-                    }
+                    RuntimeType::Backtest => cycle
+                        .run_backtest(model, chain_tx.as_ref())
+                        .await
+                        .map_err(CycleError::from)?,
                 }
             }
             CycleType::Sandbox => {
@@ -318,12 +354,13 @@ impl CycleSupervisor {
                 })?;
                 match config.runtime.runtime_type {
                     RuntimeType::Realtime => cycle
-                        .run(counter_tx, model)
+                        .run(counter_tx, model, chain_tx.as_ref())
                         .await
                         .map_err(CycleError::from)?,
-                    RuntimeType::Backtest => {
-                        cycle.run_backtest(model).await.map_err(CycleError::from)?
-                    }
+                    RuntimeType::Backtest => cycle
+                        .run_backtest(model, chain_tx.as_ref())
+                        .await
+                        .map_err(CycleError::from)?,
                 }
             }
         }
@@ -606,6 +643,12 @@ impl CycleManager {
                 .map_err(|e| anyhow::anyhow!(e))?;
         }
 
+        if needs_model && self.config.model.generate_plots {
+            self.initialize_chain()
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
+        }
+
         for symbol in &symbols {
             let cycle_type = cycle_types.get(symbol).unwrap_or(&CycleType::Loader);
             self.add_cycle(symbol.clone(), *cycle_type).await?;
@@ -696,6 +739,25 @@ impl CycleManager {
         Ok(())
     }
 
+    async fn initialize_chain(&self) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.supervisor_tx
+            .send(SupervisorCommand::StopAll { respond_to: tx })
+            .await
+            .map_err(|_| "Supervisor недоступен")?;
+        let _ = rx.await;
+
+        let (chain_actor, chain_tx) = ChainActor::new();
+        tokio::spawn(chain_actor.run());
+
+        self.supervisor_tx
+            .send(SupervisorCommand::SetChain { chain_tx })
+            .await
+            .map_err(|_| "Не удалось обновить цепь в Supervisor")?;
+
+        Ok(())
+    }
+
     pub async fn add_cycle(
         &self,
         symbol: String,
@@ -715,6 +777,7 @@ impl CycleManager {
             .map_err(|_| anyhow::anyhow!("Нет ответа от Supervisor"))?
     }
 
+    // Handles need only for REST API. If tx isn't need for API, don't do handle for this
     pub fn counter_handle(&self) -> mpsc::Sender<CounterCommand> {
         self.counter_tx.clone()
     }
@@ -804,6 +867,62 @@ impl PredictionsActor {
     }
 }
 
+pub enum ChainCommand {
+    AddBlock {
+        symbol: String,
+        block: Block,
+        respond_to: oneshot::Sender<()>,
+    },
+    DeleteChain {
+        symbol: String,
+        respond_to: oneshot::Sender<()>,
+    },
+    SavePlots {
+        symbol: String,
+        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+    },
+}
+
+pub struct ChainActor {
+    chains: Chain,
+    inbox: mpsc::Receiver<ChainCommand>,
+}
+
+impl ChainActor {
+    pub fn new() -> (Self, mpsc::Sender<ChainCommand>) {
+        let (tx, rx) = mpsc::channel(1000);
+
+        let chains = Chain::new();
+
+        (Self { chains, inbox: rx }, tx)
+    }
+
+    pub async fn run(mut self) {
+        log_info("ChainActor запущен");
+
+        while let Some(cmd) = self.inbox.recv().await {
+            match cmd {
+                ChainCommand::AddBlock {
+                    respond_to,
+                    symbol,
+                    block,
+                } => {
+                    let result = self.chains.add_block(&symbol, block);
+                    let _ = respond_to.send(result);
+                }
+                ChainCommand::DeleteChain { symbol, respond_to } => {
+                    let result = self.chains.delete_chain(&symbol);
+                    let _ = respond_to.send(result);
+                }
+                ChainCommand::SavePlots { symbol, respond_to } => {
+                    let result = self.chains.save_plots(&symbol);
+                    let _ = respond_to.send(result);
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ApiResponse<T> {
     success: bool,
@@ -859,7 +978,7 @@ pub enum ServersCommand {
     },
     UpdateActive {
         respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
-    }, // ... TODO: update enum, after creating account logic
+    },
 }
 
 async fn test_server(server: &str) -> bool {
@@ -1386,5 +1505,11 @@ fn log_warning(msg: &str) {
 }
 
 fn log_error(msg: &str) {
-    error!("{}{}", Fore::RED.as_str(), msg);
+    error!(
+        "{}[{}] {}{}",
+        Fore::WHITE.as_str(),
+        Utc::now().format("%H:%M:%S"),
+        Fore::RED.as_str(),
+        msg
+    );
 }

@@ -8,7 +8,7 @@ use crate::data::requests::database::standart::{
 };
 use crate::data::requests::time::TimeRequest;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::Add;
 
 #[derive(Debug, Clone, Copy)]
@@ -280,6 +280,14 @@ impl DataMap {
                 ),
             ]),
         }
+    }
+
+    pub fn to_hashmap(&self) -> HashMap<String, f64> {
+        let mut map = HashMap::new();
+        for (key, value) in self.data.iter() {
+            map.insert(key.clone(), *value);
+        }
+        map
     }
 }
 

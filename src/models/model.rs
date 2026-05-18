@@ -204,7 +204,6 @@ pub trait Model: ModelDependencies {
                         self.get_name(),
                         r2_score
                     );
-
                     println!(
                         "{}[{}] Acc on threshold {} for {}: {:.3}%",
                         Fore::WHITE.as_str(),
