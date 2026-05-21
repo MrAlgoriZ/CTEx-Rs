@@ -603,7 +603,7 @@ async fn test_training() -> Result<(), anyhow::Error> {
     let pool =
         sqlx::PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
             .await
-            .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
+            .map_err(|e| return anyhow!(format!("{}", e)))?;
     let params = crate::engine::utils::config::load_config::load_config(crate::CONFIG_PATH)
         .model
         .params;
@@ -666,7 +666,7 @@ async fn find_best_model_config() -> Result<(), anyhow::Error> {
     let pool =
         sqlx::PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
             .await
-            .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
+            .map_err(|e| return anyhow!(format!("{}", e)))?;
 
     let targets = [
         (TargetType::FutureVolatility, SQLStandart::FirstLayer),

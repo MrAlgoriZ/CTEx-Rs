@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use chrono::Utc;
 use log::{debug, error, info, warn};
 use serde::Deserialize;
@@ -59,6 +60,9 @@ pub enum SupervisorCommand {
     },
     SetChain {
         chain_tx: mpsc::Sender<ChainCommand>,
+    },
+    ChainHandle {
+        respond_to: oneshot::Sender<Option<mpsc::Sender<ChainCommand>>>,
     },
 }
 
@@ -129,6 +133,10 @@ impl CycleSupervisor {
                     self.chain_tx = Some(chain_tx);
                     log_info("Chain установлена в Supervisor");
                 }
+
+                SupervisorCommand::ChainHandle { respond_to } => {
+                    let _ = respond_to.send(self.chain_tx.clone());
+                }
             }
         }
 
@@ -141,12 +149,12 @@ impl CycleSupervisor {
         cycle_type: CycleType,
     ) -> Result<(), anyhow::Error> {
         if self.workers.contains_key(&symbol) {
-            return Err(anyhow::anyhow!(format!("Worker {} уже запущен", symbol)));
+            return Err(anyhow!(format!("Worker {} уже запущен", symbol)));
         }
 
         if matches!(cycle_type, CycleType::Training | CycleType::Sandbox) && self.model_tx.is_none()
         {
-            return Err(anyhow::anyhow!("Model не инициализирована для цикла"));
+            return Err(anyhow!("Model не инициализирована для цикла"));
         }
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
@@ -188,7 +196,7 @@ impl CycleSupervisor {
                 handle.stop().await;
                 Ok(())
             }
-            None => Err(anyhow::anyhow!(format!("Worker {} не найден", symbol))),
+            None => Err(anyhow!(format!("Worker {} не найден", symbol))),
         }
     }
 
@@ -326,9 +334,7 @@ impl CycleSupervisor {
                 sleep(Duration::from_secs(10)).await;
 
                 let model = model_tx.as_ref().ok_or_else(|| {
-                    CycleError::AnyhowError(anyhow::anyhow!(
-                        "Model not initialized for Training cycle"
-                    ))
+                    CycleError::AnyhowError(anyhow!("Model not initialized for Training cycle"))
                 })?;
                 match config.runtime.runtime_type {
                     RuntimeType::Realtime => cycle
@@ -348,9 +354,7 @@ impl CycleSupervisor {
                 sleep(Duration::from_secs(10)).await;
 
                 let model = model_tx.as_ref().ok_or_else(|| {
-                    CycleError::AnyhowError(anyhow::anyhow!(
-                        "Model not initialized for Sandbox cycle"
-                    ))
+                    CycleError::AnyhowError(anyhow!("Model not initialized for Sandbox cycle"))
                 })?;
                 match config.runtime.runtime_type {
                     RuntimeType::Realtime => cycle
@@ -531,11 +535,11 @@ impl ModelActor {
                 } => {
                     let result = {
                         if true_data.is_empty() {
-                            Err(anyhow::anyhow!("True data is empty!"))
+                            Err(anyhow!("True data is empty!"))
                         } else if predicted_data.is_empty() {
-                            Err(anyhow::anyhow!("Predicted data is empty!"))
+                            Err(anyhow!("Predicted data is empty!"))
                         } else if true_data.len() != predicted_data.len() {
-                            Err(anyhow::anyhow!("Data sizes do not match!"))
+                            Err(anyhow!("Data sizes do not match!"))
                         } else {
                             let model = self.model.clone();
 
@@ -638,15 +642,11 @@ impl CycleManager {
         });
 
         if needs_model {
-            self.initialize_model()
-                .await
-                .map_err(|e| anyhow::anyhow!(e))?;
+            self.initialize_model().await.map_err(|e| anyhow!(e))?;
         }
 
         if needs_model && self.config.model.generate_plots {
-            self.initialize_chain()
-                .await
-                .map_err(|e| anyhow::anyhow!(e))?;
+            self.initialize_chain().await.map_err(|e| anyhow!(e))?;
         }
 
         for symbol in &symbols {
@@ -771,10 +771,9 @@ impl CycleManager {
                 respond_to: tx,
             })
             .await
-            .map_err(|_| anyhow::anyhow!("Supervisor недоступен"))?;
+            .map_err(|_| anyhow!("Supervisor недоступен"))?;
 
-        rx.await
-            .map_err(|_| anyhow::anyhow!("Нет ответа от Supervisor"))?
+        rx.await.map_err(|_| anyhow!("Нет ответа от Supervisor"))?
     }
 
     // Handles need only for REST API. If tx isn't need for API, don't do handle for this
@@ -1099,10 +1098,10 @@ impl ServersActor {
         let state = self
             .servers
             .get_mut(&server)
-            .ok_or_else(|| anyhow::anyhow!("Сервер не найден"))?;
+            .ok_or_else(|| anyhow!("Сервер не найден"))?;
 
         if !state.active {
-            return Err(anyhow::anyhow!("Сервер не активен"));
+            return Err(anyhow!("Сервер не активен"));
         }
 
         state.workload = state.workload.saturating_add(num);
@@ -1193,7 +1192,7 @@ impl ServersActor {
 
                     current_server = self
                         .get_priority()
-                        .ok_or_else(|| anyhow::anyhow!("Нет активных серверов"))?;
+                        .ok_or_else(|| anyhow!("Нет активных серверов"))?;
 
                     continue;
                 }
@@ -1202,45 +1201,45 @@ impl ServersActor {
             let body: ApiResponse<serde_json::Value> = res
                 .json()
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to parse JSON response: {}", e))?;
+                .map_err(|e| anyhow!("Failed to parse JSON response: {}", e))?;
             self.add_workload(current_server.clone(), limit as u8)?;
             if !body.success {
-                return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+                return Err(anyhow!(body.message.unwrap_or("".to_string())));
             }
             let raw_ohlcv = match body.data {
                 Some(candles) => candles,
-                None => return Err(anyhow::anyhow!("Data is None!")),
+                None => return Err(anyhow!("Data is None!")),
             };
 
             let candles = raw_ohlcv
                 .as_array()
-                .ok_or_else(|| anyhow::anyhow!("ohlcv is not an array"))?
+                .ok_or_else(|| anyhow!("ohlcv is not an array"))?
                 .iter()
                 .map(|item| {
                     let arr = item
                         .as_array()
-                        .ok_or_else(|| anyhow::anyhow!("ohlcv item is not an array"))?;
+                        .ok_or_else(|| anyhow!("ohlcv item is not an array"))?;
 
                     if arr.len() < 6 {
-                        return Err(anyhow::anyhow!("ohlcv item has less than 6 elements"));
+                        return Err(anyhow!("ohlcv item has less than 6 elements"));
                     }
 
                     Ok(Candle {
                         open: arr[1]
                             .as_f64()
-                            .ok_or_else(|| anyhow::anyhow!("open is not a number"))?,
+                            .ok_or_else(|| anyhow!("open is not a number"))?,
                         high: arr[2]
                             .as_f64()
-                            .ok_or_else(|| anyhow::anyhow!("high is not a number"))?,
+                            .ok_or_else(|| anyhow!("high is not a number"))?,
                         low: arr[3]
                             .as_f64()
-                            .ok_or_else(|| anyhow::anyhow!("low is not a number"))?,
+                            .ok_or_else(|| anyhow!("low is not a number"))?,
                         close: arr[4]
                             .as_f64()
-                            .ok_or_else(|| anyhow::anyhow!("close is not a number"))?,
+                            .ok_or_else(|| anyhow!("close is not a number"))?,
                         volume: arr[5]
                             .as_f64()
-                            .ok_or_else(|| anyhow::anyhow!("volume is not a number"))?,
+                            .ok_or_else(|| anyhow!("volume is not a number"))?,
                     })
                 })
                 .collect::<Result<Vec<_>, anyhow::Error>>()?;
@@ -1280,7 +1279,7 @@ impl ServersActor {
 
                     current_server = self
                         .get_priority()
-                        .ok_or_else(|| anyhow::anyhow!("Нет активных серверов"))?;
+                        .ok_or_else(|| anyhow!("Нет активных серверов"))?;
 
                     continue;
                 }
@@ -1289,48 +1288,48 @@ impl ServersActor {
             let body: ApiResponse<serde_json::Value> = res
                 .json()
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to parse JSON response: {}", e))?;
+                .map_err(|e| anyhow!("Failed to parse JSON response: {}", e))?;
             self.add_workload(current_server.clone(), limit as u8)?;
             if !body.success {
-                return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+                return Err(anyhow!(body.message.unwrap_or("".to_string())));
             }
             let raw_ohlcv = match body.data {
                 Some(candles) => candles,
-                None => return Err(anyhow::anyhow!("Data is None!")),
+                None => return Err(anyhow!("Data is None!")),
             };
 
             let candles = raw_ohlcv
                 .as_array()
-                .ok_or_else(|| anyhow::anyhow!("ohlcv is not an array"))?
+                .ok_or_else(|| anyhow!("ohlcv is not an array"))?
                 .iter()
                 .map(|item| {
                     let arr = item
                         .as_array()
-                        .ok_or_else(|| anyhow::anyhow!("ohlcv item is not an array"))?;
+                        .ok_or_else(|| anyhow!("ohlcv item is not an array"))?;
 
                     if arr.len() < 6 {
-                        return Err(anyhow::anyhow!("ohlcv item has less than 6 elements"));
+                        return Err(anyhow!("ohlcv item has less than 6 elements"));
                     }
 
                     Ok(CandleWithTimestamp {
                         timestamp: arr[0]
                             .as_u64()
-                            .ok_or_else(|| anyhow::anyhow!("timestamp is not a number"))?,
+                            .ok_or_else(|| anyhow!("timestamp is not a number"))?,
                         open: arr[1]
                             .as_f64()
-                            .ok_or_else(|| anyhow::anyhow!("open is not a number"))?,
+                            .ok_or_else(|| anyhow!("open is not a number"))?,
                         high: arr[2]
                             .as_f64()
-                            .ok_or_else(|| anyhow::anyhow!("high is not a number"))?,
+                            .ok_or_else(|| anyhow!("high is not a number"))?,
                         low: arr[3]
                             .as_f64()
-                            .ok_or_else(|| anyhow::anyhow!("low is not a number"))?,
+                            .ok_or_else(|| anyhow!("low is not a number"))?,
                         close: arr[4]
                             .as_f64()
-                            .ok_or_else(|| anyhow::anyhow!("close is not a number"))?,
+                            .ok_or_else(|| anyhow!("close is not a number"))?,
                         volume: arr[5]
                             .as_f64()
-                            .ok_or_else(|| anyhow::anyhow!("volume is not a number"))?,
+                            .ok_or_else(|| anyhow!("volume is not a number"))?,
                     })
                 })
                 .collect::<Result<Vec<_>, anyhow::Error>>()?;
@@ -1366,7 +1365,7 @@ impl ServersActor {
 
                     current_server = self
                         .get_priority()
-                        .ok_or_else(|| anyhow::anyhow!("Нет активных серверов"))?;
+                        .ok_or_else(|| anyhow!("Нет активных серверов"))?;
 
                     continue;
                 }
@@ -1375,25 +1374,25 @@ impl ServersActor {
             let body: ApiResponse<serde_json::Value> = res
                 .json()
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to parse JSON response: {}", e))?;
+                .map_err(|e| anyhow!("Failed to parse JSON response: {}", e))?;
             self.add_workload(current_server.clone(), 1)?;
             if !body.success {
-                return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+                return Err(anyhow!(body.message.unwrap_or("".to_string())));
             }
             let data = body
                 .data
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Response data is None!"))?;
+                .ok_or_else(|| anyhow!("Response data is None!"))?;
             let bid = data
                 .get("bid")
-                .ok_or_else(|| anyhow::anyhow!("bid field is missing"))?
+                .ok_or_else(|| anyhow!("bid field is missing"))?
                 .as_f64()
-                .ok_or_else(|| anyhow::anyhow!("bid is not a number"))?;
+                .ok_or_else(|| anyhow!("bid is not a number"))?;
             let ask = data
                 .get("ask")
-                .ok_or_else(|| anyhow::anyhow!("ask field is missing"))?
+                .ok_or_else(|| anyhow!("ask field is missing"))?
                 .as_f64()
-                .ok_or_else(|| anyhow::anyhow!("ask is not a number"))?;
+                .ok_or_else(|| anyhow!("ask is not a number"))?;
 
             return Ok(Ticker { bid, ask });
         }
@@ -1415,20 +1414,20 @@ impl ServersActor {
             .json(&payload)
             .send()
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to send request: {}", e))?;
+            .map_err(|e| anyhow!("Failed to send request: {}", e))?;
         self.add_workload(server.to_string(), 1)?;
         let body: ApiResponse<serde_json::Value> = res
             .json()
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to parse JSON response: {}", e))?;
+            .map_err(|e| anyhow!("Failed to parse JSON response: {}", e))?;
 
         if !body.success {
-            return Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())));
+            return Err(anyhow!(body.message.unwrap_or("".to_string())));
         }
         if body.data.is_some() {
             Ok(())
         } else {
-            Err(anyhow::anyhow!(body.message.unwrap_or("".to_string())))
+            Err(anyhow!(body.message.unwrap_or("".to_string())))
         }
     }
 }

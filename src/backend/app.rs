@@ -1,10 +1,10 @@
 use crate::CONFIG_PATH;
 use crate::backend::commands;
 use crate::backend::structure::{ApiState, ApiStructure};
-use crate::engine::cycles::manager::PredictionsCommand;
-use crate::engine::cycles::manager::{CounterCommand, SupervisorCommand};
+use crate::engine::cycles::manager::{CounterCommand, PredictionsCommand, SupervisorCommand};
 use crate::engine::utils::config::load_config::load_config;
 
+use anyhow::anyhow;
 use axum::Router;
 use axum::routing::{delete, get, post};
 use tokio::sync::mpsc;
@@ -23,9 +23,7 @@ impl Api {
         let config = load_config(CONFIG_PATH);
         let listener = tokio::net::TcpListener::bind(&config.backend.listener)
             .await
-            .map_err(|_| {
-                anyhow::anyhow!(format!("Failed to bind to {}", config.backend.listener))
-            })?;
+            .map_err(|_| anyhow!(format!("Failed to bind to {}", config.backend.listener)))?;
 
         Ok(Api {
             listener,
@@ -70,6 +68,7 @@ impl Api {
                 &structure.all_predictions_list,
                 get(commands::all_predictions_list),
             )
+            .route(&structure.generate_plots, post(commands::generate_plots))
             .with_state(state)
     }
 

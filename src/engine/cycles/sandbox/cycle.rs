@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 use std::time::Duration;
@@ -158,7 +159,7 @@ impl SandboxCycle {
                         let _ = model_tx
                             .send(ModelCommand::GetAccuracy { respond_to: tx })
                             .await;
-                        let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
+                        let accuracy = rx.await.map_err(|e| anyhow!(e))?;
 
                         let summary_data = {
                             if let Some(acc) = accuracy {
@@ -222,7 +223,7 @@ impl SandboxCycle {
             println!(
                 "Balance (USDT): ${:.3}",
                 self.account.get_balance_usdt(&self.client).await?.unwrap()
-            ); // TODO CycleWithAccount.log_balance_usdt()
+            );
 
             if self.config.prints.cycle.accuracy {
                 self.print_accuracy(counter_tx).await;
@@ -316,7 +317,7 @@ impl SandboxCycle {
                             let _ = model_tx
                                 .send(ModelCommand::GetAccuracy { respond_to: tx })
                                 .await;
-                            let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
+                            let accuracy = rx.await.map_err(|e| anyhow!(e))?;
 
                             if let Some(acc) = accuracy {
                                 last_candles.clone() + acc.clone() + targets.clone()
@@ -325,9 +326,11 @@ impl SandboxCycle {
                             }
                         };
 
-                        SQLStandart::Dummy
-                            .insert_row(&self.pool, summary_data)
-                            .await?;
+                        if self.config.runtime.with_saves {
+                            SQLStandart::Dummy
+                                .insert_row(&self.pool, summary_data)
+                                .await?;
+                        }
                         let shifted_acc = threshold_counter.get_shifted_accuracy(3);
                         if shifted_acc.unwrap_or(0.0) == 0.0 {
                             let (tx, rx) = oneshot::channel();
@@ -413,7 +416,7 @@ impl SandboxCycle {
                 respond_to: tx,
             })
             .await
-            .map_err(|e| CycleError::AnyhowError(anyhow::anyhow!(e)))?;
+            .map_err(|e| CycleError::AnyhowError(anyhow!(e)))?;
             let _ = rx.await;
         }
 

@@ -468,8 +468,6 @@ impl Model for Ensemble {
         let mut data = data.clone();
         let mut predictions = DataMap::new(data.symbol.clone(), BTreeMap::new());
 
-        // TODO: Доставать accuracy и загружать как confidence
-
         // FIRST LAYER
         let fl_models = [
             self.future_volatility_model_tx.clone(),

@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use sqlx::PgPool;
@@ -145,9 +146,11 @@ impl LoaderWMCycle {
                     let accuracy = if let Some(mtx) = model_tx {
                         let (tx, rx) = oneshot::channel();
                         let _ = mtx.send(ModelCommand::GetAccuracy { respond_to: tx }).await;
-                        rx.await.map_err(|e| anyhow::anyhow!(e))?
+                        rx.await.map_err(|e| anyhow!(e))?
                     } else {
-                        todo!()
+                        return Err(CycleError::AnyhowError(anyhow!(
+                            "Model не инициализирована!"
+                        )));
                     };
                     let summary_data = {
                         if let Some(acc) = accuracy {
@@ -262,7 +265,7 @@ impl LoaderWMCycle {
                     let accuracy = if let Some(mtx) = model_tx {
                         let (tx, rx) = oneshot::channel();
                         let _ = mtx.send(ModelCommand::GetAccuracy { respond_to: tx }).await;
-                        rx.await.map_err(|e| anyhow::anyhow!(e))?
+                        rx.await.map_err(|e| anyhow!(e))?
                     } else {
                         Some(DataMap::generate_accuracy())
                     };
@@ -380,7 +383,7 @@ impl LoaderWMCycle {
                 respond_to: tx,
             })
             .await
-            .map_err(|e| CycleError::AnyhowError(anyhow::anyhow!(e)))?;
+            .map_err(|e| CycleError::AnyhowError(anyhow!(e)))?;
             let _ = rx.await;
         }
 

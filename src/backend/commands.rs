@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use crate::CONFIG_PATH;
 use crate::backend::structure::{ApiState, ApiStructure};
-use crate::engine::cycles::manager::{CounterCommand, PredictionsCommand, SupervisorCommand};
+use crate::engine::cycles::manager::{
+    ChainCommand, CounterCommand, PredictionsCommand, SupervisorCommand,
+};
 use crate::engine::utils::config::config_types::CycleType;
 use crate::engine::utils::config::load_config::load_config;
 
@@ -135,9 +137,11 @@ pub async fn cycle_add(
     let cycle_type = match payload.cycle_type.to_lowercase().as_str() {
         "training" => CycleType::Training,
         "loader" => CycleType::Loader,
+        "loaderwm" => CycleType::Loaderwm,
+        "sandbox" => CycleType::Sandbox,
         _ => {
             return Ok(Json(ApiResponse::error(
-                "Тип цикла должен быть 'training' или 'loader'".to_string(),
+                "Тип цикла должен быть 'training', 'loader', 'loaderwm' или 'sandbox'".to_string(),
             )));
         }
     };
@@ -377,5 +381,44 @@ pub async fn all_predictions_list(
         .into_iter()
         .map(|data| (data.0, data.1.data.into_iter().collect()))
         .collect();
+    Ok(Json(ApiResponse::success(result)))
+}
+
+pub async fn generate_plots(
+    State(state): State<ApiState>,
+    Path(symbol): Path<String>,
+    Json(payload): Json<PasswordRequest>,
+) -> Result<Json<ApiResponse<()>>, StatusCode> {
+    if !verify_password(payload.password) {
+        return Ok(Json(ApiResponse::error("Неверный пароль".to_string())));
+    }
+
+    let (tx, rx) = oneshot::channel();
+
+    state
+        .supervisor_handle
+        .send(SupervisorCommand::ChainHandle { respond_to: tx })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let chain_handle = rx
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NO_CONTENT)?;
+
+    let (tx, rx) = oneshot::channel();
+
+    chain_handle
+        .send(ChainCommand::SavePlots {
+            symbol,
+            respond_to: tx,
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let result = rx
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?
+        .map_err(|_| StatusCode::NO_CONTENT)?;
     Ok(Json(ApiResponse::success(result)))
 }

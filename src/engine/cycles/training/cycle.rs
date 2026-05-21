@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 use std::time::Duration;
@@ -150,7 +151,7 @@ impl TrainingCycle {
                         let _ = model_tx
                             .send(ModelCommand::GetAccuracy { respond_to: tx })
                             .await;
-                        let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
+                        let accuracy = rx.await.map_err(|e| anyhow!(e))?;
 
                         let summary_data = {
                             if let Some(acc) = accuracy {
@@ -286,7 +287,7 @@ impl TrainingCycle {
                         let _ = model_tx
                             .send(ModelCommand::GetAccuracy { respond_to: tx })
                             .await;
-                        let accuracy = rx.await.map_err(|e| anyhow::anyhow!(e))?;
+                        let accuracy = rx.await.map_err(|e| anyhow!(e))?;
 
                         let summary_data = {
                             if let Some(acc) = accuracy {
@@ -296,9 +297,11 @@ impl TrainingCycle {
                             }
                         };
 
-                        SQLStandart::Dummy
-                            .insert_row(&self.pool, summary_data)
-                            .await?;
+                        if self.config.runtime.with_saves {
+                            SQLStandart::Dummy
+                                .insert_row(&self.pool, summary_data)
+                                .await?;
+                        }
                         let shifted_acc = threshold_counter.get_shifted_accuracy(3);
                         if shifted_acc.unwrap_or(0.0) == 0.0 {
                             let (tx, rx) = oneshot::channel();
@@ -348,6 +351,17 @@ impl TrainingCycle {
             self.print_symbol,
             Fore::GREEN.as_str()
         ));
+
+        if let Some(ctx) = chain_tx {
+            let (tx, rx) = oneshot::channel();
+            ctx.send(ChainCommand::SavePlots {
+                symbol: self.symbol.clone(),
+                respond_to: tx,
+            })
+            .await
+            .map_err(|e| CycleError::AnyhowError(anyhow!(e)))?;
+            let _ = rx.await;
+        }
 
         tokio::time::sleep(Duration::from_secs(1)).await;
 

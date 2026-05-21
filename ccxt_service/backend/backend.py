@@ -215,9 +215,7 @@ async def cmd_fetch_ticker(item: FetchRequests):
         return error(f'Exchange "{item.exchange_name}" is not supported yet!')
     try:
         ticker = await exchange.fetch_ticker(symbol=item.symbol)
-        print(ticker)
     except Exception as e:
-        print(e)
         return error(message=str(e))
     return success(data=ticker)
 

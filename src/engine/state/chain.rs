@@ -1,10 +1,10 @@
 use anyhow::anyhow;
-use log::info;
+use log::{debug, info};
 use plotters::prelude::*;
 use smartcore::metrics::{mean_absolute_error, mean_squared_error, r2};
 use std::collections::{HashMap, VecDeque};
 
-use crate::data::data_interfaces::Candle;
+use crate::data::{data_interfaces::Candle, requests::database::standart::get_target_name};
 
 #[derive(Clone)]
 pub struct Block {
@@ -71,9 +71,11 @@ impl Chain {
         let mut predictions: Vec<f64> = Vec::with_capacity(chain.len());
         let mut targets: Vec<f64> = Vec::with_capacity(chain.len());
 
+        debug!("target type: {}", target_type);
+
         chain.iter().for_each(|b| {
             predictions.push(b.predictions[target_type]);
-            targets.push(b.targets[target_type]);
+            targets.push(b.targets[&get_target_name(target_type).unwrap()]);
         });
 
         let mae = mean_absolute_error(&targets, &predictions);
@@ -90,6 +92,7 @@ impl Chain {
     }
 
     pub fn save_plots(&self, symbol: &str) -> Result<(), anyhow::Error> {
+        debug!("Plots are saving right now!");
         let models = self
             .chains
             .get(symbol)
@@ -101,6 +104,10 @@ impl Chain {
             .iter()
             .map(|(k, _)| k)
             .collect::<Vec<_>>();
+        debug!("{:?}", models);
+
+        std::fs::create_dir_all("plots")
+            .map_err(|e| anyhow!("Failed to create plots dir: {}", e))?;
 
         models.iter().for_each(|model| {
             let metrics = self.generate_metrics(model, &self.chains[symbol]);
@@ -111,7 +118,10 @@ impl Chain {
                 .flat_map(|b| [b.candle.open, b.candle.high, b.candle.low, b.candle.close])
                 .collect();
             let pred_vals: Vec<f64> = chain.iter().map(|b| b.predictions[*model]).collect();
-            let tgt_vals: Vec<f64> = chain.iter().map(|b| b.targets[*model]).collect();
+            let tgt_vals: Vec<f64> = chain
+                .iter()
+                .map(|b| b.targets[&get_target_name(*model).unwrap()])
+                .collect();
 
             let all_vals: Vec<f64> = prices
                 .iter()
@@ -125,7 +135,7 @@ impl Chain {
             let y_pad = (y_max - y_min) * 0.05;
 
             let n = chain.len();
-            let filename = format!("{}_{}.png", symbol, model);
+            let filename = format!("plots/{}_{}.png", symbol, get_target_name(model).unwrap());
 
             let root = BitMapBackend::new(&filename, (1280, 720)).into_drawing_area();
             root.fill(&RGBColor(18, 18, 24)).unwrap();
@@ -134,7 +144,7 @@ impl Chain {
 
             let mut chart = ChartBuilder::on(&chart_area)
                 .caption(
-                    format!("{} — {}", symbol, model),
+                    format!("{} — {}", symbol, get_target_name(model).unwrap()),
                     ("sans-serif", 22).into_font().color(&WHITE),
                 )
                 .margin(20)
@@ -176,7 +186,7 @@ impl Chain {
                     chain
                         .iter()
                         .enumerate()
-                        .map(|(i, b)| (i, b.targets[*model])),
+                        .map(|(i, b)| (i, b.targets[&get_target_name(*model).unwrap()])),
                     ShapeStyle {
                         color: RGBAColor(80, 180, 255, 1.0),
                         filled: true,

@@ -1,5 +1,6 @@
 use chrono::Utc;
 // use log::debug;
+use anyhow::anyhow;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
@@ -66,7 +67,7 @@ pub trait Cycle: CycleGetters {
             }
 
             None => {
-                return Err(anyhow::anyhow!("invalid timeframe in config"));
+                return Err(anyhow!("invalid timeframe in config"));
             }
         }
 
@@ -114,10 +115,10 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
             self.change_last_predictions(pred.clone());
             pred.get("position_size")
-                .ok_or(anyhow::anyhow!("Model must predict position size!"))
+                .ok_or(anyhow!("Model must predict position size!"))
                 .map(|v| *v)
         } else {
-            Err(anyhow::anyhow!(
+            Err(anyhow!(
                 "FlattenedData to prediction should not have the target"
             ))
         }
@@ -189,7 +190,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             }
             Ok(())
         } else {
-            Err(anyhow::anyhow!("В поданных данных нет target!"))
+            Err(anyhow!("В поданных данных нет target!"))
         }
     }
 
@@ -247,5 +248,3 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         }
     }
 }
-
-// TODO: pub trait CycleWithAccount

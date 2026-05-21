@@ -3,6 +3,7 @@ use crate::engine::cycles::manager::ServersCommand;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 
+use anyhow::anyhow;
 use chrono::Utc;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -65,7 +66,7 @@ impl BackgroundCycle {
             }
 
             None => {
-                return Err(anyhow::anyhow!("invalid timeframe in config"));
+                return Err(anyhow!("invalid timeframe in config"));
             }
         }
 

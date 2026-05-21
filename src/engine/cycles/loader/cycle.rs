@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 
@@ -208,7 +209,7 @@ impl LoaderCycle {
             SQLStandart::Dummy.insert_row(pool, data).await?;
             Ok(())
         } else {
-            Err(anyhow::anyhow!("DataMap must has the target!"))
+            Err(anyhow!("DataMap must has the target!"))
         }
     }
 }

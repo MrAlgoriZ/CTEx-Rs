@@ -34,7 +34,7 @@ curl -X GET http://localhost:PORT/cycles
 
 ```json
 {
-  "symbol": "BTC",
+  "symbol": "BTCUSDT",
   "type": "training",
   "password": "secret"
 }
@@ -46,7 +46,7 @@ curl -X GET http://localhost:PORT/cycles
 curl -X POST http://localhost:PORT/cycles \
   -H "Content-Type: application/json" \
   -d '{
-        "symbol": "BTC",
+        "symbol": "BTCUSDT",
         "type": "training",
         "password": "secret"
       }'
@@ -67,7 +67,7 @@ curl -X POST http://localhost:PORT/cycles \
 Пример:
 
 ```bash
-curl -X DELETE http://localhost:PORT/cycles/BTC \
+curl -X DELETE http://localhost:PORT/cycles/BTCUSDT \
   -H "Content-Type: application/json" \
   -d '{ "password": "secret" }'
 ```
@@ -118,13 +118,13 @@ curl -X GET "http://localhost:PORT/accuracy/total?window=100"
 ### `GET /accuracy/{symbol}`
 
 ```bash
-curl -X GET http://localhost:PORT/accuracy/BTC
+curl -X GET http://localhost:PORT/accuracy/BTCUSDT
 ```
 
 Или с window:
 
 ```bash
-curl -X GET "http://localhost:PORT/accuracy/BTC?window=100"
+curl -X GET "http://localhost:PORT/accuracy/BTCUSDT?window=100"
 ```
 
 ## **3. Accuracy всех активных токенов**
@@ -139,4 +139,14 @@ curl -X GET http://localhost:PORT/accuracy
 
 ```bash
 curl -X GET "http://localhost:PORT/accuracy?window=100"
+```
+
+## **4. Сохраение на сервер графика точности**
+
+### `POST /plot/{symbol}`
+
+```bash
+curl -X POST http://localhost:PORT/plot/BTCUSDT \
+  -H "Content-Type: application/json" \
+  -d '{ "password": "secret" }'
 ```

@@ -225,3 +225,40 @@ pub fn get_confidence_name(string: &str) -> Option<String> {
         _ => None,
     }
 }
+
+pub fn get_target_name(string: &str) -> Option<String> {
+    match string {
+        "future_volatility_pred" => Some("future_volatility".to_string()),
+        "future_volatility_confidence" => Some("future_volatility".to_string()),
+        "future_volume_pred" => Some("future_volume".to_string()),
+        "future_volume_confidence" => Some("future_volume".to_string()),
+        "future_trend_strength_pred" => Some("future_trend_strength".to_string()),
+        "future_trend_strength_confidence" => Some("future_trend_strength".to_string()),
+        "future_range_pred" => Some("future_range".to_string()),
+        "future_range_confidence" => Some("future_range".to_string()),
+        "future_return_mean_pred" => Some("future_return_mean".to_string()),
+        "future_return_mean_confidence" => Some("future_return_mean".to_string()),
+        "future_return_std_pred" => Some("future_return_std".to_string()),
+        "future_return_std_confidence" => Some("future_return_std".to_string()),
+        "future_return_skewness_pred" => Some("future_return_skewness".to_string()),
+        "future_return_skewness_confidence" => Some("future_return_skewness".to_string()),
+        "future_return_kurtosis_pred" => Some("future_return_kurtosis".to_string()),
+        "future_return_kurtosis_confidence" => Some("future_return_kurtosis".to_string()),
+        "risk_score_pred" => Some("risk_score".to_string()),
+        "risk_score_confidence" => Some("risk_score".to_string()),
+        "drawdown_probability_pred" => Some("drawdown_probability".to_string()),
+        "drawdown_probability_confidence" => Some("drawdown_probability".to_string()),
+        "tail_event_probability_pred" => Some("tail_event_probability".to_string()),
+        "tail_event_probability_confidence" => Some("tail_event_probability".to_string()),
+        "volatility_spike_probability_pred" => Some("volatility_spike_probability".to_string()),
+        "volatility_spike_probability_confidence" => {
+            Some("volatility_spike_probability".to_string())
+        }
+        "liquidity_drop_probability_pred" => Some("liquidity_drop_probability".to_string()),
+        "liquidity_drop_probability_confidence" => Some("liquidity_drop_probability".to_string()),
+        "future_return" => Some("future_return".to_string()),
+        "action_type" => Some("action_type".to_string()),
+        "position_size" => Some("position_size".to_string()),
+        _ => None,
+    }
+}

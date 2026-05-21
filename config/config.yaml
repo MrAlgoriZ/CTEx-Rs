@@ -133,11 +133,12 @@ behaviour:
 runtime:
   type: backtest
   with_training: true
-  with_saves: true
+  with_saves: false
   with_model: true
-  cycle_type: sandbox
+  cycle_type: training
 symbols:
-  - ADAUSDT
+  - BTCUSDT
+  - ETHUSDT
 main_exchange: binance
 timeframes:
   main: 1h

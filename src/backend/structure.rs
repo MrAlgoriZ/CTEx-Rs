@@ -26,6 +26,8 @@ pub struct ApiStructure {
     pub get_last_prediction: String,
     pub predictions_list: String,
     pub all_predictions_list: String,
+
+    pub generate_plots: String,
 }
 
 impl Default for ApiStructure {
@@ -46,6 +48,8 @@ impl Default for ApiStructure {
             get_last_prediction: "/prediction/{symbol}".to_string(),
             predictions_list: "/prediction/list/{symbol}".to_string(),
             all_predictions_list: "/prediction/list".to_string(),
+
+            generate_plots: "/plot/{symbol}".to_string(),
         }
     }
 }
