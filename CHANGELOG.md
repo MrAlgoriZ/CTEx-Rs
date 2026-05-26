@@ -1,432 +1,431 @@
 # --2025--
 
 < 22-6-2025:
-  - Добавлен dynamic_b
-  - Добавлен минимальный сбор данных
-  - Добавлена модель с бинарной классификацией на PyTorch
+  - Added dynamic_b
+  - Added minimal data collection
+  - Added binary classification model on PyTorch
 
 22-6-2025:
-  - Добавлен вывод того, что всё сохранено (при выходе из программы)
-  - Изменен алгоритм нейронной сети на PyTorch (добавлен Mish, удален LeakyReLU, Adam заменен на AdamW)
+  - Added output that everything is saved (on program exit)
+  - Changed the neural network algorithm in PyTorch (added Mish, removed LeakyReLU, Adam replaced with AdamW)
 
-  - Тесты проводятся на ETH заместо BTC
-  - Раскоментирована логика запросов к Binance
+  - Tests are run on ETH instead of BTC
+  - Binance request logic uncommented
   
 25-6-2025:
-  - Файл config_ag.py переименован в config.py
-  - Добавлен .gitignore
-  - Модель переименована с "algoriz" в "ct"
+  - Renamed config_ag.py to config.py
+  - Added .gitignore
+  - Renamed model from "algoriz" to "ct"
 
 27-6-2025:
-  - Изменен файл data_collection.py (вводится минимальное ООП)
-  - dynamic_b перенесен с файла config.py в файл data_collection.py
-  - Добавлено минимальнео логирование
-  - Структура модели перенесена на ООП
+  - Changed data_collection.py (introduced minimal OOP)
+  - Moved dynamic_b from config.py to data_collection.py
+  - Added minimal logging
+  - Moved model structure to OOP
 
-  - Добавлен файл ohlcv_deriv.py (в нем функция powerful_ohlcv)
-  - dynamic_b переименован в dynamic_percent и поменялась логика
+  - Added ohlcv_deriv.py (it contains the powerful_ohlcv function)
+  - Renamed dynamic_b to dynamic_percent and changed its logic
 
 28-6-2025:
-  - Основной запрос к Binance был оптимизирован, и перестал быть "тестом"
-  - Добавилась запись свеч в файл requests.csv
+  - Main Binance request was optimized and stopped being a "test"
+  - Added candle writing to requests.csv
 
 1-7-2025:
-  - Моделей стало 3: hard_cap_model, low_cap_model, medium_cap_model
-  - Обновлен .gitignore
-  - Добавлена поддержка большего кол-ва токенов
-  - Метод list_of_data() начал принимать параметр is_current: bool
-  - Добавлены счетчики
-  - **Добавлено самообучение**
-  - Убраны лишние round(), дабы улучшить логику
+  - There are now 3 models: hard_cap_model, low_cap_model, medium_cap_model
+  - Updated .gitignore
+  - Added support for more tokens
+  - list_of_data() method started accepting parameter is_current: bool
+  - Added counters
+  - **Added self-learning**
+  - Removed extra round() calls to improve logic
 
 2-7-2025:
-  - Добавлен фильтр токенов по уровням капитализации (high-cap, medium-cap, low-cap)
-  - Добавлена функция для получения волатильности
-  - Добавлена тестовая функция save_all_data()
-  - Изменена логика главного цикла. Добавлен метод wait_to_next_minute()
-  - В модель добавлен EarlyStopping
+  - Added token filter by capitalization levels (high-cap, medium-cap, low-cap)
+  - Added a function to get volatility
+  - Added test function save_all_data()
+  - Changed main cycle logic. Added method wait_to_next_minute()
+  - Added EarlyStopping to the model
 
 3-7-2025:
-  - Добавлена настройка group_size в config.py
+  - Added group_size setting in config.py
   
-  - Добавлен README.md
-  - Главный цикл теперь принимает любой из поддерживаемых токенов
-  - Главный цикл начать проверять волатильность токена
+  - Added README.md
+  - Main cycle now accepts any supported token
+  - Main cycle started checking token volatility
 
-  - Обновлен README.md
+  - Updated README.md
 
 4-7-2025:
-  - Теперь главный таймфрейм не 1 минута, а 3 минуты
-  - Изменена логика главного цикла
+  - Main timeframe is now 3 minutes instead of 1 minute
+  - Changed main cycle logic
   
-  - Гланый цикл стал асинхронным, что позволило запускать несколько циклов одновременно
+  - Main cycle became asynchronous, allowing multiple cycles to run simultaneously
 
-  - Счетчики стали глобальными объектами
-  - Добавлена проверка проекта через телеграм (с помощью aiogram)
-  - Добавлен особый цикл с тренировкой модели, но он singleton
+  - Counters became global objects
+  - Added project status checking via Telegram (using aiogram)
+  - Added a special model training cycle, but it is singleton
 
 20-7-2025:
-  - В config.py добавлены параметры: global_input_size, global_seed
-  - Добавлено глобальное изменение сида по global_seed
+  - Added parameters to config.py: global_input_size, global_seed
+  - Added global seed change via global_seed
 
 21-7-2025:
-  - Добавлены поясняющие комментарии
-  - Теперь все циклы запускаются, как cycle_with_training
+  - Added explanatory comments
+  - Now all cycles start like cycle_with_training
   
-  - Изменен powerful_ohlcv()
+  - Changed powerful_ohlcv()
 
 26-7-2025:
-  - Изменена структура проекта
+  - Changed project structure
   
 11-8-2025:
-  - Удалены hard-cap, medium-cap, low-cap модели, всех их заменила binary_model
-  - Добавлено вычисление индикаторов и ATR
+  - Removed hard-cap, medium-cap, low-cap models and replaced them all with binary_model
+  - Added indicator and ATR calculation
 
 12-8-2025:
-  - Добавлено больше индикаторов
+  - Added more indicators
   
 13-8-2025:
-  - **Добавлен цикл save_cycle**
-  - Обновлен телеграм-бот
-  - Убран первый open для сохранения в датасет
+  - **Added save_cycle**
+  - Updated Telegram bot
+  - Removed first open for saving to dataset
 
 18-8-2025:
-  - Добавлена библиотека на C для вычисления индикаторов и powerful_ohlcv
+  - Added a C library for indicator calculation and powerful_ohlcv
 
 19-8-2025:
-  - Изменения в функции process_targets
-  - Код был подготовлен к длительному запуску на сервере
+  - Changes in process_targets function
+  - Code was prepared for long server runtime
 
 20-8-2025:
-  - Маленькие изменения в библиотеке на C и в структуре
+  - Small changes in the C library and structure
 
 21-8-2025:
-  - Добавлены вычисления на свечи таймфрейма 1 день
-  - Изменена функция checking_volatility
+  - Added calculations for daily timeframe candles
+  - Changed checking_volatility function
 
 22-8-2025:
-  - Изменена архитектура, код стал чище и читаемее
-  - **Добавлен цикл trading_cycle**
-  - **Добавлены менеджеры для циклов trading_cycle и loader_cycle (save_cycle)**
-  - Изменен README
-  - Структура моделей снова поменялась, теперь на каждый токен отдельная модель и датасет
-  - У каждого токена теперь есть свой отдельный счетчик точности
+  - Architecture changed, code became cleaner and more readable
+  - **Added trading_cycle**
+  - **Added managers for trading_cycle and loader_cycle (save_cycle)**
+  - Updated README
+  - Model structure changed again: now each token has its own model and dataset
+  - Each token now has its own separate accuracy counter
 
 23-8-2025:
-  - Пофикшен баг с загрузкой библиотеки на C
+  - Fixed bug with loading the C library
 
 24-8-2025:
-  - Написан тестовый TUI на C (с поддержкой макросов и проверкой проекта)
+  - Wrote a test TUI in C (with macro support and project checks)
 
 25-8-2025:
-  - Пофикшен баг с неправильным копированием вложенных списков
+  - Fixed bug with incorrect copying of nested lists
 
 27-8-2025:
-   - Пофикшена логическая ошибка, связанная с множественным использованием powerful_ohlcv и dynamic_percent
-   - Телеграм бот обновлен под новую структуру счетчиков
+   - Fixed logical bug related to multiple use of powerful_ohlcv and dynamic_percent
+   - Updated Telegram bot for new counter structure
 
 28-8-2025:
-  - Добавлен файл requirements.txt, на тот момент он включал в себя 5 библиотек: aiogram, ccxt, colorama, numpy, torch
+  - Added requirements.txt file, at that time it included 5 libraries: aiogram, ccxt, colorama, numpy, torch
 
 29-8-2025:
-  - Время автоматическоего сброса счетчиков уменьшилось почти в 2 раза
+  - Automatic counter reset time reduced by almost 2x
 
 2-10-2025:
-  - Снова сильное обновление структуры
+  - Another major structure update
 
 3-10-2025:
-  - Улучшен асинхрон, добавлены asyncio.to_thread на сложные вычисления
-  - Пофикшена ошибка, которая заключалась в том, что нельзя было остановить код на ^C
+  - Improved async, added asyncio.to_thread for heavy computations
+  - Fixed an error where code could not be stopped with ^C
 
-  - **Переход с PyTorch на scikit-learn с моделью HistGradientBoosting**
-  - Улучшено сохранение данных в файл, с помощью pandas + numpy
-  - Обновление README в связи с переходом на обычные ML модели
-  - Добавлена лицензия проекта (проприетарная)
+  - **Transitioned from PyTorch to scikit-learn with HistGradientBoosting model**
+  - Improved data saving with pandas + numpy
+  - Updated README due to transition to standard ML models
+  - Added project license (proprietary)
   
 4-10-2025:
-  - Возвращение к истокам (вернул старую логику таргетов)
-  - Удалил старую логику таргетов, почти сразу же
-  - И снова вернул старую логику таргетов
-  - Бомбанул и перешел с классификации на регрессию. Добавил так называемый soft-target (в нем уникальная формула, не просто процентное изменение), вместе с ним **добавлен success_threshold для вычисления ошибок**
+  - Returned to original target logic
+  - Removed old target logic, almost immediately
+  - Then restored the old target logic again
+  - Had a crisis and switched from classification to regression. Added a so-called soft-target (with a unique formula, not just percentage change), and with it **success_threshold** for error calculation
 
 5-10-2025:
-  - Добавлено one-hot кодирование для токена, чтобы добавлять его в датасет
-  - Изменена структура моделей, в сторону одной модели, но которая видит токены
+  - Added one-hot encoding for token to include it in the dataset
+  - Changed model structure toward one model that sees tokens
 
 6-10-2025:
-  - CSV файлы заменены на базу данных на SQLite
-  - Закрепление soft-target, финальный допил логики под него
+  - CSV files replaced by an SQLite database
+  - Finalized soft-target and polished logic around it
 
 7-10-2025:
-  - Дописан полноценный LoaderCycle
-  - Оптимизация кода, в сторону неточных операций с торговыми данными
+  - Completed full LoaderCycle
+  - Optimized code toward imprecise trading data operations
 
 8-10-2025:
-  - Добавлены time-features, для того, чтобы модель понимала цикличность времени
-  - soft-target стал более чувствительным
+  - Added time-features so the model understands time cyclicality
+  - soft-target became more sensitive
 
 10-10-2025:
-  - soft-target стал зависеть от ATR
-  - Добавлен фильтр мусорных данных
-  - Добавлены дефолтные Dockerfile и docker-compose.yml для легкого деплоя
-  - Добавлены настройки через .json файл
+  - soft-target became dependent on ATR
+  - Added junk data filter
+  - Added default Dockerfile and docker-compose.yml for easy deployment
+  - Added settings via .json file
 
 16-10-2025:
-  - Обновление структуры: инициализация конфига через фабрику
-  - Теперь можно задавать scale для soft-target и success_threshold через settings.json
-  - Переход на 15-минутный таймфрейм
+  - Structure update: config initialization via factory
+  - Now can set scale for soft-target and success_threshold via settings.json
+  - Switched to 15-minute timeframe
 
 26-10-2025:
-  - Финальное обновление README и подготовка к переходу на Rust
+  - Final README update and preparation for migration to Rust
 
-18-10-2025: 
-  - Начало перехода на Rust:
-  > Переход на Rust был вызван двумя причинами: 
-  > 1. Типобезопасность и безопасность оперативной памяти 
-  > 2. Скорость скомпилированного кода.
+18-10-2025:
+  - Start of transition to Rust:
+  > Transition to Rust was driven by two reasons:
+  > 1. type safety and memory safety
+  > 2. speed of compiled code.
   >
-  > Но глобально, он улучшил качество и читаемость кода, а так же убрал кучу неиспользованных переменных
+  > But overall, it improved code quality and readability, and also removed a lot of unused variables
 
 19-10-2025:
-  - Создана базовая структура проекта, скопирована лицензия
-  - Создан модуль запросов к Binance, а также модуль вычисления time-features и модуль вычисления ATR
+  - Created basic project structure, copied license
+  - Created Binance request module, time-features module, and ATR module
   
 23-10-2025:
-  - Созданы структуры для хранения данных с биржи
+  - Created structures for storing exchange data
 
 24-10-2025:
-  - Добавлена поддержка асинхронности
-  - Моментальный рефакторинг модуля запросов к Binance, чтобы закрепить его на долгое время
+  - Added async support
+  - Immediate refactor of Binance request module to secure it for the long term
   
 26-10-2025:
-  - Была попытка отказаться от dynamic_percent, но всё же пришлось его сделать, ибо нет альтернатив
-  - Реализован dynamic_percent ко всем структурам данных биржи
+  - Attempted to abandon dynamic_percent, but still had to implement it because there was no alternative
+  - Implemented dynamic_percent for all exchange data structures
 
 27-10-2025:
-  - Провальная попытка интегрировать Python для управления ML моделью
+  - Failed attempt to integrate Python for ML model management
 
 29-10-2025:
-  - Была окончательна создана функция полного сбора данных, для использования в циклах
-  - Добавлен конфиг config.yaml, который является основным конфигурационным файлом
+  - Finalized the full data collection function for use in cycles
+  - Added config.yaml as the main configuration file
 
 30-10-2025:
-  - Теперь датасет хранится в PostgreSQL базе данных, интеграция через sqlx
+  - Dataset is now stored in PostgreSQL database, integrated via sqlx
 
 3-11-2025:
-  - Полноценная поддержка config.yaml с помощью serde_yaml
-  - **Модель RandomForestRegressor перенесена и создан RFInterface**
+  - Full config.yaml support via serde_yaml
+  - **RandomForestRegressor model ported and RFInterface created**
  
 5-11-2025:
-  - Перенесен TradingCycle
-  - Перенесен LoaderCycle
+  - Transferred TradingCycle
+  - Transferred LoaderCycle
   
 6-11-2025:
-  - Создан **CycleManager**
-  - Чуть-чуть изменена логика счетчиков
+  - Created **CycleManager**
+  - Slightly changed counter logic
 
 7-11-2025:
-  - Добавлена возможность настраивать модель прямо из конфига
-  - Убран is_significant
-  - Все счетчики теперь с Mutex
-  - trading_cycle переименован в training_cycle (потому что по существу, это просто тренировка, а не торговля)
+  - Added ability to configure the model directly from config
+  - Removed is_significant
+  - All counters now use Mutex
+  - trading_cycle renamed to training_cycle (because in essence it is training, not trading)
 
 8-11-2025:
-  - Добавлен цветной вывод (самое важное в проекте), и возможность выключить его через конфиг
+  - Added colored output (the most important thing in the project), and ability to disable it via config
 
 15-11-2025:
-  - Уничтожение soft-target подобных философий, target теперь просто процентное изменение
-  - Полностью удалено is_significant
-  - Модель теперь не инициализируется, если в начале запускается LoaderCycle, который не требует модели
-  - Теперь счетчики не сбрасываются, а просто являются скользящим окном, их размер можно задать в конфиге
+  - Eliminated soft-target-like philosophies, target is now just percentage change
+  - is_significant completely removed
+  - Model no longer initializes if LoaderCycle starts first and does not require a model
+  - Counters are no longer reset; they now act as a sliding window whose size can be set in config
   
 16-11-2025:
-  - Добавлен бекенд в качестве альтернативы телеграм бота
+  - Added backend as an alternative to Telegram bot
 
 18-11-2025:
-  - Попытка интегрировать логику циклов в бекенд (чтобы была возможность запускать циклы удаленно, даже после запуска программы и других циклов)
-  - Безуспешные попытки интеграции
+  - Attempted to integrate cycle logic into backend (so cycles could be started remotely, even after the program and other cycles were already running)
+  - Unsuccessful integration attempts
   
 19-11-2025:
-  - Полное обновление структуры менеджера. Теперь счетчики это не объект с Mutex, а блокирующий сервис. А запуск и остановка циклов теперь тоже является отдельным блокирующим сервисом
-  - Добавлена возможность останавливать и начинать циклы удаленно
-  - Завершение интеграции, чистка кода, документация по бекенду для будущего фронтенда
-  - Обновление конфига, теперь в нем можно настроить ПОЧТИ ВСЁ
-  - Добавлен метод test_token(), который позволяет проверять валиден ли токен
+  - Complete manager structure overhaul. Now counters are not an object with Mutex, but a blocking service. And cycle start/stop is also a separate blocking service
+  - Added ability to stop and start cycles remotely
+  - Completed integration, code cleanup, backend documentation for future frontend
+  - Updated config, now it is possible to configure ALMOST EVERYTHING
+  - Added method test_token(), which allows checking whether a token is valid
 
 20-11-2025:
-  - Фикс хеш-таблицы, которая отвечает за счетчики, теперь есть гарант, что всё будет в едином формате
-  - Обновление README в связи с обновлением конфига
+  - Fixed counter hash table, now there is a guarantee that everything will be in a consistent format
+  - Updated README due to config changes
   
 23-11-2025:
-  - Тренировка модели теперь происходит в разы реже, только если последние 2 итерации на одном токене были ошибочные
-  
+  - Model training now occurs much less frequently, only if the last 2 iterations on one token were erroneous
+
 22-12-2025:
-  - Фикс CounterActor (раньше точночть в циклах и точность от бекенда были разными)
-  - Возможность выключить/включить бекенд с помощью конфига
+  - Fixed CounterActor (previously cycle accuracy and backend accuracy were different)
+  - Added ability to disable/enable backend via config
 
 25-12-2025:
-  - Первые попытки написать логику для SandboxCycle
+  - First attempts to write logic for SandboxCycle
 
-27-12-2025:  
-  - Теперь можно задать минимальные и максимальные значения success_threshold в конфиге
-  - SandboxCycle теперь можно запускать из CycleManager, потому что все зависимости уже известны
-  - Возможность настроить SandboxCycle более глубоко с помощью конфига
+27-12-2025:
+  - Now minimum and maximum values for success_threshold can be set in config
+  - SandboxCycle can now be launched from CycleManager because all dependencies are already known
+  - Ability to configure SandboxCycle more deeply via config
 
 28-12-2025:
-  - Обновления в логике SandboxCycle
+  - Updates in SandboxCycle logic
 
 # --2026--
 
 9-1-2026:
-  - Удален std::sync::Mutex, заместо него теперь везде используется tokio::sync::Mutex
-  - Удалены лишние параметры в .env
-  - Добавлены общие трейты для всех циклов
-  - Удалена проверка точности модели по классификации, добавлена своя проверка с success_threshold со скоростью O(n)
-  - Удален StandartScaler из модели, потому что модель - RandomForestRegressor
+  - Removed std::sync::Mutex, replaced it everywhere with tokio::sync::Mutex
+  - Removed extra parameters from .env
+  - Added common traits for all cycles
+  - Removed model accuracy check by classification, added custom O(n) success_threshold calculation
+  - Removed StandardScaler from the model because the model is RandomForestRegressor
 
 11-1-2026:
-  - Добавлен новый счетчик - direction_accuracy, который показывает, угадала ли модель направление рынка
-  - Изменена логика волатильности, теперь она вычисляется каждую итерацию любого цикла
-  - Код был сильно оптимизирован
-  - success_threshold теперь требует для своего вычисления коэфициент из конфига и волатильность
-  - Был написан неудачный рефакторинг API Binance
+  - Added new counter - direction_accuracy, which shows whether the model guessed market direction
+  - Changed volatility logic, now it is calculated every iteration of any cycle
+  - Code was heavily optimized
+  - success_threshold now requires a coefficient from config and volatility for its calculation
+  - Added an unsuccessful Binance API refactor
 
 12-1-2026:
-  - Модель стала отдельным блокирующим сервисом
-  - Рефакторинг API Binance был отменен
+  - Model became a separate blocking service
+  - Binance API refactor was canceled
 
 13-1-2026:
-  - Добавлен rayon для вычислений связанных с функцией collect_all()
+  - Added rayon for computations related to collect_all()
 
 16-1-2026:
-  - Удалена асинхронность функций, которые не требуют асинхронности
-  - Написан CHANGELOG.md
-  - Изменен README из-за изменений в конфиге и CHANGELOG.md
+  - Removed async from functions that do not require async
+  - Wrote CHANGELOG.md
+  - Updated README due to changes in config and CHANGELOG.md
 
 25-1-2026:
-  - Написан микросервис для ccxt на Python
+  - Wrote the ccxt microservice in Python
 
 28-1-2026:
-  - Инфраструктура полностью перенесена на микросервис с Python, вместо binance.rs
-  - Добавлена возможность настраивать в конфиге, какую биржу использовать для запросов
-  - Большинство обработок ошибок заменено с String на anyhow::Error
-  - Исправлена логика DynamicPercent
-  - ITicker теперь имеет поля, которые ранее имели IDayPrice, average_price (уменьшено кол-во запросов к API)
-  - Удалены IDayPrice и AveragePrice
-  - ITicker переименован в Ticker, ICandle в Candle и ITime в CircleTime
-  - Изменен и украшен README
+  - Infrastructure fully moved to Python microservice instead of binance.rs
+  - Added ability to configure which exchange to use for requests in config
+  - Most error handling changed from String to anyhow::Error
+  - Fixed DynamicPercent logic
+  - ITicker now has fields that previously belonged to IDayPrice, average_price (reduced API requests)
+  - Removed IDayPrice and AveragePrice
+  - Renamed ITicker to Ticker, ICandle to Candle and ITime to CircleTime
+  - Changed and beautified README
 
-31-1-2026 (подготовка к бектестам):
-  - Добавлен объект runtime в конфиге, нужен для настройки какой цикл выбрать, и какой runtime использовать (на выбор либо realtime либо backtest)
-  - Добавлен CycleError для уникальных ошибок циклов
-  - Исправлен баг с тестированием токена и повторным запуском цикла с ним
+31-1-2026 (preparing for backtests):
+  - Added runtime object to config, needed to configure which cycle to choose and which runtime to use (either realtime or backtest)
+  - Added CycleError for unique cycle errors
+  - Fixed bug with token testing and restarting the cycle with it
 
 1-2-2026:
-  - Исправлена проблема collect_all, которая собирала данные сразу с 3-х таймфреймов
-  - Таймфрейм теперь настраивается в конфиге
-  - Метод wait_for_next_interval теперь завязан на таймфрейме
-  - Каждый цикл работает теперь только на одном таймфрейме
-  - Минимальные бектесты и косметика для них добавлены
-  - Слегка улучшенна обработка ошибок
+  - Fixed collect_all issue that collected data from 3 timeframes at once
+  - Timeframe is now configured in config
+  - Method wait_for_next_interval is now tied to the timeframe
+  - Each cycle now works only on one timeframe
+  - Added minimal backtests and cosmetics for them
+  - Slightly improved error handling
 
 2-2-2026:
-  - Исправлен баг в бектесте связанный с цикличным временем
-  - Убраны ненужные fn new() у структур данных
-  - Добавлен ServersActor, который позволяет контролировать запросы и загруженность серверов
+  - Fixed backtest bug related to cyclic time
+  - Removed unnecessary fn new() from data structures
+  - Added ServersActor, which allows controlling requests and server load
 
 3-2-2026:
-  - Исправлена незначительная ошибка в логике ServersActor
-  - Добавлен BackgroundCycle
-  - Исправлены запросы к микросервису
-  - В BackgroundCycle добавлено обновление проверки работы сервера
+  - Fixed minor bug in ServersActor logic
+  - Added BackgroundCycle
+  - Fixed requests to microservice
+  - BackgroundCycle now includes server health check updates
 
 5-2-2026:
-  - Полностью изменен датасет и сбор данных для него
-  - В загрузке данных у модели теперь фильтруются NaN значения
-  - collect_all теперь метод CCXTClient, collect_from_slice теперь CollectedData::from_slice(), flat_all теперь FlattenedData::from_collected()
-  - В валидацию добавлена точность по направлению
-  - Модель изменена с RandomForestRegressor на XGBoostRegressor
-  - Добавлена структура AccuracyModel
-  - Добавлен исполнитель PredictionActor
+  - Completely changed dataset and its data collection
+  - In model data loading, NaN values are now filtered
+  - collect_all is now a CCXTClient method, collect_from_slice is now CollectedData::from_slice(), flat_all is now FlattenedData::from_collected()
+  - Added direction accuracy to validation
+  - Changed model from RandomForestRegressor to XGBoostRegressor
+  - Added AccuracyModel structure
+  - Added PredictionActor executor
 
 6-2-2026:
-  - Бекенд улучшен под PredictionActor
-  - Добавлен перезапуск в случае, если сервер резко перестал работать
+  - Improved backend for PredictionActor
+  - Added restart if a server suddenly stops working
 
 9-2-2026:
-  - Создан трейт Model, он нужен для легкого создания моделей (а также путь к полиформизму)
-  - AccuracyModel переименована в ModelAccuracy
-  - Добавлен ModelParams для полного полиформизма
-  - Модель RandomForest возвращена
-  - Добавлена обработка разных метрик по одному, или все сразу
-  - В конфиг добавлены принты пропущенных значений, а также evualate и metrics стало одним принтом metrics
-  - Добавлены модели: Linear, Ridge, DecisionTree, KNN, ExtraTrees
+  - Added Model trait to simplify model creation and enable polymorphism
+  - Renamed AccuracyModel to ModelAccuracy
+  - Added ModelParams for full polymorphism
+  - Returned RandomForest model
+  - Added handling of different metrics by single or all at once
+  - Added models: Linear, Ridge, DecisionTree, KNN, ExtraTrees
 
 12-2-2026:
-  - Проведен грид-серч гиперпараметров всех моделей, которые я сделал
-  - Грид-серч провален, все модели показали одинаково плохие результаты
-  - Исправлен баг `channel closed` в PredictionActor
-  - Добавлен трейт IAccount
-  - Удалена старая логика SandboxCycle
-  - Добавлен минимальный бектест в SandboxCycle
+  - Performed grid search of hyperparameters for all models I created
+  - Grid search failed, all models showed equally poor results
+  - Fixed `channel closed` bug in PredictionActor
+  - Added IAccount trait
+  - Removed old SandboxCycle logic
+  - Added minimal backtest in SandboxCycle
 
 09-3-2026:
-  - Добавлен SQLStandart, чтобы разделять запросы
-  - Удален FlattenedData, ибо было не удобно использовать индексы
-  - Заместо FlattenedData добавлен DataMap, под капотом использует BTreeMap
-  - Модели в Ensemble изменены
+  - Added SQLStandart to separate queries
+  - Removed FlattenedData because it was inconvenient to use indices
+  - Replaced FlattenedData with DataMap, which internally uses BTreeMap
+  - Changed Ensemble models
 
 14-03-2026:
-  - consts.rs переименован в standart.rs
-  - В SQLStandart добавлено поле Dummy
-  - Частично реализованы новые фичи
-  - CollectedData полностью заменен на DataMap
-  - Временно удалены оптимизации в циклах с помощью Arc
+  - Renamed consts.rs to standart.rs
+  - Added Dummy field to SQLStandart
+  - Partially implemented new features
+  - Completely replaced CollectedData with DataMap
+  - Temporarily removed cycle optimizations using Arc
 
 15-03-2026:
-  - Полностью добавлены новые фичи
-  - Базовый функционал Ensemble добавлен
+  - Fully added new features
+  - Added basic Ensemble functionality
 
 30-03-2026:
-  - Увеличен функционал у DataMap
-  - Структура AddFeatures удалена
+  - Increased DataMap functionality
+  - Removed AddFeatures structure
 
 3-04-2026:
-  - Добавлена функция collect_targets, и изменена функция collect_all
+  - Added collect_targets function and changed collect_all
 
 4-04-2026:
-  - Добавлен новый тип цикла "LoaderWM" (LoaderWithModel)
-  - collect_targets был завершен
+  - Added new cycle type "LoaderWM" (LoaderWithModel)
+  - Completed collect_targets
 
 6-04-2026:
-  - Добавлены модели классификации
-  - Теоритечски пофикшены баги с форматированием строк
-  - Сервис ccxt_python_service добавлен в репозиторий CTEx-Rs
-  - Для вычисления ошибок diff заменен на ratio
-  - Direction accuracy удален
-  - Созданы методы generate_accuracy и generate_predictions для создания первичного датасета Ensemble
+  - Added classification models
+  - Theoretically fixed string formatting bugs
+  - Added ccxt_python_service to the CTEx-Rs repository
+  - Replaced diff with ratio for error calculation
+  - Removed direction accuracy
+  - Added generate_accuracy and generate_predictions methods to create initial Ensemble dataset
 
 7-04-2026:
-  - Добавлено логирование через env_logger
-  - Добавлена нормальная обработка ошибок
+  - Added logging via env_logger
+  - Added proper error handling
 
 9-04-2026:
-  - Исправлены потенциальные баги при запуске тренировки модели
-  - Добавлено логирование ошибок Ensemble модели
+  - Fixed potential bugs when starting model training
+  - Added Ensemble model error logging
 
 30-04-2026:
-  - **Ensemble-модель окончательно реализована**
-  - Исправлено несколько логических багов
+  - Ensemble model finally implemented
+  - Fixed several logical bugs
 
 3-05-2026:
-  - Добавлена структура теста моделей
+  - Added model test structure
 
 18-05-2026:
-  - Добавлен ChainActor, в котором находится структура Chain, используемая для последовательного сохранения предиктов и таргетов
-  - Добавлена настройка save_plots для сохранения графиков
+  - Added ChainActor containing Chain structure used for sequential saving of predictions and targets
+  - Added save_plots setting for saving charts
 
 21-05-2026:
-  - Полностью реализовано сохранение графиков
-  - Реализовано сохранение графиков с помощью REST API
+  - Fully implemented plot saving
+  - Implemented plot saving via REST API
 
-  - **Проект признан не рабочим**
+  - **Project recognized as non-working**

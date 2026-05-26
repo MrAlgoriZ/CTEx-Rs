@@ -1,166 +1,150 @@
-# CTEx-Rs - Rust подход проекта 'CTEx-Ai'
+# CTEx-Rs - Rust implementation of the 'CTEx-Ai' project
 
-![Status](https://img.shields.io/badge/status-active-brightgreen) ![License](https://img.shields.io/badge/license-proprietary-red) ![Language](https://img.shields.io/badge/language-Rust-orange)
+![Status](https://img.shields.io/badge/status-completed-brightgreen) ![License](https://img.shields.io/badge/license-GPL-blue) ![Language](https://img.shields.io/badge/language-Rust-orange)
 
-Репозиторий представляет из себя реализацию проекта 'CTEx-Ai' на языке Rust. Проект CTEx-Ai это полноценная модульная realtime система для алгоритмического трейдинга на биржах (Binance) с использованием технологий машинного обучения
+This repository is a Rust implementation of the 'CTEx-Ai' project. CTEx-Ai is a fully modular realtime algorithmic trading system for exchanges (Binance) using machine learning technologies.
 
-## Запуск
-Чтобы запустить бинарный файл, вы должны подготовить окружение:
-  - Установите микросервис с биржами https://github.com/MrAlgoriZ/ccxt-python-service, и запустите его
-  - Создайте .env файл, в котором должен быть реализован параметр DATABASE_URL
-  - Ваша база данных должна быть подготовлена до запуска приложения. Подробнее о подготовке базе указано ниже в пункте "Подготовка базы данных"
-  - Настройка запуска расписывается в файле по пути "config/config.yaml"
+## Run
+To run the binary, you must prepare the environment:
+  - Start the exchange microservice at https://github.com/MrAlgoriZ/ccxt-python-service (./ccxt_service/start.sh)
+  - Create a .env file containing the DATABASE_URL parameter
+  - Your database must be prepared before launching the application. More details on database preparation are below in the "Database preparation" section
+  - Startup configuration is described in the file at `config/config.yaml`
 
-## Настройка запуска
-Конфиги создаются автоматически, но их параметры можно менять. В config/config.yaml можно указать следующие параметры:
-  - Model (настройка модели):
-    - name: Как будет называться модель
-    - n_trees: количество деревьев в модели RandomForest
-    - max_depth: максимальная глубина дерева
-    - seed: инициализация генератора случайных чисел
-    - train_test_split: настройки разделителя обучающих и валидационных данных
-      - train_ratio: в каком коэффиценте модель будет брать данные для обучения
-    - metric: основная метрика для вычисления ошибки модели
+## Startup configuration
+Configs are created automatically, but their parameters can be changed. More details in the [documentation](docs/en/config.md)
 
-  - behaviour (настройка поведения): 
-    - success_threshold: порог успешности обучения модели
-      - minimum: минимальный порог значения
-      - default: стартовое значение
-      - maximum: максимальный порог значения
-      - ratio: для использования в качестве коэфициента
-    - risk_threshold и trading_mode_value: экспериментальные настройки для SandboxCycle, настраиваются по аналогии с success_threshold
-    - accuracy_capacity: сколько максимум успехов/ошибок будет помещаться в счетчиках
-    - feedback_engine_capacity: экспериментальная настройка для SandboxCycle, позволяет регулировать объем последних ошибок модели
+## Database preparation
+Your table must have a specific name (`candles`) and a specific number of columns. All columns are listed in [database.md](docs/en/database.md)
+You must pass the database URL in the environment variable named DATABASE_URL.
+The format of this URL must be: `postgresql://example.user:example.password@example.ip:example.port/example.database`
 
-  - services (настройка сервисов):
-    - ccxt_python (сервис для загрузки бирж https://github.com/MrAlgoriZ/ccxt-python-service)
-      - ip: на каком айпи сервис
-      - port: на каком порте сервис
-
-  - backend (настройка бекенда):
-    - enabled: включить или отключить бекенд
-    - listener: по какому ip и порту работает бекенд
-    - admin_password: захешированный пароль администратора
-     
-  - prints (настройка вывода):
-    - Различные выводы, можете протестировать
-
-  - token (настройка запуска):
-    Здесь вы можете указать несколько или множество токенов, в формате:
-      ```yaml
-      - BTCUSDT
-      - ETHUSDT
-      - BNBUSDT
-      ```
-    Поддерживаются все токены, которые есть на binance.
-    Если вдруг вы захотите использовать токен, который не поддерживается, то ничего не произойдет, токен остановит цикл в самом начале.
-  - main_exchange: какую биржу использовать, писать в lowercase ("binance", "bybit", "mexc", "bitget", "bingx" и тд)
-  - cycle type (настройка цикла): какой цикл запустить? (на выбор loader, training, sandbox, в будущем больше вариантов)
-  - mode: тип вывода ("log": без цвета, "print": с цветом)
-
-## Подготовка базы данных
-Ваша таблица должна иметь определенное название (candles) и определенное количество столбцов, а именно 233 значений, где первое значение - Токен (String | TEXT), а последнее - target. Остальные имена столбцов не важны. (В будущем будет обновленно, чтобы можно было использовать любое значение, а также различные варианты загрузки датасета (помимо базы данных) )
-Ссылку на базу данных вы должны передать в переменной окружения с названием DATABASE_URL.
-Формат этой ссылки должен быть следующим: "postgresql://example.user:example.password@example.ip:example.port/example.database"
-
-## Инструкция по сборке
-Скопируйте файлы (требуется доступ к приватному репозиторию)
+## Build instructions
+Copy the files (access to the private repository is required)
 ```bash
 git clone https://github.com/MrAlgoriZ/CTEx-Rs.git
 ```
-Создайте .env (подробнее описано выше), конфиг лежит по пути config/config.yaml.
-Зависимости в сборке: Rust
-**Запустите**
+Create a .env file (details above), the config file is located at `config/config.yaml`.
+Build dependencies: Rust
+**Run**
 ```bash
-cargo run
+cargo run --release
 ```
-**Либо скомпилируйте**
+**Or compile**
 ```bash
 cargo build --release && ./target/release/CTEx-Rs
 ```
 
-## О проекте
-В проекте реализована всего 1 модель: RandomForestRegressor, её более удобную имплементацию вы можете использовать из файла src/models, там она представлена, как RFInterface. Настройка модели осуществляется с помощью конфига config/config.yaml.
+## About the project
+The project implements 7 regression models and 3 classification models. It also includes a custom Ensemble model that outputs both regression and classification results.
 
-### Структура проекта:
+### Project structure [architecture.md](docs/en/architecture.md):
 ```
 ├── Cargo.lock
 ├── Cargo.toml
-├── config/
-│   └── config.yaml
+├── ccxt_service
+│   ├── backend
+│   │   └── backend.py
+│   ├── ccxt_requests
+│   │   └── requests.py
+│   ├── private_key.pem
+│   ├── public_key.pem
+│   ├── pyproject.toml
+│   ├── README.md
+│   ├── start.sh
+│   ├── utils
+│   │   ├── cache.py
+│   │   ├── crypto.py
+│   │   └── errors.py
+│   └── uv.lock
+├── CHANGELOG.md
+├── config
+│   └── config.yaml
+├── docs
 ├── LICENSE
 ├── README.md
-├── CHANGELOG.md
-└── src/
-    ├── backend/
-    │   ├── app.rs
-    │   ├── commands.rs
-    │   ├── mod.rs
-    │   ├── README.md
-    │   └── structure.rs
-    ├── data/
-    │   ├── data_interfaces.rs
-    │   ├── mod.rs
-    │   ├── process/
-    │   │   ├── data_collection.rs
-    │   │   ├── features.rs
-    │   │   ├── mod.rs
-    │   │   ├── target.rs
-    │   │   └── volatility.rs
-    │   └── requests/
-    │       ├── ccxt/
-    │       │   ├── client.rs
-    │       │   └── mod.rs
-    │       ├── database/
-    │       │   ├── db_req.rs
-    │       │   └── mod.rs
-    │       ├── mod.rs
-    │       └── time.rs
-    ├── engine/
-    │   ├── cycles/
-    │   │   ├── loader/
-    │   │   │   ├── cycle.rs
-    │   │   │   └── mod.rs
-    │   │   ├── training/
-    │   │   │   ├── cycle.rs
-    │   │   │   └── mod.rs
-    │   │   ├── sandbox/
-    │   │   │   ├── cycle.rs
-    │   │   │   └── mod.rs
-    │   │   ├── trading/
-    │   │   │   ├── cycle.rs
-    │   │   │   └── mod.rs
-    │   │   ├── manager.rs
-    │   │   ├── mod.rs
-    │   │   └── traits.rs
-    │   ├── mod.rs
-    │   ├── state/
-    │   │   ├── counters.rs
-    │   │   └── mod.rs
-    │   └── utils/
-    │       ├── colors.rs
-    │       ├── config/
-    │       │   ├── config_types.rs
-    │       │   ├── load_config.rs
-    │       │   ├── load_env.rs
-    │       │   └── mod.rs
-    │       ├── mod.rs
-    │       ├── parse.rs
-    │       └── processor.rs
+└── src
+    ├── backend
+    │   ├── app.rs
+    │   ├── commands.rs
+    │   ├── mod.rs
+    │   ├── README.md
+    │   └── structure.rs
+    ├── data
+    │   ├── data_interfaces.rs
+    │   ├── mod.rs
+    │   ├── process
+    │   │   ├── data_collection.rs
+    │   │   ├── features
+    │   │   │   ├── auxiliary.rs
+    │   │   │   ├── basic.rs
+    │   │   │   └── mod.rs
+    │   │   ├── mod.rs
+    │   │   └── volatility.rs
+    │   └── requests
+    │       ├── ccxt
+    │       │   ├── account.rs
+    │       │   ├── client.rs
+    │       │   └── mod.rs
+    │       ├── database
+    │       │   ├── mod.rs
+    │       │   ├── requests.rs
+    │       │   └── standart.rs
+    │       ├── mod.rs
+    │       └── time.rs
+    ├── engine
+    │   ├── cycles
+    │   │   ├── background
+    │   │   │   ├── cycle.rs
+    │   │   │   └── mod.rs
+    │   │   ├── loader
+    │   │   │   ├── cycle.rs
+    │   │   │   └── mod.rs
+    │   │   ├── loaderwm
+    │   │   │   ├── cycle.rs
+    │   │   │   └── mod.rs
+    │   │   ├── manager.rs
+    │   │   ├── mod.rs
+    │   │   ├── sandbox
+    │   │   │   ├── cycle.rs
+    │   │   │   └── mod.rs
+    │   │   ├── training
+    │   │   │   ├── cycle.rs
+    │   │   │   └── mod.rs
+    │   │   └── traits.rs
+    │   ├── mod.rs
+    │   ├── state
+    │   │   ├── chain.rs
+    │   │   ├── counters.rs
+    │   │   └── mod.rs
+    │   └── utils
+    │       ├── colors.rs
+    │       ├── config
+    │       │   ├── config_types.rs
+    │       │   ├── load_config.rs
+    │       │   ├── load_env.rs
+    │       │   └── mod.rs
+    │       ├── mod.rs
+    │       └── parse.rs
     ├── main.rs
-    └── models/
+    └── models
+        ├── decisiontree.rs
+        ├── ensemble.rs
+        ├── extratrees.rs
+        ├── knn.rs
+        ├── linear.rs
+        ├── metrics.rs
         ├── model.rs
-        └── mod.rs
+        ├── mod.rs
+        ├── randomforest.rs
+        ├── ridge.rs
+        └── xgboost.rs
 ```
-## Лицензия
-
-Все права защищены © 2025 tulymics (GitHub: Mr. AlgoriZ).
-Использование, копирование, модификация или распространение этого ПО без письменного разрешения запрещено.
-
-Для вопросов по лицензированию: https://github.com/MrAlgoriZ
-
-## Поддержка
-
-По всем вопросам обращайтесь:
+## Support
 
 - Email: [b.a.d.xdev@proton.me](mailto:b.a.d.xdev@proton.me)
+- Telegram: [@QmralgorizQ](https://t.me/QmralgorizQ)
+- Crypto:
+  Network: Ethereum
+  Address: `0x1a98835815b2b47d6B4d4Ab830C369980Dcb9E69`
+  Currency: ETH
