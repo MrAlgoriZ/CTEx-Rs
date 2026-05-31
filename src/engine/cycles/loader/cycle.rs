@@ -52,7 +52,7 @@ impl LoaderCycle {
             symbol: symbol,
             last_candles: None,
             last_close: None,
-            config: load_config("config/config.yaml"),
+            config: load_config(),
             client,
             pool,
         }
@@ -71,7 +71,11 @@ impl LoaderCycle {
         let volatility: f64 = {
             let candles: Vec<Candle> = self
                 .client
-                .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 10)
+                .fetch_ohlcv(
+                    &self.symbol,
+                    &self.config.exchange.timeframes.main_timeframe,
+                    10,
+                )
                 .await?;
             get_volatility(&candles)
         };
@@ -86,12 +90,19 @@ impl LoaderCycle {
             self.wait_for_next_interval().await?;
             let (candles, ohlcv) = self
                 .client
-                .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
+                .collect_all(
+                    &self.symbol,
+                    &self.config.exchange.timeframes.main_timeframe,
+                )
                 .await?;
             let close = if self.config.prints.cycle.target {
                 Some(
                     self.client
-                        .fetch_ohlcv(&self.symbol, &self.config.timeframes.main_timeframe, 2)
+                        .fetch_ohlcv(
+                            &self.symbol,
+                            &self.config.exchange.timeframes.main_timeframe,
+                            2,
+                        )
                         .await?[0]
                         .close,
                 )
@@ -146,7 +157,11 @@ impl LoaderCycle {
 
         let all_candles: Vec<CandleWithTimestamp> = self
             .client
-            .fetch_ohlcv_with_timestamp(&self.symbol, &self.config.timeframes.main_timeframe, 1000)
+            .fetch_ohlcv_with_timestamp(
+                &self.symbol,
+                &self.config.exchange.timeframes.main_timeframe,
+                1000,
+            )
             .await?;
 
         let total = (all_candles.len() - 1 - OHLCV_FETCH_LEN) as u64;
@@ -166,8 +181,11 @@ impl LoaderCycle {
             let window = &all_candles[i - OHLCV_FETCH_LEN..i];
             let current_close = all_candles[i - 2].close;
 
-            let candles =
-                DataMap::from_slice(&self.symbol, &self.config.timeframes.main_timeframe, window);
+            let candles = DataMap::from_slice(
+                &self.symbol,
+                &self.config.exchange.timeframes.main_timeframe,
+                window,
+            );
 
             match phase {
                 CyclePhase::Active => {

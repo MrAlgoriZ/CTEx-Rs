@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use crate::CONFIG_PATH;
 use crate::backend::structure::{ApiState, ApiStructure};
 use crate::engine::cycles::manager::{
     ChainCommand, CounterCommand, PredictionsCommand, SupervisorCommand,
@@ -15,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
 fn verify_password(input: String) -> bool {
-    let cfg = load_config(CONFIG_PATH);
+    let cfg = load_config();
     input == cfg.backend.admin_password
 }
 
@@ -66,7 +65,7 @@ pub struct SymbolQuery {
 }
 
 fn default_window() -> usize {
-    load_config(CONFIG_PATH).behaviour.accuracy_capacity
+    load_config().behaviour.accuracy_capacity
 }
 
 #[derive(Serialize)]

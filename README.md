@@ -59,6 +59,7 @@ The project implements 7 regression models and 3 classification models. It also 
 │   └── uv.lock
 ├── CHANGELOG.md
 ├── config
+│   ├── model.yaml
 │   └── config.yaml
 ├── docs
 ├── LICENSE

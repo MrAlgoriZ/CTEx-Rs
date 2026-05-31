@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::time::{Duration, sleep};
 
-use crate::CONFIG_PATH;
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, DataMap, Ticker};
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
@@ -275,8 +274,8 @@ impl CycleSupervisor {
         model_tx: &Option<mpsc::Sender<ModelCommand>>,
         chain_tx: &Option<mpsc::Sender<ChainCommand>>,
     ) -> Result<(), CycleError> {
-        let config = load_config(CONFIG_PATH);
-        let client = CCXTClient::new(&config.main_exchange, server_tx.clone());
+        let config = load_config();
+        let client = CCXTClient::new(&config.exchange.main_exchange, server_tx.clone());
 
         match cycle_type {
             CycleType::Loader => {
@@ -594,7 +593,7 @@ pub struct CycleManager {
 
 impl CycleManager {
     pub async fn new() -> Self {
-        let config = load_config(CONFIG_PATH);
+        let config = load_config();
         let counter_capacity = config.behaviour.accuracy_capacity;
         let prediction_capacity = config.behaviour.predictions_capacity;
 
@@ -611,7 +610,7 @@ impl CycleManager {
             CycleSupervisor::new(counter_tx.clone(), servers_tx.clone());
         let supervisor_task = tokio::spawn(supervisor.run());
 
-        let background_cycle = BackgroundCycle::new(load_config(CONFIG_PATH), servers_tx);
+        let background_cycle = BackgroundCycle::new(load_config(), servers_tx);
         let _ = tokio::spawn(background_cycle.run());
 
         Self {
@@ -675,7 +674,7 @@ impl CycleManager {
             .await
             .map_err(|e| format!("DB connection error: {}", e))?;
 
-        let params = load_config(CONFIG_PATH).model.params;
+        let params = load_config().model.params;
 
         let mut model: Box<dyn Model + Send + Sync> = match params {
             ModelParams::Ensemble {
@@ -997,7 +996,7 @@ impl ServersActor {
     pub async fn new() -> (Self, mpsc::Sender<ServersCommand>) {
         let (tx, rx) = mpsc::channel(10);
 
-        let servers_vec = load_config(CONFIG_PATH).servers;
+        let servers_vec = load_config().exchange.servers;
 
         let mut servers = HashMap::new();
 
@@ -1464,11 +1463,7 @@ fn calculate_average_shifted_accuracy<'a>(
 }
 
 fn log_info(msg: &str) {
-    if load_config(CONFIG_PATH)
-        .prints
-        .manager
-        .additional_manager_prints
-    {
+    if load_config().prints.manager.additional_manager_prints {
         info!(
             "{}[{}] {}{}",
             Fore::WHITE.as_str(),
@@ -1480,7 +1475,7 @@ fn log_info(msg: &str) {
 }
 
 fn log_debug(msg: &str) {
-    if load_config(CONFIG_PATH).prints.manager.manager_init {
+    if load_config().prints.manager.manager_init {
         debug!(
             "{}[{}] {}{}",
             Fore::WHITE.as_str(),
@@ -1492,7 +1487,7 @@ fn log_debug(msg: &str) {
 }
 
 fn log_warning(msg: &str) {
-    if load_config(CONFIG_PATH).prints.manager.manager_init {
+    if load_config().prints.manager.manager_init {
         warn!(
             "{}[{}] {}{}",
             Fore::WHITE.as_str(),

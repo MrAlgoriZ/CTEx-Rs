@@ -1,4 +1,4 @@
-Настройка модели осуществляется следующим образом:
+Настройка модели осуществляется в блоке `model` по пути `config/model.yaml` :
 
 ### `model_struct` — Структура модели
 
@@ -21,13 +21,12 @@ model:
 model:
   model_struct: single
   params:
-    type: ensemble
-    params:
-      XGBoost:
-        task_type: regression
-        target_type: position_size
-        n_estimators: 100
-        max_depth: 5
+    type: single
+    kind: XGBoost
+    task_type: regression
+    target_type: position_size
+    n_estimators: 100
+    max_depth: 5
 ```
 
 **`task_type`** — тип ML-задачи:
@@ -38,6 +37,7 @@ model:
 - `position_size` — размер вкладываемого процента от бюджета
 
 #### Для `model_struct: ensemble`
+
 ```yaml
 model:
   model_struct: ensemble
@@ -166,8 +166,6 @@ model:
 model:
   metric: R2
 ```
-
-Метрика, по которой оценивается модель:
 
 | Значение    | Описание                                       | Когда использовать                         |
 |-------------|------------------------------------------------|--------------------------------------------|

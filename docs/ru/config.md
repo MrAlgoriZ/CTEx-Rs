@@ -1,6 +1,6 @@
 # Конфигурация системы
 
-Конфиг задаётся в файле `config.yaml`. Ниже описаны все секции и поля.
+Конфиг задаётся в файле `config/config.yaml`. Ниже описаны все секции и поля.
 
 ---
 
@@ -191,8 +191,6 @@ prints:
 | `prediction`  | Предсказание модели                            |
 | `accuracy`    | Текущая точность на скользящем окне            |
 
----
-
 ### `prints.manager`
 
 ```yaml
@@ -221,13 +219,12 @@ model:
   generate_plots: true
   seed: 42
   params:
-    Single:
-      params:
-        XGBoost:
-          task_type: regression
-          target_type: future_return
-          n_estimators: 200
-          max_depth: 4
+    type: single
+    kind: XGBoost
+    task_type: regression
+    target_type: future_return
+    n_estimators: 200
+    max_depth: 4
   train_test_split:
     train_ratio: 0.8
   metric: R2

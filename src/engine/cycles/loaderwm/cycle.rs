@@ -69,7 +69,7 @@ impl LoaderWMCycle {
             symbol: symbol,
             last_candles: None,
             last_predictions: None,
-            config: load_config("config/config.yaml"),
+            config: load_config(),
             client,
             pool,
         }
@@ -103,7 +103,10 @@ impl LoaderWMCycle {
 
             let (candles, ohlcv) = self
                 .client
-                .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
+                .collect_all(
+                    &self.symbol,
+                    &self.config.exchange.timeframes.main_timeframe,
+                )
                 .await?;
 
             match phase {
@@ -227,7 +230,11 @@ impl LoaderWMCycle {
 
         let all_candles = self
             .client
-            .fetch_ohlcv_with_timestamp(&self.symbol, &self.config.timeframes.main_timeframe, 1000)
+            .fetch_ohlcv_with_timestamp(
+                &self.symbol,
+                &self.config.exchange.timeframes.main_timeframe,
+                1000,
+            )
             .await?;
 
         let mut phase = CyclePhase::Warmup;
@@ -255,8 +262,11 @@ impl LoaderWMCycle {
 
             volatility = get_volatility(&to_volatility);
 
-            let candles =
-                DataMap::from_slice(&self.symbol, &self.config.timeframes.main_timeframe, window);
+            let candles = DataMap::from_slice(
+                &self.symbol,
+                &self.config.exchange.timeframes.main_timeframe,
+                window,
+            );
 
             match phase {
                 CyclePhase::Active => {

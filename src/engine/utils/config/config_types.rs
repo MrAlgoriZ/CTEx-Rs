@@ -6,14 +6,35 @@ use crate::models::{ModelParams, ModelStructure, TaskType};
 pub struct Config {
     pub model: ModelConfig,
     pub backend: BackendConfig,
-    pub servers: Vec<String>,
     pub prints: PrintsConfig,
     pub behaviour: BehaviourConfig,
     pub runtime: RuntimeConfig,
-    pub symbols: Vec<String>,
-    pub main_exchange: String,
-    pub timeframes: TimeframesConfig,
+    pub exchange: ExchangeConfig,
     pub mode: PrintMode,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RawConfig {
+    pub backend: BackendConfig,
+    pub prints: PrintsConfig,
+    pub behaviour: BehaviourConfig,
+    pub runtime: RuntimeConfig,
+    pub exchange: ExchangeConfig,
+    pub mode: PrintMode,
+}
+
+impl RawConfig {
+    pub fn to_config(self, model_config: ModelConfig) -> Config {
+        Config {
+            model: model_config,
+            backend: self.backend,
+            prints: self.prints,
+            behaviour: self.behaviour,
+            runtime: self.runtime,
+            exchange: self.exchange,
+            mode: self.mode,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -104,6 +125,14 @@ pub struct RuntimeConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ExchangeConfig {
+    pub symbols: Vec<String>,
+    pub servers: Vec<String>,
+    pub main_exchange: String,
+    pub timeframes: TimeframesConfig,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TimeframesConfig {
     #[serde(rename = "main")]
     pub main_timeframe: String,
@@ -150,7 +179,6 @@ impl Default for Config {
                 listener: "0.0.0.0:3000".to_string(),
                 admin_password: "123".to_string(),
             },
-            servers: vec!["127.0.0.1:3737".to_string()],
             prints: PrintsConfig {
                 model: ModelPrintsConfig {
                     skipped_values: true,
@@ -175,7 +203,6 @@ impl Default for Config {
                 accuracy_capacity: 192,
                 predictions_capacity: 96,
             },
-            symbols: vec!["BTCUSDT".to_string()],
             runtime: RuntimeConfig {
                 runtime_type: RuntimeType::Realtime,
                 with_training: false,
@@ -183,12 +210,89 @@ impl Default for Config {
                 with_saves: true,
                 cycle_type: CycleType::Loader,
             },
-            main_exchange: "binance".to_string(),
-            timeframes: TimeframesConfig {
-                main_timeframe: "15m".to_string(),
-                background_timeframe: "1m".to_string(),
+            exchange: ExchangeConfig {
+                symbols: vec!["BTCUSDT".to_string()],
+                servers: vec!["127.0.0.1:3737".to_string()],
+                main_exchange: "binance".to_string(),
+                timeframes: TimeframesConfig {
+                    main_timeframe: "15m".to_string(),
+                    background_timeframe: "1m".to_string(),
+                },
             },
             mode: PrintMode::Print,
+        }
+    }
+}
+
+impl Default for RawConfig {
+    fn default() -> Self {
+        Self {
+            backend: BackendConfig {
+                enabled: true,
+                listener: "0.0.0.0:3000".to_string(),
+                admin_password: "123".to_string(),
+            },
+            prints: PrintsConfig {
+                model: ModelPrintsConfig {
+                    skipped_values: true,
+                    metrics: false,
+                },
+                cycle: CyclePrintsConfig {
+                    volatility: true,
+                    cycle_start: true,
+
+                    price: false,
+                    target: true,
+                    prediction: true,
+                    accuracy: true,
+                },
+                manager: ManagerPrintsConfig {
+                    manager_init: true,
+                    additional_manager_prints: true,
+                },
+            },
+            behaviour: BehaviourConfig {
+                success_threshold: 0.125,
+                accuracy_capacity: 192,
+                predictions_capacity: 96,
+            },
+            runtime: RuntimeConfig {
+                runtime_type: RuntimeType::Realtime,
+                with_training: false,
+                with_model: false,
+                with_saves: true,
+                cycle_type: CycleType::Loader,
+            },
+            exchange: ExchangeConfig {
+                symbols: vec!["BTCUSDT".to_string()],
+                servers: vec!["127.0.0.1:3737".to_string()],
+                main_exchange: "binance".to_string(),
+                timeframes: TimeframesConfig {
+                    main_timeframe: "15m".to_string(),
+                    background_timeframe: "1m".to_string(),
+                },
+            },
+            mode: PrintMode::Print,
+        }
+    }
+}
+
+impl Default for ModelConfig {
+    fn default() -> Self {
+        ModelConfig {
+            model_struct: ModelStructure::Single,
+            params: ModelParams::Single {
+                params: crate::models::SingleModelParams::XGBoost {
+                    task_type: TaskType::Regression,
+                    target_type: crate::models::TargetType::FutureReturn,
+                    n_estimators: 100,
+                    max_depth: 5,
+                },
+            },
+            train_test_split: TrainTestSplit { train_ratio: 0.8 },
+            metric: MetricType::R2,
+            generate_plots: false,
+            seed: 42,
         }
     }
 }

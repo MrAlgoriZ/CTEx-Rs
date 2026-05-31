@@ -51,7 +51,7 @@ impl ExtraTrees {
             name: "ExtraTrees".to_string(),
             target_type,
             symbol_columns: None,
-            config: load_config("config/config.yaml"),
+            config: load_config(),
             prediction_tx,
             standart,
             pool,

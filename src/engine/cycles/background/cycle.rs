@@ -49,7 +49,7 @@ impl BackgroundCycle {
     }
 
     async fn wait_for_next_interval(&self) -> Result<(), anyhow::Error> {
-        let timeframe = Timeframe::from_str(&self.config.timeframes.background_timeframe)
+        let timeframe = Timeframe::from_str(&self.config.exchange.timeframes.background_timeframe)
             .expect("Invalid timeframe in config!");
 
         let now = Utc::now();

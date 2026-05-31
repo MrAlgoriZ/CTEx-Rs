@@ -429,3 +429,10 @@
   - Implemented plot saving via REST API
 
   - **Project recognized as non-working**
+
+27-05-2026:
+  - Added documentation
+  - **Project released**
+
+31-05-2026:
+  - Config divided into 2 files

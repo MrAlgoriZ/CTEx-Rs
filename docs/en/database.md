@@ -175,5 +175,3 @@ CREATE INDEX idx_dataset_symbol_timeframe ON dataset(symbol, timeframe);
 ## Data validation
 
 After creating the table, make sure the loaded values are inserted as `double precision` numbers.
-
-> Note: if you want to use the table name `candles`, change the SQL queries in `src/data/requests/database/requests.rs`.

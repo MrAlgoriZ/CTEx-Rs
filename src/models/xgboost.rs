@@ -47,7 +47,7 @@ impl XGBoost {
             target_type,
             symbol_columns: None,
             standart,
-            config: load_config("config/config.yaml"),
+            config: load_config(),
             prediction_tx,
             pool,
             n_estimators,

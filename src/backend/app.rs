@@ -1,4 +1,3 @@
-use crate::CONFIG_PATH;
 use crate::backend::commands;
 use crate::backend::structure::{ApiState, ApiStructure};
 use crate::engine::cycles::manager::{CounterCommand, PredictionsCommand, SupervisorCommand};
@@ -20,7 +19,7 @@ impl Api {
         counter_handle: mpsc::Sender<CounterCommand>,
         prediction_handle: mpsc::Sender<PredictionsCommand>,
     ) -> Result<Self, anyhow::Error> {
-        let config = load_config(CONFIG_PATH);
+        let config = load_config();
         let listener = tokio::net::TcpListener::bind(&config.backend.listener)
             .await
             .map_err(|_| anyhow!(format!("Failed to bind to {}", config.backend.listener)))?;

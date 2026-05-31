@@ -41,7 +41,7 @@ pub trait Cycle: CycleGetters {
             .get_client()
             .fetch_ohlcv(
                 self.get_symbol(),
-                &self.get_config().timeframes.main_timeframe,
+                &self.get_config().exchange.timeframes.main_timeframe,
                 10,
             )
             .await?;
@@ -50,7 +50,7 @@ pub trait Cycle: CycleGetters {
     }
 
     async fn wait_for_next_interval(&self) -> Result<(), anyhow::Error> {
-        let timeframe = Timeframe::from_str(&self.get_config().timeframes.main_timeframe)
+        let timeframe = Timeframe::from_str(&self.get_config().exchange.timeframes.main_timeframe)
             .expect("Invalid timeframe in config!");
 
         let now = Utc::now();

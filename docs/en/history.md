@@ -1,5 +1,3 @@
-# Project history
-
 CTEx-Rs is not a finished commercial product, but it represents an important milestone in the development of engineering skills and architectural thinking.
 
 The idea began in February 2025, when interest in crypto markets and machine learning led to a plan for an algorithmic system to trade crypto pairs. The initial implementation was written in Python, and most architectural concepts were developed during active development.

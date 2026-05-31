@@ -1,6 +1,4 @@
-# Model configuration
-
-Model settings are configured under the `model` section in `config/config.yaml`.
+Model settings are configured under the `model` section in `config/model.yaml`.
 
 ## `model_struct` — model structure
 
@@ -23,13 +21,12 @@ Model structure types:
 model:
   model_struct: single
   params:
-    type: ensemble
-    params:
-      XGBoost:
-        task_type: regression
-        target_type: position_size
-        n_estimators: 100
-        max_depth: 5
+    type: single
+    kind: XGBoost
+    task_type: regression
+    target_type: position_size
+    n_estimators: 100
+    max_depth: 5
 ```
 
 **`task_type`** — ML task type:

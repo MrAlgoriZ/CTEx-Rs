@@ -12,14 +12,15 @@ use env_logger;
 use std::collections::HashMap;
 
 const CONFIG_PATH: &'static str = "config/config.yaml";
+const MODEL_CONFIG_PATH: &'static str = "config/model.yaml";
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    ensure_config_exists(CONFIG_PATH);
+    ensure_config_exists(vec![CONFIG_PATH, MODEL_CONFIG_PATH]);
     dotenv().ok();
     env_logger::init();
-    let config = load_config(CONFIG_PATH);
-    let symbols = config.symbols;
+    let config = load_config();
+    let symbols = config.exchange.symbols;
 
     let mut cycle_types = HashMap::new();
     for symbol in symbols.clone().into_iter() {

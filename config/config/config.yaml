@@ -1,11 +1,10 @@
 backend:
-  enabled: false
+  enabled: true
   listener: 0.0.0.0:3000
-  admin_password: "123"
-
+  admin_password: '123'
 prints:
   model:
-    skipped_values: false
+    skipped_values: true
     metrics: false
   cycle:
     volatility: true
@@ -17,29 +16,23 @@ prints:
   manager:
     manager_init: true
     additional_manager_prints: true
-
 behaviour:
-  success_threshold: 0.9
+  success_threshold: 0.125
   accuracy_capacity: 192
   predictions_capacity: 96
-
 runtime:
-  type: backtest
-  with_training: true
-  with_saves: false
-  with_model: true
-  cycle_type: training
-
+  type: realtime
+  with_training: false
+  with_saves: true
+  with_model: false
+  cycle_type: loader
 exchange:
-  servers:
-    - 127.0.0.1:3737
   symbols:
-    - BTCUSDT
-    - ETHUSDT
+  - BTCUSDT
+  servers:
+  - 127.0.0.1:3737
   main_exchange: binance
-
   timeframes:
-    main: 1h
+    main: 15m
     background: 1m
-
 mode: print

@@ -1,0 +1,14 @@
+model_struct: single
+params:
+  type: single
+  params:
+    kind: XGBoost
+    task_type: regression
+    target_type: future_return
+    n_estimators: 100
+    max_depth: 5
+train_test_split:
+  train_ratio: 0.8
+metric: R2
+generate_plots: false
+seed: 42

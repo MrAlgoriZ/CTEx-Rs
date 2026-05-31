@@ -74,7 +74,7 @@ impl SandboxCycle {
             last_candles: None,
             last_predictions: None,
             last_order_price: None,
-            config: load_config("config/config.yaml"),
+            config: load_config(),
             pool,
             client,
             account,
@@ -111,7 +111,10 @@ impl SandboxCycle {
 
             let (candles, ohlcv) = self
                 .get_client()
-                .collect_all(&self.symbol, &self.config.timeframes.main_timeframe)
+                .collect_all(
+                    &self.symbol,
+                    &self.config.exchange.timeframes.main_timeframe,
+                )
                 .await?;
 
             match phase {
@@ -252,7 +255,11 @@ impl SandboxCycle {
 
         let all_candles = self
             .get_client()
-            .fetch_ohlcv_with_timestamp(&self.symbol, &self.config.timeframes.main_timeframe, 1000)
+            .fetch_ohlcv_with_timestamp(
+                &self.symbol,
+                &self.config.exchange.timeframes.main_timeframe,
+                1000,
+            )
             .await?;
 
         let mut phase = CyclePhase::Warmup;
@@ -280,8 +287,11 @@ impl SandboxCycle {
 
             volatility = get_volatility(&to_volatility);
 
-            let candles =
-                DataMap::from_slice(&self.symbol, &self.config.timeframes.main_timeframe, window);
+            let candles = DataMap::from_slice(
+                &self.symbol,
+                &self.config.exchange.timeframes.main_timeframe,
+                window,
+            );
 
             match phase {
                 CyclePhase::Active => {

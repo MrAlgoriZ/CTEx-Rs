@@ -604,7 +604,7 @@ async fn test_training() -> Result<(), anyhow::Error> {
         sqlx::PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
             .await
             .map_err(|e| return anyhow!(format!("{}", e)))?;
-    let params = crate::engine::utils::config::load_config::load_config(crate::CONFIG_PATH)
+    let params = crate::engine::utils::config::load_config::load_config()
         .model
         .params;
 

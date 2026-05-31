@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::CONFIG_PATH;
 use crate::data::data_interfaces::DataMap;
 use crate::data::requests::database::standart::{
     SQLStandart, get_confidence_name, get_prediction_name,
@@ -107,7 +106,7 @@ impl Ensemble {
         action_type_model_params: SingleModelParams,
         position_size_model_params: SingleModelParams,
     ) -> Self {
-        let config = load_config(CONFIG_PATH);
+        let config = load_config();
 
         let future_volatility_model = init_single_model(
             future_volatility_model_params,

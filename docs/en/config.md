@@ -25,7 +25,7 @@ backend:
 - `0.0.0.0:3000` — accessible from all interfaces on port 3000
 - `127.0.0.1:3000` — accessible only locally
 
-**`admin_password`** — password for protected endpoints. Change it before deployment.
+**`admin_password`** — password for protected endpoints. **Change it before deployment.**
 
 ---
 
@@ -165,6 +165,8 @@ prints:
 
 **`metrics`** — print quality metrics after each training.
 
+---
+
 ### `prints.cycle`
 
 ```yaml
@@ -217,13 +219,12 @@ model:
   generate_plots: true
   seed: 42
   params:
-    Single:
-      params:
-        XGBoost:
-          task_type: regression
-          target_type: future_return
-          n_estimators: 200
-          max_depth: 4
+    type: single
+    kind: XGBoost
+    task_type: regression
+    target_type: future_return
+    n_estimators: 200
+    max_depth: 4
   train_test_split:
     train_ratio: 0.8
   metric: R2

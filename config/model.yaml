@@ -1,0 +1,97 @@
+defaults:
+  classification_rf: &classification_rf
+    kind: RandomForest
+    task_type: classification
+    n_trees: 100
+    max_depth: 1
+    min_samples_leaf: 1
+    min_samples_split: 1
+    m: 1
+
+  regression_rf: &regression_rf
+    kind: RandomForest
+    task_type: regression
+    n_trees: 100
+    max_depth: 1
+    min_samples_leaf: 1
+    min_samples_split: 1
+    m: 1
+
+  regression_xgb: &regression_xgb
+    kind: XGBoost
+    task_type: regression
+    n_estimators: 100
+    max_depth: 1
+
+model_struct: ensemble
+params:
+  type: ensemble
+  future_volatility_model_params:
+    <<: *regression_xgb
+    target_type: future_volatility
+
+  future_volume_model_params:
+    <<: *regression_xgb
+    target_type: future_volume
+
+  future_trend_strength_model_params:
+    <<: *regression_xgb
+    target_type: future_trend_strength
+
+  future_range_model_params:
+    <<: *regression_xgb
+    target_type: future_range
+
+  future_return_mean_model_params:
+    <<: *regression_xgb
+    target_type: future_return_mean
+
+  future_return_std_model_params:
+    <<: *regression_xgb
+    target_type: future_return_std
+
+  future_return_skew_model_params:
+    <<: *regression_xgb
+    target_type: future_return_skewness
+
+  future_return_kurt_model_params:
+    <<: *regression_xgb
+    target_type: future_return_kurtosis
+
+  risk_score_model_params:
+    <<: *regression_xgb
+    target_type: risk_score
+
+  drawdown_probability_model_params:
+    <<: *regression_xgb
+    target_type: drawdown_probability
+
+  tail_event_probability_model_params:
+    <<: *regression_xgb
+    target_type: tail_event_probability
+
+  volatility_spike_probability_model_params:
+    <<: *regression_xgb
+    target_type: volatility_spike_probability
+
+  liquidity_drop_probability_model_params:
+    <<: *regression_xgb
+    target_type: liquidity_drop_probability
+
+  future_return_model_params:
+    <<: *regression_xgb
+    target_type: future_return
+
+  action_type_model_params:
+    <<: *classification_rf
+    target_type: action_type
+
+  position_size_model_params:
+    <<: *regression_xgb
+    target_type: position_size
+
+train_test_split:
+  train_ratio: 0.8
+metric: R2
+generate_plots: true
+seed: 42

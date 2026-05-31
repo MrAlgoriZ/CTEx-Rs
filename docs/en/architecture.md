@@ -6,7 +6,7 @@ CTEx-Rs is a modular realtime trading system written in Rust, designed to work w
 
 1. `src/main.rs`
    - Application entry point.
-   - Loads configuration from `config/config.yaml` and environment variables from `.env`.
+   - Loads configuration from `config/config.yaml`, `config/model.yaml` and environment variables from `.env`.
    - Initializes `CycleManager` and starts cycles for the configured symbols.
    - If backend is enabled, starts an HTTP API using `axum`.
 
