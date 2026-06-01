@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+
 use anyhow::anyhow;
+use log::error;
 use smartcore::api::{Transformer, UnsupervisedEstimator};
 use smartcore::linalg::basic::arrays::Array;
 use smartcore::linalg::basic::matrix::DenseMatrix;
@@ -105,7 +108,7 @@ impl Model for Linear {
         y_train: &Vec<f64>,
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
         match self.task_type {
             TaskType::Regression => {
                 let solver: &str = &self.solver;
@@ -127,12 +130,12 @@ impl Model for Linear {
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             match self.evaluate(xv, yv) {
-                Ok(_) => {}
-                Err(e) => return Err(e),
+                Ok(result) => return Ok(Some(result)),
+                Err(e) => error!("Failed to evaluate RandomForest model: {}", e),
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {

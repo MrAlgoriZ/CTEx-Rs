@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::anyhow;
 use log::warn;
 use smartcore::linalg::basic::arrays::Array;
@@ -105,7 +107,7 @@ impl Model for XGBoost {
         y_train: &Vec<f64>,
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
         // debug!("tx len: {:?}", x_train);
         // debug!("ty len: {:?}", y_train.len());
 
@@ -137,12 +139,12 @@ impl Model for XGBoost {
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             match self.evaluate(xv, yv) {
-                Ok(_) => {}
+                Ok(result) => return Ok(Some(result)),
                 Err(e) => return Err(e),
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {

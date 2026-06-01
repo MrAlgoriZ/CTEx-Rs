@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+
 use anyhow::anyhow;
+use log::error;
 use smartcore::ensemble::extra_trees_regressor::{
     ExtraTreesRegressor, ExtraTreesRegressorParameters,
 };
@@ -113,7 +116,7 @@ impl Model for ExtraTrees {
         y_train: &Vec<f64>,
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
         match self.task_type {
             TaskType::Regression => {
                 let params = ExtraTreesRegressorParameters::default()
@@ -131,14 +134,15 @@ impl Model for ExtraTrees {
             }
             _ => return Err(anyhow!("ExtraTrees supports only regression task type!")),
         };
+
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             match self.evaluate(xv, yv) {
-                Ok(_) => {}
-                Err(e) => eprintln!("Failed to evaluate ExtraTrees model: {}", e),
+                Ok(result) => return Ok(Some(result)),
+                Err(e) => error!("Failed to evaluate RandomForest model: {}", e),
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {

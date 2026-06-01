@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use indicatif::{ProgressBar, ProgressStyle};
+use log::debug;
 use sqlx::PgPool;
 
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, DataMap};
@@ -121,9 +122,8 @@ impl LoaderCycle {
                     if self.config.prints.cycle.target {
                         let target = targets.get("position_size").unwrap();
 
-                        println!(
-                            "{}{} {}Position size: {:.5}",
-                            self.print_time(),
+                        debug!(
+                            "{} {}Position size: {:.5}",
                             self.print_symbol,
                             Fore::WHITE.as_str(),
                             target,
@@ -149,8 +149,7 @@ impl LoaderCycle {
         }
 
         println!(
-            "{}{} {}Бектест начался!\n",
-            self.print_time(),
+            "{} {}Backtest has started!\n",
             self.print_symbol,
             Fore::YELLOW.as_str()
         );
@@ -211,8 +210,7 @@ impl LoaderCycle {
         }
 
         pb.finish_with_message(format!(
-            "{}{} {}Бектест окончен!",
-            self.print_time(),
+            "{} {}Backtest has finished!",
             self.print_symbol,
             Fore::GREEN.as_str()
         ));
@@ -221,7 +219,7 @@ impl LoaderCycle {
         Ok(())
     }
 
-    // --- Методы ---
+    // --- Methods ---
     async fn save_data(&self, data: DataMap, pool: &PgPool) -> Result<(), anyhow::Error> {
         if data.has_target() {
             SQLStandart::Dummy.insert_row(pool, data).await?;

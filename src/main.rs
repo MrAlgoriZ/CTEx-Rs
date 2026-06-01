@@ -6,9 +6,9 @@ mod models;
 use crate::backend::app::Api;
 use crate::engine::cycles::manager::CycleManager;
 use crate::engine::utils::config::load_config::{ensure_config_exists, load_config};
+use crate::engine::utils::log::setup_logger;
 
 use dotenvy::dotenv;
-use env_logger;
 use std::collections::HashMap;
 
 const CONFIG_PATH: &'static str = "config/config.yaml";
@@ -18,7 +18,9 @@ const MODEL_CONFIG_PATH: &'static str = "config/model.yaml";
 async fn main() -> Result<(), anyhow::Error> {
     ensure_config_exists(vec![CONFIG_PATH, MODEL_CONFIG_PATH]);
     dotenv().ok();
-    env_logger::init();
+
+    setup_logger()?;
+
     let config = load_config();
     let symbols = config.exchange.symbols;
 
@@ -42,14 +44,14 @@ async fn main() -> Result<(), anyhow::Error> {
         });
 
         tokio::select! {
-            _ = api_task => println!("API завершилось!"),
+            _ = api_task => println!("API has finished!"),
             _ = tokio::signal::ctrl_c() => {
-                println!("Получен сигнал завершения!");
+                println!("Termination signal received!");
             }
         }
     } else {
         tokio::signal::ctrl_c().await.unwrap();
-        println!("Получен сигнал завершения!");
+        println!("Termination signal received!");
     }
 
     Ok(())

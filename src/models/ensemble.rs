@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use log::{debug, info};
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use sqlx::PgPool;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, oneshot};
 
@@ -366,7 +366,7 @@ impl Model for Ensemble {
         _: &Vec<f64>,
         _: Option<&DenseMatrix<f64>>,
         _: Option<&Vec<f64>>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
         Err(anyhow!("not implemented!"))
     }
 
@@ -374,7 +374,7 @@ impl Model for Ensemble {
         Err(anyhow!("not implemented!"))
     }
 
-    async fn train(&mut self) -> Result<(), anyhow::Error> {
+    async fn train(&mut self) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
         let txs = [
             self.future_volatility_model_tx.clone(),
             self.future_volume_model_tx.clone(),
@@ -460,7 +460,7 @@ impl Model for Ensemble {
         }
 
         info!("[Ensemble::train] All models trained successfully");
-        Ok(())
+        Ok(None)
     }
 
     async fn predict(&self, data: DataMap) -> Result<DataMap, anyhow::Error> {

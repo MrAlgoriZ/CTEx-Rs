@@ -5,6 +5,7 @@ use crate::engine::utils::config::config_types::Config;
 
 use anyhow::anyhow;
 use chrono::Utc;
+use log::info;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
@@ -20,11 +21,7 @@ impl BackgroundCycle {
     }
 
     pub async fn run(self) -> Result<(), anyhow::Error> {
-        println!(
-            "{}{}BackgroundCycle запущен!",
-            self.print_time(),
-            Fore::YELLOW.as_str(),
-        );
+        info!("{}Background cycle has started!", Fore::YELLOW.as_str(),);
         loop {
             self.wait_for_next_interval().await?;
 
@@ -73,17 +70,9 @@ impl BackgroundCycle {
         sleep(Duration::from_secs(2)).await;
 
         if self.config.prints.cycle.cycle_start {
-            println!("{}Фоновый цикл запустился", self.print_time());
+            info!("Background cycle has started!");
         }
 
         Ok(())
-    }
-
-    fn print_time(&self) -> String {
-        format!(
-            "{}[{}] ",
-            Fore::WHITE.as_str(),
-            Utc::now().format("%H:%M:%S")
-        )
     }
 }

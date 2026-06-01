@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use log::{debug, info};
+use log::debug;
 use plotters::prelude::*;
 use smartcore::metrics::{mean_absolute_error, mean_squared_error, r2};
 use std::collections::{HashMap, VecDeque};
@@ -283,7 +283,7 @@ impl Chain {
             }
 
             root.present().unwrap();
-            info!("Saved {}", filename);
+            debug!("Saved {}", filename);
         });
 
         Ok(())

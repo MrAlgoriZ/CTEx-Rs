@@ -1,5 +1,6 @@
 use crate::engine::utils::config::config_types::{Config, ModelConfig, RawConfig};
 use crate::{CONFIG_PATH, MODEL_CONFIG_PATH};
+use log::debug;
 use std::fs::{self, File};
 use std::io::{BufReader, Write};
 use std::path::Path;
@@ -31,25 +32,25 @@ pub fn ensure_config_exists(paths: Vec<&str>) {
             let yaml = match path {
                 CONFIG_PATH => {
                     let cfg = RawConfig::default();
-                    serde_yaml::to_string(&cfg).expect("Не удалось сериализовать дефолтный конфиг")
+                    serde_yaml::to_string(&cfg).expect("Default config serialization failed")
                 }
                 MODEL_CONFIG_PATH => {
                     let cfg = ModelConfig::default();
-                    serde_yaml::to_string(&cfg).expect("Не удалось сериализовать дефолтный конфиг")
+                    serde_yaml::to_string(&cfg).expect("Default model config serialization failed")
                 }
                 _ => {
                     let cfg = Config::default();
-                    serde_yaml::to_string(&cfg).expect("Не удалось сериализовать дефолтный конфиг")
+                    serde_yaml::to_string(&cfg).expect("Default config serialization failed")
                 }
             };
             if let Some(parent) = Path::new(path).parent() {
-                fs::create_dir_all(parent).expect("Не удалось создать директорию для конфига");
+                fs::create_dir_all(parent).expect("Failed to create directory for config");
             }
 
-            let mut file = File::create(path).expect("Не удалось создать файл конфига");
+            let mut file = File::create(path).expect("Failed to create file for config");
             file.write_all(yaml.as_bytes())
-                .expect("Не удалось записать дефолтный конфиг");
-            println!("Создан дефолтный конфиг: {}", path);
+                .expect("Failed to write default config");
+            debug!("Created default config: {}", path);
         }
     }
 }

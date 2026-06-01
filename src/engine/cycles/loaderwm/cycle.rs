@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use indicatif::{ProgressBar, ProgressStyle};
-use log::debug;
+use log::{debug, info};
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -124,9 +124,8 @@ impl LoaderWMCycle {
                     };
 
                     if self.config.prints.cycle.target {
-                        println!(
-                            "{}{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
-                            self.print_time(),
+                        debug!(
+                            "{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
                             self.print_symbol,
                             Fore::WHITE.as_str(),
                             prediction.unwrap(),
@@ -152,7 +151,7 @@ impl LoaderWMCycle {
                         rx.await.map_err(|e| anyhow!(e))?
                     } else {
                         return Err(CycleError::AnyhowError(anyhow!(
-                            "Model не инициализирована!"
+                            "Model is not initialized!"
                         )));
                     };
                     let summary_data = {
@@ -163,13 +162,8 @@ impl LoaderWMCycle {
                         }
                     };
 
-                    self.handle_mistake(
-                        summary_data, // Внутри функции сохраняется всё, но модель сравнивает только targets
-                        last_predictions,
-                        counter_tx,
-                        model_tx,
-                    )
-                    .await?;
+                    self.handle_mistake(summary_data, last_predictions, counter_tx, model_tx)
+                        .await?;
 
                     if let Some(ctx) = chain_tx {
                         let (tx, rx) = oneshot::channel();
@@ -219,8 +213,7 @@ impl LoaderWMCycle {
         }
 
         println!(
-            "{}{} {}Бектест начался!\n",
-            self.print_time(),
+            "{} {}Backtest has started!\n",
             self.print_symbol,
             Fore::YELLOW.as_str()
         );
@@ -380,8 +373,7 @@ impl LoaderWMCycle {
         }
 
         pb.finish_with_message(format!(
-            "{}{} {}Бектест окончен!",
-            self.print_time(),
+            "{} {}Backtest has finished!",
             self.print_symbol,
             Fore::GREEN.as_str()
         ));
@@ -399,9 +391,8 @@ impl LoaderWMCycle {
 
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        println!(
-            "\n{}{} {}Точность по threshold составляет: {:.3}%",
-            self.print_time(),
+        info!(
+            "\n{} {}Threshold accuracy: {:.3}%",
             self.print_symbol,
             Fore::YELLOW.as_str(),
             threshold_counter.get_accuracy()

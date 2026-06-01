@@ -130,7 +130,7 @@ pub async fn cycle_add(
     Json(payload): Json<AddCycleRequest>,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
     if !verify_password(payload.password) {
-        return Ok(Json(ApiResponse::error("Неверный пароль".to_string())));
+        return Ok(Json(ApiResponse::error("Invalid password".to_string())));
     }
 
     let cycle_type = match payload.cycle_type.to_lowercase().as_str() {
@@ -140,7 +140,7 @@ pub async fn cycle_add(
         "sandbox" => CycleType::Sandbox,
         _ => {
             return Ok(Json(ApiResponse::error(
-                "Тип цикла должен быть 'training', 'loader', 'loaderwm' или 'sandbox'".to_string(),
+                "Cycle type must be 'training', 'loader', 'loaderwm' or 'sandbox'".to_string(),
             )));
         }
     };
@@ -159,7 +159,7 @@ pub async fn cycle_add(
 
     match rx.await {
         Ok(Ok(())) => Ok(Json(ApiResponse::success(format!(
-            "Цикл {} успешно запущен",
+            "Cycle {} successfully started",
             payload.symbol
         )))),
         Ok(Err(e)) => Ok(Json(ApiResponse::error(e.to_string()))),
@@ -173,7 +173,7 @@ pub async fn cycle_stop(
     Json(payload): Json<PasswordRequest>,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
     if !verify_password(payload.password) {
-        return Ok(Json(ApiResponse::error("Неверный пароль".to_string())));
+        return Ok(Json(ApiResponse::error("Invalid password".to_string())));
     }
 
     let (tx, rx) = oneshot::channel();
@@ -189,7 +189,7 @@ pub async fn cycle_stop(
 
     match rx.await {
         Ok(Ok(())) => Ok(Json(ApiResponse::success(format!(
-            "Цикл {} остановлен",
+            "Cycle {} stopped",
             symbol
         )))),
         Ok(Err(e)) => Ok(Json(ApiResponse::error(e.to_string()))),
@@ -202,7 +202,7 @@ pub async fn cycles_stop_all(
     Json(payload): Json<PasswordRequest>,
 ) -> Result<Json<ApiResponse<String>>, StatusCode> {
     if !verify_password(payload.password) {
-        return Ok(Json(ApiResponse::error("Неверный пароль".to_string())));
+        return Ok(Json(ApiResponse::error("Invalid password".to_string())));
     }
 
     let (tx, rx) = oneshot::channel();
@@ -215,9 +215,7 @@ pub async fn cycles_stop_all(
 
     rx.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(ApiResponse::success(
-        "Все циклы остановлены".to_string(),
-    )))
+    Ok(Json(ApiResponse::success("All cycles stopped".to_string())))
 }
 
 pub async fn accuracy_total(
@@ -389,7 +387,7 @@ pub async fn generate_plots(
     Json(payload): Json<PasswordRequest>,
 ) -> Result<Json<ApiResponse<()>>, StatusCode> {
     if !verify_password(payload.password) {
-        return Ok(Json(ApiResponse::error("Неверный пароль".to_string())));
+        return Ok(Json(ApiResponse::error("Invalid password".to_string())));
     }
 
     let (tx, rx) = oneshot::channel();

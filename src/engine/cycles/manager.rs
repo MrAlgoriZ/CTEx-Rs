@@ -1,6 +1,5 @@
 use anyhow::anyhow;
-use chrono::Utc;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use serde::Deserialize;
 use sqlx::PgPool;
 use std::collections::{BTreeMap, HashMap};
@@ -95,7 +94,7 @@ impl CycleSupervisor {
     }
 
     async fn run(mut self) {
-        log_info("Supervisor запущен");
+        info!("Supervisor has started!");
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
@@ -125,12 +124,12 @@ impl CycleSupervisor {
 
                 SupervisorCommand::SetModel { model_tx } => {
                     self.model_tx = Some(model_tx);
-                    log_info("Model установлена в Supervisor");
+                    info!("Model has installed in Supervisor");
                 }
 
                 SupervisorCommand::SetChain { chain_tx } => {
                     self.chain_tx = Some(chain_tx);
-                    log_info("Chain установлена в Supervisor");
+                    info!("Chain has installed in Supervisor");
                 }
 
                 SupervisorCommand::ChainHandle { respond_to } => {
@@ -139,7 +138,7 @@ impl CycleSupervisor {
             }
         }
 
-        log_warning("Supervisor остановлен");
+        warn!("Supervisor has stopped!");
     }
 
     async fn start_worker(
@@ -148,12 +147,12 @@ impl CycleSupervisor {
         cycle_type: CycleType,
     ) -> Result<(), anyhow::Error> {
         if self.workers.contains_key(&symbol) {
-            return Err(anyhow!(format!("Worker {} уже запущен", symbol)));
+            return Err(anyhow!(format!("Worker {} already running!", symbol)));
         }
 
         if matches!(cycle_type, CycleType::Training | CycleType::Sandbox) && self.model_tx.is_none()
         {
-            return Err(anyhow!("Model не инициализирована для цикла"));
+            return Err(anyhow!("Model is not initialized for cycle!"));
         }
 
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
@@ -185,7 +184,7 @@ impl CycleSupervisor {
             },
         );
 
-        log_debug(&format!("Worker {} запущен ({:?})", symbol, cycle_type));
+        info!("Worker {} has started ({:?})!", symbol, cycle_type);
         Ok(())
     }
 
@@ -195,7 +194,7 @@ impl CycleSupervisor {
                 handle.stop().await;
                 Ok(())
             }
-            None => Err(anyhow!(format!("Worker {} не найден", symbol))),
+            None => Err(anyhow!(format!("Worker {} not found!", symbol))),
         }
     }
 
@@ -218,14 +217,14 @@ impl CycleSupervisor {
         loop {
             tokio::select! {
                 _ = shutdown_rx.recv() => {
-                    log_warning(&format!("Worker {} получил сигнал остановки", symbol));
+                    warn!("Worker {} received shutdown signal!", symbol);
                     break;
                 }
 
                 result = Self::run_cycle_once(&symbol, cycle_type, &counter_tx, &server_tx, &model_tx, &chain_tx) => {
                     match result {
                         Ok(_) => {
-                            log_debug(&format!("Worker {} завершился нормально", symbol));
+                            info!("Worker {} has finished normally", symbol);
                             if let Some(ctx) = &chain_tx {
                                 let (tx, rx) = oneshot::channel();
                                 let _ = ctx
@@ -241,7 +240,7 @@ impl CycleSupervisor {
                         Err(e) => {
                             match e {
                                 CycleError::AnyhowError(err) => {
-                                    log_error(&format!("Worker {} упал: {}, рестарт через 5 сек", symbol, err));
+                                    error!("Worker {} crashed: {}, restarting in 5 sec", symbol, err);
                                     if let Some(ctx) = &chain_tx {
                                         let (tx, rx) = oneshot::channel();
                                         let _ = ctx
@@ -255,7 +254,7 @@ impl CycleSupervisor {
                                     sleep(Duration::from_secs(5)).await;
                                 }
                                 CycleError::SymbolDoesNotExist => {
-                                    log_error(&format!("Токена {} не существует!", symbol));
+                                    error!("Token {} does not exist!", symbol);
                                     break;
                                 }
                             }
@@ -281,8 +280,8 @@ impl CycleSupervisor {
             CycleType::Loader => {
                 match config.model.model_struct {
                     ModelStructure::Ensemble => {
-                        println!(
-                            "{}ВНИМАНИЕ! LoaderCycle не предназначен для использования с типом модели Ensemble. Используйте LoaderWMCycle вместо этого.",
+                        warn!(
+                            "{}LoaderCycle not for Ensemble model type. Use LoaderWMCycle instead!",
                             Fore::YELLOW.as_str()
                         );
                     }
@@ -303,8 +302,8 @@ impl CycleSupervisor {
             CycleType::Loaderwm => {
                 match config.model.model_struct {
                     ModelStructure::Single => {
-                        println!(
-                            "{}ВНИМАНИЕ! LoaderWMCycle не предназначен для использования с типом модели Single. Используйте LoaderCycle вместо этого.",
+                        warn!(
+                            "{}LoaderWMCycle not for Single model type. Use LoaderCycle instead!",
                             Fore::YELLOW.as_str()
                         );
                     }
@@ -333,7 +332,7 @@ impl CycleSupervisor {
                 sleep(Duration::from_secs(10)).await;
 
                 let model = model_tx.as_ref().ok_or_else(|| {
-                    CycleError::AnyhowError(anyhow!("Model not initialized for Training cycle"))
+                    CycleError::AnyhowError(anyhow!("Model not initialized for Training cycle!"))
                 })?;
                 match config.runtime.runtime_type {
                     RuntimeType::Realtime => cycle
@@ -353,7 +352,7 @@ impl CycleSupervisor {
                 sleep(Duration::from_secs(10)).await;
 
                 let model = model_tx.as_ref().ok_or_else(|| {
-                    CycleError::AnyhowError(anyhow!("Model not initialized for Sandbox cycle"))
+                    CycleError::AnyhowError(anyhow!("Model not initialized for Sandbox cycle!"))
                 })?;
                 match config.runtime.runtime_type {
                     RuntimeType::Realtime => cycle
@@ -413,7 +412,7 @@ impl CounterActor {
     }
 
     pub async fn run(mut self) {
-        log_info("CounterActor запущен");
+        info!("CounterActor has started!");
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
@@ -456,7 +455,7 @@ impl CounterActor {
             }
         }
 
-        log_warning("CounterActor остановлен");
+        warn!("CounterActor has stopped!");
     }
 }
 
@@ -496,19 +495,19 @@ impl ModelActor {
     }
 
     pub async fn run(mut self) {
-        log_debug("ModelActor запущен");
+        info!("ModelActor has started!");
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
                 ModelCommand::Predict { data, respond_to } => {
-                    // log_debug(format!("{:#?}", &data).as_str());
+                    // debug!("{:#?}", &data);
                     let model = self.model.clone();
                     let result = model.lock().await.predict(data).await;
 
                     let prediction = match result {
                         Ok(pred) => pred,
                         Err(e) => {
-                            log_error(&format!("Ошибка предсказания: {}", e));
+                            error!("Prediction error: {}", e);
                             DataMap::new("".to_string(), BTreeMap::new())
                         }
                     };
@@ -524,7 +523,14 @@ impl ModelActor {
                         locked.train().await
                     };
 
-                    let _ = respond_to.send(result);
+                    match result {
+                        Ok(_) => {
+                            let _ = respond_to.send(Ok(()));
+                        }
+                        Err(e) => {
+                            let _ = respond_to.send(Err(e));
+                        }
+                    }
                 }
 
                 ModelCommand::HandleMistakes {
@@ -562,7 +568,7 @@ impl ModelActor {
             }
         }
 
-        log_warning("ModelActor остановлен");
+        warn!("ModelActor has stopped!");
     }
 }
 
@@ -576,7 +582,7 @@ impl WorkerHandle {
     async fn stop(self) {
         let _ = self.shutdown_tx.send(()).await;
         let _ = self.task.await;
-        log_warning(&format!("Worker {} остановлен", self.symbol));
+        warn!("Worker {} has stopped!", self.symbol);
     }
 }
 
@@ -653,11 +659,7 @@ impl CycleManager {
             self.add_cycle(symbol.clone(), *cycle_type).await?;
         }
 
-        log_info(&format!(
-            "Запущено {} циклов: {}",
-            symbols.len(),
-            symbols.join(", ")
-        ));
+        info!("Started {} cycles: {}", symbols.len(), symbols.join(", "));
 
         Ok(())
     }
@@ -667,12 +669,12 @@ impl CycleManager {
         self.supervisor_tx
             .send(SupervisorCommand::StopAll { respond_to: tx })
             .await
-            .map_err(|_| "Supervisor недоступен")?;
+            .map_err(|_| "Supervisor is unavailable!")?;
         let _ = rx.await;
 
         let pool = PgPool::connect(&load_env().database_url)
             .await
-            .map_err(|e| format!("DB connection error: {}", e))?;
+            .map_err(|e| format!("Database connection error: {}", e))?;
 
         let params = load_config().model.params;
 
@@ -733,7 +735,7 @@ impl CycleManager {
         self.supervisor_tx
             .send(SupervisorCommand::SetModel { model_tx })
             .await
-            .map_err(|_| "Не удалось обновить модель в Supervisor")?;
+            .map_err(|_| "Failed to update model in Supervisor!")?;
 
         Ok(())
     }
@@ -743,7 +745,7 @@ impl CycleManager {
         self.supervisor_tx
             .send(SupervisorCommand::StopAll { respond_to: tx })
             .await
-            .map_err(|_| "Supervisor недоступен")?;
+            .map_err(|_| "Supervisor is unavailable!")?;
         let _ = rx.await;
 
         let (chain_actor, chain_tx) = ChainActor::new();
@@ -752,7 +754,7 @@ impl CycleManager {
         self.supervisor_tx
             .send(SupervisorCommand::SetChain { chain_tx })
             .await
-            .map_err(|_| "Не удалось обновить цепь в Supervisor")?;
+            .map_err(|_| "Failed to update chain in Supervisor!")?;
 
         Ok(())
     }
@@ -770,9 +772,10 @@ impl CycleManager {
                 respond_to: tx,
             })
             .await
-            .map_err(|_| anyhow!("Supervisor недоступен"))?;
+            .map_err(|_| anyhow!("Supervisor is unavailable!"))?;
 
-        rx.await.map_err(|_| anyhow!("Нет ответа от Supervisor"))?
+        rx.await
+            .map_err(|_| anyhow!("No response from Supervisor!"))?
     }
 
     // Handles need only for REST API. If tx isn't need for API, don't do handle for this
@@ -829,7 +832,7 @@ impl PredictionsActor {
     }
 
     pub async fn run(mut self) {
-        log_info("PredictionsActor запущен");
+        info!("PredictionsActor has started!");
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
@@ -896,7 +899,7 @@ impl ChainActor {
     }
 
     pub async fn run(mut self) {
-        log_info("ChainActor запущен");
+        info!("ChainActor has started!");
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
@@ -1012,14 +1015,14 @@ impl ServersActor {
         }
 
         if !servers.values().any(|s| s.active) {
-            panic!("Нет ни одного активного сервера");
+            panic!("No active servers available!");
         }
 
         (Self { servers, inbox: rx }, tx)
     }
 
     pub async fn run(mut self) {
-        log_info("ServersActor запущен");
+        info!("ServersActor has started!");
 
         while let Some(cmd) = self.inbox.recv().await {
             match cmd {
@@ -1097,10 +1100,10 @@ impl ServersActor {
         let state = self
             .servers
             .get_mut(&server)
-            .ok_or_else(|| anyhow!("Сервер не найден"))?;
+            .ok_or_else(|| anyhow!("Server not found!"))?;
 
         if !state.active {
-            return Err(anyhow!("Сервер не активен"));
+            return Err(anyhow!("Server is inactive!"));
         }
 
         state.workload = state.workload.saturating_add(num);
@@ -1186,12 +1189,12 @@ impl ServersActor {
             {
                 Ok(ohlcv) => ohlcv,
                 Err(e) => {
-                    log_error(format!("{}", e).as_str());
+                    error!("{}", e);
                     self.mark_server_inactive(&current_server);
 
                     current_server = self
                         .get_priority()
-                        .ok_or_else(|| anyhow!("Нет активных серверов"))?;
+                        .ok_or_else(|| anyhow!("All servers are inactive!"))?;
 
                     continue;
                 }
@@ -1273,12 +1276,12 @@ impl ServersActor {
             {
                 Ok(response) => response,
                 Err(e) => {
-                    log_error(format!("{}", e).as_str());
+                    error!("{}", e);
                     self.mark_server_inactive(&current_server);
 
                     current_server = self
                         .get_priority()
-                        .ok_or_else(|| anyhow!("Нет активных серверов"))?;
+                        .ok_or_else(|| anyhow!("All servers are inactive!"))?;
 
                     continue;
                 }
@@ -1359,12 +1362,12 @@ impl ServersActor {
             {
                 Ok(response) => response,
                 Err(e) => {
-                    eprintln!("{}", e);
+                    error!("{}", e);
                     self.mark_server_inactive(&current_server);
 
                     current_server = self
                         .get_priority()
-                        .ok_or_else(|| anyhow!("Нет активных серверов"))?;
+                        .ok_or_else(|| anyhow!("All servers are inactive!"))?;
 
                     continue;
                 }
@@ -1460,50 +1463,4 @@ fn calculate_average_shifted_accuracy<'a>(
             .sum::<f64>()
             / count as f64
     }
-}
-
-fn log_info(msg: &str) {
-    if load_config().prints.manager.additional_manager_prints {
-        info!(
-            "{}[{}] {}{}",
-            Fore::WHITE.as_str(),
-            Utc::now().format("%H:%M:%S"),
-            Fore::CYAN.as_str(),
-            msg
-        );
-    }
-}
-
-fn log_debug(msg: &str) {
-    if load_config().prints.manager.manager_init {
-        debug!(
-            "{}[{}] {}{}",
-            Fore::WHITE.as_str(),
-            Utc::now().format("%H:%M:%S"),
-            Fore::CYAN.as_str(),
-            msg
-        );
-    }
-}
-
-fn log_warning(msg: &str) {
-    if load_config().prints.manager.manager_init {
-        warn!(
-            "{}[{}] {}{}",
-            Fore::WHITE.as_str(),
-            Utc::now().format("%H:%M:%S"),
-            Fore::YELLOW.as_str(),
-            msg
-        );
-    }
-}
-
-fn log_error(msg: &str) {
-    error!(
-        "{}[{}] {}{}",
-        Fore::WHITE.as_str(),
-        Utc::now().format("%H:%M:%S"),
-        Fore::RED.as_str(),
-        msg
-    );
 }

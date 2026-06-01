@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use indicatif::{ProgressBar, ProgressStyle};
+use log::{debug, info};
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -127,9 +128,8 @@ impl TrainingCycle {
                         ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
                     if self.config.prints.cycle.target {
-                        println!(
-                            "{}{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
-                            self.print_time(),
+                        debug!(
+                            "{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
                             self.print_symbol,
                             Fore::WHITE.as_str(),
                             prediction.unwrap(),
@@ -215,8 +215,7 @@ impl TrainingCycle {
         }
 
         println!(
-            "{}{} {}Бектест начался!\n",
-            self.print_time(),
+            "{} {}Backtest has started!\n",
             self.print_symbol,
             Fore::YELLOW.as_str()
         );
@@ -356,8 +355,7 @@ impl TrainingCycle {
         }
 
         pb.finish_with_message(format!(
-            "{}{} {}Бектест окончен!",
-            self.print_time(),
+            "{} {}Backtest has finished!",
             self.print_symbol,
             Fore::GREEN.as_str()
         ));
@@ -375,9 +373,8 @@ impl TrainingCycle {
 
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        println!(
-            "\n{}{} {}Точность по threshold составляет: {:.3}%",
-            self.print_time(),
+        info!(
+            "\n{} {}Threshold accuracy: {:.3}%",
             self.print_symbol,
             Fore::YELLOW.as_str(),
             threshold_counter.get_accuracy()

@@ -8,6 +8,7 @@ pub mod knn;
 pub mod linear;
 pub mod randomforest;
 pub mod ridge;
+pub mod tests;
 pub mod xgboost;
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]

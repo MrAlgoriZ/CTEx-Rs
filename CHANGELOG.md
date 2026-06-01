@@ -436,3 +436,8 @@
 
 31-05-2026:
   - Config divided into 2 files
+
+1-06-2026:
+  - Best model configuration test added
+  - Logging to file added
+  - Project fully translated to English

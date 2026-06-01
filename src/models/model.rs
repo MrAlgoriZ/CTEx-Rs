@@ -1,12 +1,12 @@
 use anyhow::anyhow;
 use chrono::Utc;
 
-use log::debug;
+use log::{debug, error, info};
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::{accuracy, mean_absolute_error, mean_squared_error, r2};
 use smartcore::model_selection::train_test_split;
 use sqlx::PgPool;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::data::data_interfaces::DataMap;
@@ -109,14 +109,14 @@ pub trait Model: ModelDependencies {
         }
 
         if self.get_config().prints.model.skipped_values {
-            println!(
+            debug!(
                 "{}[{}] Skipped rows: {} (NaN in target), {} (NaN in features)",
                 Fore::YELLOW.as_str(),
                 Utc::now().format("%H:%M:%S"),
                 skipped_nan_target,
                 skipped_nan_features
             );
-            println!(
+            debug!(
                 "{}[{}] Remaining {} valid rows from {}",
                 Fore::GREEN.as_str(),
                 Utc::now().format("%H:%M:%S"),
@@ -160,7 +160,11 @@ pub trait Model: ModelDependencies {
         Ok((x_train, x_val, y_train, y_val))
     }
 
-    fn evaluate(&self, x_val: &DenseMatrix<f64>, y_val: &Vec<f64>) -> Result<f64, anyhow::Error> {
+    fn evaluate(
+        &self,
+        x_val: &DenseMatrix<f64>,
+        y_val: &Vec<f64>,
+    ) -> Result<HashMap<String, f64>, anyhow::Error> {
         if !self.check_model_trained() {
             return Err(anyhow!("Model not trained yet"));
         }
@@ -175,36 +179,44 @@ pub trait Model: ModelDependencies {
             self.get_config().behaviour.success_threshold,
         );
 
-        let metric = match self.get_config().model.metric {
-            MetricType::RAll => {
-                let mae = mean_absolute_error(&y_float, &proba);
-                let mse = mean_squared_error(&y_float, &proba);
-                let r2_score = r2(&y_float, &proba);
-                let rmse = mean_squared_error(&y_float, &proba).sqrt();
+        let mae = mean_absolute_error(&y_float, &proba);
+        let mse = mean_squared_error(&y_float, &proba);
+        let r2_score = r2(&y_float, &proba);
+        let rmse = mean_squared_error(&y_float, &proba).sqrt();
 
+        let metrics = HashMap::from([
+            ("mae".to_string(), mae),
+            ("mse".to_string(), mse),
+            ("r2".to_string(), r2_score),
+            ("rmse".to_string(), rmse),
+            ("thr".to_string(), thr_accuracy),
+        ]);
+
+        match self.get_config().model.metric {
+            MetricType::RAll => {
                 if self.get_config().prints.model.metrics {
-                    println!(
+                    info!(
                         "{}[{}] MAE for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         mae
                     );
-                    println!(
+                    info!(
                         "{}[{}] MSE for {}: {:.3} (pp²)",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         mse
                     );
-                    println!(
+                    info!(
                         "{}[{}] R2 for {}: {:.3}",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         r2_score
                     );
-                    println!(
+                    info!(
                         "{}[{}] Acc on threshold {} for {}: {:.3}%",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
@@ -212,7 +224,7 @@ pub trait Model: ModelDependencies {
                         self.get_name(),
                         thr_accuracy * 100.0
                     );
-                    println!(
+                    info!(
                         "{}[{}] RMSE for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
@@ -223,13 +235,8 @@ pub trait Model: ModelDependencies {
                 thr_accuracy
             }
             MetricType::Threshold => {
-                let thr_accuracy = threshold_accuracy(
-                    &y_float,
-                    &proba,
-                    self.get_config().behaviour.success_threshold,
-                );
                 if self.get_config().prints.model.metrics {
-                    println!(
+                    info!(
                         "{}[{}] Acc on threshold {} for {}: {:.3}%",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
@@ -241,9 +248,8 @@ pub trait Model: ModelDependencies {
                 thr_accuracy
             }
             MetricType::MAE => {
-                let mae = mean_absolute_error(&y_float, &proba);
                 if self.get_config().prints.model.metrics {
-                    println!(
+                    info!(
                         "{}[{}] MAE for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
@@ -254,9 +260,8 @@ pub trait Model: ModelDependencies {
                 mae
             }
             MetricType::MSE => {
-                let mse = mean_squared_error(&y_float, &proba);
                 if self.get_config().prints.model.metrics {
-                    println!(
+                    info!(
                         "{}[{}] MSE for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
@@ -267,9 +272,8 @@ pub trait Model: ModelDependencies {
                 mse
             }
             MetricType::R2 => {
-                let r2_score = r2(&y_float, &proba);
                 if self.get_config().prints.model.metrics {
-                    println!(
+                    info!(
                         "{}[{}] R2 for {}: {:.3}",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
@@ -280,9 +284,8 @@ pub trait Model: ModelDependencies {
                 r2_score
             }
             MetricType::RMSE => {
-                let rmse = mean_squared_error(&y_float, &proba).sqrt();
                 if self.get_config().prints.model.metrics {
-                    println!(
+                    info!(
                         "{}[{}] RMSE for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
@@ -298,7 +301,7 @@ pub trait Model: ModelDependencies {
                     &proba.iter().map(|v| *v as i32).collect::<Vec<i32>>(),
                 );
                 if self.get_config().prints.model.metrics {
-                    println!(
+                    info!(
                         "{}[{}] Accuracy for {}: {:.3} pp",
                         Fore::WHITE.as_str(),
                         Utc::now().format("%H:%M:%S"),
@@ -310,7 +313,7 @@ pub trait Model: ModelDependencies {
             }
         };
 
-        Ok(metric)
+        Ok(metrics)
     }
 
     async fn predict(&self, data: DataMap) -> Result<DataMap, anyhow::Error> {
@@ -361,10 +364,10 @@ pub trait Model: ModelDependencies {
                 })
                 .await
             {
-                println!("Prediction channel closed: {}", e);
+                error!("Prediction channel closed: {}", e);
             } else {
                 if let Err(e) = rx.await {
-                    println!("Prediction response cancelled: {}", e);
+                    error!("Prediction response cancelled: {}", e);
                 }
             }
         }
@@ -375,7 +378,7 @@ pub trait Model: ModelDependencies {
         ))
     }
 
-    async fn train(&mut self) -> Result<(), anyhow::Error> {
+    async fn train(&mut self) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
         let pool = self
             .get_pool()
             .ok_or_else(|| anyhow!("Pool is not available"))?;
@@ -401,10 +404,11 @@ pub trait Model: ModelDependencies {
             )
             .map_err(|e| anyhow!("Failed to prepare data: {}", e))?;
         debug!("Data successfully prepared");
-        self.model_fit(&x_train, &y_train, Some(&x_val), Some(&y_val))
+        let result = self
+            .model_fit(&x_train, &y_train, Some(&x_val), Some(&y_val))
             .map_err(|e| anyhow!("Model fitting failed: {}", e))?;
         debug!("Model trained successfully");
-        Ok(())
+        Ok(result)
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error>;
@@ -415,7 +419,7 @@ pub trait Model: ModelDependencies {
         y_train: &Vec<f64>,
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
-    ) -> Result<(), anyhow::Error>;
+    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error>;
 
     fn normalize(
         &self,
@@ -596,136 +600,4 @@ pub fn init_ensemble_model(
         position_size_model_params,
     );
     Box::new(model)
-}
-
-#[tokio::test]
-async fn test_training() -> Result<(), anyhow::Error> {
-    let pool =
-        sqlx::PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
-            .await
-            .map_err(|e| return anyhow!(format!("{}", e)))?;
-    let params = crate::engine::utils::config::load_config::load_config()
-        .model
-        .params;
-
-    match params {
-        crate::models::ModelParams::Ensemble {
-            future_volatility_model_params,
-            future_volume_model_params,
-            future_trend_strength_model_params,
-            future_range_model_params,
-            future_return_mean_model_params,
-            future_return_std_model_params,
-            future_return_skew_model_params,
-            future_return_kurt_model_params,
-            risk_score_model_params,
-            drawdown_probability_model_params,
-            tail_event_probability_model_params,
-            volatility_spike_probability_model_params,
-            liquidity_drop_probability_model_params,
-            future_return_model_params,
-            action_type_model_params,
-            position_size_model_params,
-        } => {
-            let mut model = init_ensemble_model(
-                None,
-                pool,
-                future_volatility_model_params,
-                future_volume_model_params,
-                future_trend_strength_model_params,
-                future_range_model_params,
-                future_return_mean_model_params,
-                future_return_std_model_params,
-                future_return_skew_model_params,
-                future_return_kurt_model_params,
-                risk_score_model_params,
-                drawdown_probability_model_params,
-                tail_event_probability_model_params,
-                volatility_spike_probability_model_params,
-                liquidity_drop_probability_model_params,
-                future_return_model_params,
-                action_type_model_params,
-                position_size_model_params,
-            );
-            model.train().await?;
-        }
-        crate::models::ModelParams::Single { params } => {
-            let mut model = init_single_model(params, None, SQLStandart::SingleModel, pool);
-            model.train().await?;
-        }
-    }
-
-    Ok(())
-}
-
-// #[tokio::test]
-#[allow(unused)]
-async fn find_best_model_config() -> Result<(), anyhow::Error> {
-    use crate::models::TargetType;
-
-    let pool =
-        sqlx::PgPool::connect(&crate::engine::utils::config::load_env::load_env().database_url)
-            .await
-            .map_err(|e| return anyhow!(format!("{}", e)))?;
-
-    let targets = [
-        (TargetType::FutureVolatility, SQLStandart::FirstLayer),
-        (TargetType::FutureVolume, SQLStandart::FirstLayer),
-        (TargetType::FutureTrendStrength, SQLStandart::FirstLayer),
-        (TargetType::FutureRange, SQLStandart::FirstLayer),
-        (TargetType::FutureReturnMean, SQLStandart::FirstLayer),
-        (TargetType::FutureReturnStd, SQLStandart::FirstLayer),
-        (TargetType::FutureReturnSkewness, SQLStandart::FirstLayer),
-        (TargetType::FutureReturnKurtosis, SQLStandart::FirstLayer),
-        (TargetType::RiskScore, SQLStandart::SecondLayer),
-        (TargetType::DrawdownProbability, SQLStandart::SecondLayer),
-        (TargetType::TailEventProbability, SQLStandart::SecondLayer),
-        (
-            TargetType::VolatilitySpikeProbability,
-            SQLStandart::SecondLayer,
-        ),
-        (
-            TargetType::LiquidityDropProbability,
-            SQLStandart::SecondLayer,
-        ),
-        (TargetType::FutureReturn, SQLStandart::ThirdLayer),
-        (TargetType::ActionType, SQLStandart::ThirdLayer),
-        (TargetType::PositionSize, SQLStandart::ThirdLayer),
-    ];
-
-    for target in targets {
-        // XGBoost
-        {
-            let n_estimators_arr = [10, 25, 50, 100, 150];
-            let max_depth_arr = [1, 2, 3, 4, 5];
-
-            for n_estimators in n_estimators_arr.into_iter() {
-                for max_depth in max_depth_arr.into_iter() {
-                    let mut xgboost = match target.clone().0 {
-                        TargetType::ActionType => crate::models::xgboost::XGBoost::new(
-                            None,
-                            crate::models::TaskType::Classification,
-                            target.0,
-                            target.1,
-                            pool.clone(),
-                            n_estimators,
-                            max_depth,
-                        ),
-                        _ => crate::models::xgboost::XGBoost::new(
-                            None,
-                            crate::models::TaskType::Regression,
-                            target.0,
-                            target.1,
-                            pool.clone(),
-                            n_estimators,
-                            max_depth,
-                        ),
-                    };
-                    xgboost.train().await?;
-                }
-            }
-        }
-    }
-
-    Ok(())
 }

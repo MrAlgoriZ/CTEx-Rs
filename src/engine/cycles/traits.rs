@@ -1,6 +1,7 @@
 use chrono::Utc;
 // use log::debug;
 use anyhow::anyhow;
+use log::{debug, info};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
@@ -27,9 +28,8 @@ pub trait CycleGettersForCycleWithModel {
 
 pub trait Cycle: CycleGetters {
     fn print_volatility_status(&self, volatility: f64) {
-        println!(
-            "{}{}Волатильность на токене {} составляет {:.3}",
-            self.print_time(),
+        debug!(
+            "{}Volatility on {} is {:.3}",
             Fore::YELLOW.as_str(),
             self.get_symbol(),
             volatility
@@ -74,22 +74,10 @@ pub trait Cycle: CycleGetters {
         sleep(Duration::from_secs(2)).await;
 
         if self.get_config().prints.cycle.cycle_start {
-            println!(
-                "{}{} Цикл запустился",
-                self.print_time(),
-                self.get_print_symbol()
-            );
+            info!("{} Cycle started", self.get_print_symbol());
         }
 
         Ok(())
-    }
-
-    fn print_time(&self) -> String {
-        format!(
-            "{}[{}] ",
-            Fore::WHITE.as_str(),
-            Utc::now().format("%H:%M:%S")
-        )
     }
 }
 
@@ -118,9 +106,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                 .ok_or(anyhow!("Model must predict position size!"))
                 .map(|v| *v)
         } else {
-            Err(anyhow!(
-                "FlattenedData to prediction should not have the target"
-            ))
+            Err(anyhow!("Data to prediction should not have the target"))
         }
     }
 
@@ -190,32 +176,16 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             }
             Ok(())
         } else {
-            Err(anyhow!("В поданных данных нет target!"))
+            Err(anyhow!("In submitted data does not contain target!"))
         }
     }
 
     fn log_prediction(&self, prediction: f64) {
         if self.get_config().prints.cycle.prediction {
-            let str_prediction: String;
-            if prediction > 0.0 {
-                str_prediction = format!(
-                    "{}Цена пойдет вверх на {:.5}%",
-                    Fore::GREEN.as_str(),
-                    prediction
-                );
-            } else {
-                str_prediction = format!(
-                    "{}Цена пойдет вниз на {:.5}%",
-                    Fore::RED.as_str(),
-                    prediction.abs()
-                );
-            }
-
-            println!(
-                "{}{} {}",
-                self.print_time(),
+            info!(
+                "{} Model position size prediction: {}",
                 self.get_print_symbol(),
-                str_prediction
+                prediction
             );
         }
     }
@@ -237,9 +207,8 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             .await;
 
         if let (Ok(Some(local_acc)), Ok(global_acc)) = (rx_local.await, rx_global.await) {
-            println!(
-                "{}{} {}L ACC {:.2}% | G ACC {:.2}%",
-                self.print_time(),
+            info!(
+                "{} {}L ACC {:.2}% | G ACC {:.2}%",
                 self.get_print_symbol(),
                 Fore::WHITE.as_str(),
                 local_acc,

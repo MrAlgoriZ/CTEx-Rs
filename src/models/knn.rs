@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+
 use anyhow::anyhow;
+use log::error;
 use smartcore::algorithm::neighbour::KNNAlgorithmName;
 use smartcore::api::{Transformer, UnsupervisedEstimator};
 use smartcore::linalg::basic::arrays::Array;
@@ -119,7 +122,7 @@ impl Model for KNN {
         y_train: &Vec<f64>,
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
         let algorithm: &str = &self.algorithm;
         let weight: &str = &self.weight;
         let algorithm_value = match algorithm {
@@ -164,12 +167,12 @@ impl Model for KNN {
 
         if let (Some(xv), Some(yv)) = (x_val, y_val) {
             match self.evaluate(xv, yv) {
-                Ok(_) => {}
-                Err(e) => eprintln!("Failed to evaluate KNN model: {}", e),
+                Ok(result) => return Ok(Some(result)),
+                Err(e) => error!("Failed to evaluate RandomForest model: {}", e),
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {

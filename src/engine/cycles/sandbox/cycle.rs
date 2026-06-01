@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use indicatif::{ProgressBar, ProgressStyle};
+use log::debug;
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -136,9 +137,8 @@ impl SandboxCycle {
                         ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
                     if self.config.prints.cycle.target {
-                        println!(
-                            "{}{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
-                            self.print_time(),
+                        debug!(
+                            "{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
                             self.print_symbol,
                             Fore::WHITE.as_str(),
                             prediction.unwrap(),
@@ -244,8 +244,7 @@ impl SandboxCycle {
         }
 
         println!(
-            "{}{} {}Бектест начался!",
-            self.print_time(),
+            "{} {}Backtest has started!",
             self.print_symbol,
             Fore::YELLOW.as_str()
         );
@@ -380,8 +379,7 @@ impl SandboxCycle {
                             .unwrap(),
                     );
                     println!(
-                        "{}{} {}Start balance (USDT): ${:.3}\n",
-                        self.print_time(),
+                        "{} {}Start balance (USDT): ${:.3}\n",
                         self.print_symbol,
                         Fore::GREEN.as_str(),
                         self.start_balance.unwrap()
@@ -413,8 +411,7 @@ impl SandboxCycle {
         }
 
         pb.finish_with_message(format!(
-            "{}{} {}Бектест окончен!",
-            self.print_time(),
+            "{} {}Backtest has finished!",
             self.print_symbol,
             Fore::GREEN.as_str()
         ));
@@ -448,19 +445,13 @@ impl SandboxCycle {
         };
 
         println!(
-            "\n\n{}{} {}End balance (USDT): ${:.3}",
-            self.print_time(),
-            self.print_symbol,
-            fore,
-            end_balance
+            "\n\n{} {}End balance (USDT): ${:.3}",
+            self.print_symbol, fore, end_balance
         );
 
         println!(
-            "{}{} {}Модель заработала: {:.5}%",
-            self.print_time(),
-            self.print_symbol,
-            fore,
-            percent
+            "{} {}Model earned: {:.5}%",
+            self.print_symbol, fore, percent
         );
 
         Ok(())
