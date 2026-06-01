@@ -1,5 +1,5 @@
 pub fn setup_logger() -> Result<(), anyhow::Error> {
-    let file_name = format!("{}.log", chrono::Local::now().format("%Y-%m-%d_%H-%M"));
+    let file_name = format!("logs/{}.log", chrono::Local::now().format("%Y-%m-%d_%H-%M"));
 
     fern::Dispatch::new()
         .format(|out, message, record| {
