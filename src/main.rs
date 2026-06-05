@@ -10,16 +10,23 @@ use crate::engine::utils::log::setup_logger;
 
 use dotenvy::dotenv;
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::LazyLock;
 
-const CONFIG_PATH: &'static str = "config/config.yaml";
-const MODEL_CONFIG_PATH: &'static str = "config/model.yaml";
+static CONFIG_PATH: LazyLock<PathBuf> =
+    LazyLock::new(|| ["config", "config.yaml"].iter().collect());
+
+static MODEL_CONFIG_PATH: LazyLock<PathBuf> =
+    LazyLock::new(|| ["config", "model.yaml"].iter().collect());
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    ensure_config_exists(vec![CONFIG_PATH, MODEL_CONFIG_PATH]);
-    dotenv().ok();
-
+    println!("Logging initialization...");
     setup_logger()?;
+
+    println!("Config initialization...");
+    ensure_config_exists(vec![&*CONFIG_PATH, &*MODEL_CONFIG_PATH]);
+    dotenv().ok();
 
     let config = load_config();
     let symbols = config.exchange.symbols;

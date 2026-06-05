@@ -1,5 +1,17 @@
+use std::fs;
+use std::path::PathBuf;
+
 pub fn setup_logger() -> Result<(), anyhow::Error> {
-    let file_name = format!("logs/{}.log", chrono::Local::now().format("%Y-%m-%d_%H-%M"));
+    let file_name: PathBuf = [
+        "logs",
+        &format!("{}.log", chrono::Local::now().format("%Y-%m-%d_%H-%M")),
+    ]
+    .iter()
+    .collect();
+
+    if let Some(parent) = file_name.parent() {
+        fs::create_dir_all(parent).expect("Failed to create directory for logs");
+    }
 
     fern::Dispatch::new()
         .format(|out, message, record| {

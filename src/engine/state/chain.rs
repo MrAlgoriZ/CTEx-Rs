@@ -3,6 +3,7 @@ use log::debug;
 use plotters::prelude::*;
 use smartcore::metrics::{mean_absolute_error, mean_squared_error, r2};
 use std::collections::{HashMap, VecDeque};
+use std::path::{Path, PathBuf};
 
 use crate::data::{data_interfaces::Candle, requests::database::standart::get_target_name};
 
@@ -106,7 +107,7 @@ impl Chain {
             .collect::<Vec<_>>();
         debug!("{:?}", models);
 
-        std::fs::create_dir_all("plots")
+        std::fs::create_dir_all(Path::new("plots"))
             .map_err(|e| anyhow!("Failed to create plots dir: {}", e))?;
 
         models.iter().for_each(|model| {
@@ -135,7 +136,12 @@ impl Chain {
             let y_pad = (y_max - y_min) * 0.05;
 
             let n = chain.len();
-            let filename = format!("plots/{}_{}.png", symbol, get_target_name(model).unwrap());
+            let filename: PathBuf = [
+                "plots",
+                &format!("{}_{}.png", symbol, get_target_name(model).unwrap()),
+            ]
+            .iter()
+            .collect();
 
             let root = BitMapBackend::new(&filename, (1280, 720)).into_drawing_area();
             root.fill(&RGBColor(18, 18, 24)).unwrap();
@@ -283,7 +289,7 @@ impl Chain {
             }
 
             root.present().unwrap();
-            debug!("Saved {}", filename);
+            debug!("Saved {}", filename.to_string_lossy());
         });
 
         Ok(())
