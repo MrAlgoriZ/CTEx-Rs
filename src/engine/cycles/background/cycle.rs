@@ -1,5 +1,5 @@
 use crate::data::data_interfaces::Timeframe;
-use crate::engine::cycles::manager::ServersCommand;
+use crate::engine::actors::service::ServiceCommand;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 
@@ -12,11 +12,11 @@ use tokio::time::sleep;
 
 pub struct BackgroundCycle {
     config: Config,
-    servers_tx: mpsc::Sender<ServersCommand>,
+    servers_tx: mpsc::Sender<ServiceCommand>,
 }
 
 impl BackgroundCycle {
-    pub fn new(config: Config, servers_tx: mpsc::Sender<ServersCommand>) -> Self {
+    pub fn new(config: Config, servers_tx: mpsc::Sender<ServiceCommand>) -> Self {
         BackgroundCycle { config, servers_tx }
     }
 
@@ -29,7 +29,7 @@ impl BackgroundCycle {
 
             let _ = self
                 .servers_tx
-                .send(ServersCommand::RemoveAllWorkload { respond_to: tx })
+                .send(ServiceCommand::RemoveAllWorkload { respond_to: tx })
                 .await;
 
             rx.await??;
@@ -38,7 +38,7 @@ impl BackgroundCycle {
 
             let _ = self
                 .servers_tx
-                .send(ServersCommand::UpdateActive { respond_to: tx })
+                .send(ServiceCommand::UpdateActive { respond_to: tx })
                 .await;
 
             rx.await??;

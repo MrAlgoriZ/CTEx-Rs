@@ -21,10 +21,8 @@ static MODEL_CONFIG_PATH: LazyLock<PathBuf> =
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    println!("Logging initialization...");
     setup_logger()?;
 
-    println!("Config initialization...");
     ensure_config_exists(vec![&*CONFIG_PATH, &*MODEL_CONFIG_PATH]);
     dotenv().ok();
 

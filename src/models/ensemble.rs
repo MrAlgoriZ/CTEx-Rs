@@ -10,7 +10,8 @@ use crate::data::data_interfaces::DataMap;
 use crate::data::requests::database::standart::{
     SQLStandart, get_confidence_name, get_prediction_name,
 };
-use crate::engine::cycles::manager::{ModelActor, ModelCommand, PredictionsCommand};
+use crate::engine::actors::model::{ModelActor, ModelCommand};
+use crate::engine::actors::prediction::PredictionsCommand;
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;

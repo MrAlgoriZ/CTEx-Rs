@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
 use crate::backend::structure::{ApiState, ApiStructure};
-use crate::engine::cycles::manager::{
-    ChainCommand, CounterCommand, PredictionsCommand, SupervisorCommand,
-};
+use crate::engine::actors::chain::ChainCommand;
+use crate::engine::actors::counter::CounterCommand;
+use crate::engine::actors::prediction::PredictionsCommand;
+use crate::engine::cycles::manager::SupervisorCommand;
 use crate::engine::utils::config::config_types::CycleType;
 use crate::engine::utils::config::load_config::load_config;
 

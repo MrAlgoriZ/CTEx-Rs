@@ -22,27 +22,27 @@ impl<T> SymbolCounters<T> {
     }
 }
 
-impl<T: Copy + Into<u16>> SymbolCounters<T> {
+impl<T: Copy + Into<f64>> SymbolCounters<T> {
     pub fn get_accuracy(&self) -> f64 {
-        let sum: u16 = self.data.iter().map(|&v| v.into()).sum();
-        (sum as f64) / (self.data.len() as f64) * 100.0
+        let sum: f64 = self.data.iter().map(|&v| v.into()).sum();
+        (sum) / (self.data.len() as f64) * 100.0
     }
 
     pub fn get_shifted_accuracy(&self, window: usize) -> Option<f64> {
         if window == 0 || self.data.is_empty() {
-            None
-        } else {
-            let actual_window = window.min(self.data.len());
-            let sum: u16 = self
-                .data
-                .iter()
-                .rev()
-                .take(actual_window)
-                .map(|&v| v.into())
-                .sum();
-
-            Some((sum as f64) / (actual_window as f64) * 100.0)
+            return None;
         }
+
+        let actual_window = window.min(self.data.len());
+        let sum: f64 = self
+            .data
+            .iter()
+            .rev()
+            .take(actual_window)
+            .map(|&v| v.into())
+            .sum();
+
+        Some((sum) / (actual_window as f64) * 100.0)
     }
 }
 

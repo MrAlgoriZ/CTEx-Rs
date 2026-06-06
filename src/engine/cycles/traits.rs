@@ -10,7 +10,8 @@ use crate::data::data_interfaces::{Candle, DataMap, Timeframe};
 use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
-use crate::engine::cycles::manager::{CounterCommand, ModelCommand};
+use crate::engine::actors::counter::CounterCommand;
+use crate::engine::actors::model::ModelCommand;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 

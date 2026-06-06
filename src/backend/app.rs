@@ -1,6 +1,8 @@
 use crate::backend::commands;
 use crate::backend::structure::{ApiState, ApiStructure};
-use crate::engine::cycles::manager::{CounterCommand, PredictionsCommand, SupervisorCommand};
+use crate::engine::actors::counter::CounterCommand;
+use crate::engine::actors::prediction::PredictionsCommand;
+use crate::engine::cycles::manager::SupervisorCommand;
 use crate::engine::utils::config::load_config::load_config;
 
 use anyhow::anyhow;

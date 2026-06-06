@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 use crate::data::data_interfaces::DataMap;
 use crate::data::process::features::auxiliary::corr;
 use crate::data::requests::database::standart::SQLStandart;
-use crate::engine::cycles::manager::PredictionsCommand;
+use crate::engine::actors::prediction::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
 use crate::engine::utils::config::load_config::load_config;
 use crate::models::TargetType;

@@ -4,15 +4,15 @@ use tokio::sync::oneshot;
 
 use crate::data::data_interfaces::*;
 use crate::data::process::data_collection::OHLCV_FETCH_LEN;
-use crate::engine::cycles::manager::ServersCommand;
+use crate::engine::actors::service::ServiceCommand;
 
 pub struct CCXTClient {
     pub exchange_name: String,
-    server_tx: mpsc::Sender<ServersCommand>,
+    server_tx: mpsc::Sender<ServiceCommand>,
 }
 
 impl CCXTClient {
-    pub fn new(exchange_name: &str, server_tx: mpsc::Sender<ServersCommand>) -> Self {
+    pub fn new(exchange_name: &str, server_tx: mpsc::Sender<ServiceCommand>) -> Self {
         CCXTClient {
             exchange_name: exchange_name.to_string(),
             server_tx,
@@ -29,13 +29,13 @@ impl CCXTClient {
         let _ = self
             .server_tx
             .clone()
-            .send(ServersCommand::GetPriority { respond_to: tx })
+            .send(ServiceCommand::GetPriority { respond_to: tx })
             .await;
         let server = rx.await?.context("server is not string!")?;
         let (tx, rx) = oneshot::channel();
         let _ = self
             .server_tx
-            .send(ServersCommand::FetchOhlcv {
+            .send(ServiceCommand::FetchOhlcv {
                 symbol: symbol.to_string(),
                 timeframe: timeframe.to_string(),
                 limit,
@@ -58,13 +58,13 @@ impl CCXTClient {
         let _ = self
             .server_tx
             .clone()
-            .send(ServersCommand::GetPriority { respond_to: tx })
+            .send(ServiceCommand::GetPriority { respond_to: tx })
             .await;
         let server = rx.await?.context("server is not string!")?;
         let (tx, rx) = oneshot::channel();
         let _ = self
             .server_tx
-            .send(ServersCommand::FetchOhlcvWithTimestamps {
+            .send(ServiceCommand::FetchOhlcvWithTimestamps {
                 symbol: symbol.to_string(),
                 timeframe: timeframe.to_string(),
                 limit,
@@ -138,13 +138,13 @@ impl CCXTClient {
         let _ = self
             .server_tx
             .clone()
-            .send(ServersCommand::GetPriority { respond_to: tx })
+            .send(ServiceCommand::GetPriority { respond_to: tx })
             .await;
         let server = rx.await?.context("server is not string!")?;
         let (tx, rx) = oneshot::channel();
         let _ = self
             .server_tx
-            .send(ServersCommand::FetchTicker {
+            .send(ServiceCommand::FetchTicker {
                 symbol: symbol.to_string(),
                 exchange_name: self.exchange_name.clone(),
                 server: server.to_string(),
@@ -160,13 +160,13 @@ impl CCXTClient {
         let _ = self
             .server_tx
             .clone()
-            .send(ServersCommand::GetPriority { respond_to: tx })
+            .send(ServiceCommand::GetPriority { respond_to: tx })
             .await;
         let server = rx.await?.context("server is not string!")?;
         let (tx, rx) = oneshot::channel();
         let _ = self
             .server_tx
-            .send(ServersCommand::TestSymbol {
+            .send(ServiceCommand::TestSymbol {
                 symbol: symbol.to_uppercase(),
                 exchange_name: self.exchange_name.clone(),
                 server: server.to_string(),

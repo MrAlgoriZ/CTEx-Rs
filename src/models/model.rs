@@ -11,7 +11,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::data::data_interfaces::DataMap;
 use crate::data::requests::database::standart::SQLStandart;
-use crate::engine::cycles::manager::PredictionsCommand;
+use crate::engine::actors::prediction::PredictionsCommand;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::{Config, MetricType};
 use crate::models::SingleModelParams;
