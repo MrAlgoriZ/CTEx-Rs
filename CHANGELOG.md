@@ -441,3 +441,12 @@
   - Best model configuration test added
   - Logging to file added
   - Project fully translated to English
+
+5-06-2026:
+  - Added support for file paths using std::path
+  
+6-06-2026:
+  - Distributed actors across separate files
+  
+10-06-2026:
+  - Replaced Result<\*, anyhow::Error> with anyhow::Result<\*>
