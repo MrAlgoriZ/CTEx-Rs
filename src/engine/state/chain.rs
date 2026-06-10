@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use log::debug;
 use plotters::prelude::*;
 use smartcore::metrics::{mean_absolute_error, mean_squared_error, r2};
@@ -92,7 +92,7 @@ impl Chain {
         ])
     }
 
-    pub fn save_plots(&self, symbol: &str) -> Result<(), anyhow::Error> {
+    pub fn save_plots(&self, symbol: &str) -> Result<()> {
         debug!("Plots are saving right now!");
         let models = self
             .chains

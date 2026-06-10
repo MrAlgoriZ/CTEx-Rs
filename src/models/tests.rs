@@ -1,5 +1,5 @@
 #[tokio::test]
-async fn test_training() -> Result<(), anyhow::Error> {
+async fn test_training() -> anyhow::Result<()> {
     use crate::data::requests::database::standart::SQLStandart;
 
     dotenvy::dotenv().ok();
@@ -68,7 +68,7 @@ async fn test_training() -> Result<(), anyhow::Error> {
 }
 
 #[tokio::test]
-async fn find_best_model_config() -> Result<(), anyhow::Error> {
+async fn find_best_model_config() -> anyhow::Result<()> {
     use crate::data::requests::database::standart::SQLStandart;
     use crate::models::TargetType;
     use crate::models::model::{Model, ModelDependencies};

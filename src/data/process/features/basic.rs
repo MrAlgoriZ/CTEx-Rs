@@ -459,12 +459,14 @@ pub fn calculate_action_type(future_return: f64, risk_score: f64, threshold: f64
     }
 
     if future_return > 0.001 {
-        1.0
-    } else if future_return < -0.001 {
-        2.0
-    } else {
-        0.0
+        return 1.0;
     }
+
+    if future_return < -0.001 {
+        return 2.0;
+    }
+
+    0.0
 }
 
 pub fn calculate_position_size(future_return: f64, risk_score: f64, base_size: f64) -> f64 {

@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{Context, Result};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
@@ -24,7 +24,7 @@ impl CCXTClient {
         symbol: &str,
         timeframe: &str,
         limit: usize,
-    ) -> Result<Vec<Candle>, anyhow::Error> {
+    ) -> Result<Vec<Candle>> {
         let (tx, rx) = oneshot::channel();
         let _ = self
             .server_tx
@@ -53,7 +53,7 @@ impl CCXTClient {
         symbol: &str,
         timeframe: &str,
         limit: usize,
-    ) -> Result<Vec<CandleWithTimestamp>, anyhow::Error> {
+    ) -> Result<Vec<CandleWithTimestamp>> {
         let (tx, rx) = oneshot::channel();
         let _ = self
             .server_tx
@@ -133,7 +133,7 @@ impl CCXTClient {
     } */
 
     #[allow(unused)]
-    pub async fn fetch_ticker(&self, symbol: &str) -> Result<Ticker, anyhow::Error> {
+    pub async fn fetch_ticker(&self, symbol: &str) -> Result<Ticker> {
         let (tx, rx) = oneshot::channel();
         let _ = self
             .server_tx
@@ -155,7 +155,7 @@ impl CCXTClient {
         ticker
     }
 
-    pub async fn test_symbol(&self, symbol: &str) -> Result<(), anyhow::Error> {
+    pub async fn test_symbol(&self, symbol: &str) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         let _ = self
             .server_tx
@@ -181,9 +181,9 @@ impl CCXTClient {
         &self,
         symbol: &str,
         timeframe: &str,
-    ) -> Result<(DataMap, Vec<Candle>), anyhow::Error> {
+    ) -> Result<(DataMap, Vec<Candle>)> {
         let ohlcv = self.fetch_ohlcv(symbol, timeframe, OHLCV_FETCH_LEN).await?;
 
-        Ok((DataMap::init(symbol, ohlcv.clone(), timeframe), ohlcv))
+        Ok((DataMap::init(Some(symbol), ohlcv.clone(), timeframe), ohlcv))
     }
 }

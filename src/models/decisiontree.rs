@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use log::error;
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::tree::decision_tree_classifier::{
@@ -119,7 +119,7 @@ impl Model for DecisionTree {
         y_train: &Vec<f64>,
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
-    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
+    ) -> Result<Option<HashMap<String, f64>>> {
         match self.task_type {
             TaskType::Regression => {
                 let params = DecisionTreeRegressorParameters::default()
@@ -159,7 +159,7 @@ impl Model for DecisionTree {
         Ok(None)
     }
 
-    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
+    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>> {
         let prediction = match self.task_type {
             TaskType::Regression => {
                 let model = self
@@ -186,11 +186,7 @@ impl Model for DecisionTree {
         Ok(prediction)
     }
 
-    async fn handle_mistakes(
-        &mut self,
-        true_data: DataMap,
-        predicted_data: DataMap,
-    ) -> Result<(), anyhow::Error> {
+    async fn handle_mistakes(&mut self, true_data: DataMap, predicted_data: DataMap) -> Result<()> {
         let true_data = true_data.to_vec();
         let predicted_data = predicted_data.to_vec();
         let correlation = corr(&true_data, &predicted_data);

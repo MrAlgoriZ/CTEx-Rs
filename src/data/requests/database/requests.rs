@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use log::error;
 use sqlx::{Column, Error, PgPool, Row, query};
 use std::collections::BTreeMap;
@@ -37,13 +37,13 @@ impl SQLStandart {
                 values.insert(name.to_string(), value.unwrap_or(f64::NAN));
             }
 
-            result.push(DataMap::new(symbol, values));
+            result.push(DataMap::new(Some(symbol), values));
         }
 
         Ok(result)
     }
 
-    pub async fn insert_row(&self, pool: &PgPool, values: DataMap) -> Result<(), anyhow::Error> {
+    pub async fn insert_row(&self, pool: &PgPool, values: DataMap) -> Result<()> {
         let columns = values.get_keys();
         let columns_str = columns.join(", ");
 

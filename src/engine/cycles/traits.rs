@@ -1,6 +1,5 @@
+use anyhow::{Result, anyhow};
 use chrono::Utc;
-// use log::debug;
-use anyhow::anyhow;
 use log::{debug, info};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -37,7 +36,7 @@ pub trait Cycle: CycleGetters {
         );
     }
 
-    async fn update_volatility(&self, volatility_obj: &mut f64) -> Result<(), anyhow::Error> {
+    async fn update_volatility(&self, volatility_obj: &mut f64) -> Result<()> {
         let candles: Vec<Candle> = self
             .get_client()
             .fetch_ohlcv(
@@ -50,7 +49,7 @@ pub trait Cycle: CycleGetters {
         Ok(())
     }
 
-    async fn wait_for_next_interval(&self) -> Result<(), anyhow::Error> {
+    async fn wait_for_next_interval(&self) -> Result<()> {
         let timeframe = Timeframe::from_str(&self.get_config().exchange.timeframes.main_timeframe)
             .expect("Invalid timeframe in config!");
 
@@ -87,7 +86,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         &mut self,
         data: DataMap,
         model_tx: &mpsc::Sender<ModelCommand>,
-    ) -> Result<f64, anyhow::Error> {
+    ) -> Result<f64> {
         if !data.has_target() {
             let (tx, rx) = oneshot::channel();
 
@@ -143,7 +142,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         predicted_data: DataMap,
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: Option<&mpsc::Sender<ModelCommand>>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<()> {
         if true_data.has_target() {
             SQLStandart::Dummy
                 .insert_row(&self.get_pool(), true_data.clone())

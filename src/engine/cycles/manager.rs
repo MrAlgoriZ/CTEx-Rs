@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use log::{error, info, warn};
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -39,11 +39,11 @@ pub enum SupervisorCommand {
     StartCycle {
         symbol: String,
         cycle_type: CycleType,
-        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<()>>,
     },
     StopCycle {
         symbol: String,
-        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<()>>,
     },
     StopAll {
         respond_to: oneshot::Sender<()>,
@@ -139,11 +139,7 @@ impl CycleSupervisor {
         warn!("Supervisor has stopped!");
     }
 
-    async fn start_worker(
-        &mut self,
-        symbol: String,
-        cycle_type: CycleType,
-    ) -> Result<(), anyhow::Error> {
+    async fn start_worker(&mut self, symbol: String, cycle_type: CycleType) -> Result<()> {
         if self.workers.contains_key(&symbol) {
             return Err(anyhow!(format!("Worker {} already running!", symbol)));
         }
@@ -186,7 +182,7 @@ impl CycleSupervisor {
         Ok(())
     }
 
-    async fn stop_worker(&mut self, symbol: &str) -> Result<(), anyhow::Error> {
+    async fn stop_worker(&mut self, symbol: &str) -> Result<()> {
         match self.workers.remove(symbol) {
             Some(handle) => {
                 handle.stop().await;
@@ -431,7 +427,7 @@ impl CycleManager {
         &mut self,
         symbols: Vec<String>,
         cycle_types: HashMap<String, CycleType>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<()> {
         let needs_model = symbols.iter().any(|symbol| {
             matches!(
                 cycle_types.get(symbol).unwrap_or(&CycleType::Loader),
@@ -555,11 +551,7 @@ impl CycleManager {
         Ok(())
     }
 
-    pub async fn add_cycle(
-        &self,
-        symbol: String,
-        cycle_type: CycleType,
-    ) -> Result<(), anyhow::Error> {
+    pub async fn add_cycle(&self, symbol: String, cycle_type: CycleType) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         self.supervisor_tx
             .send(SupervisorCommand::StartCycle {

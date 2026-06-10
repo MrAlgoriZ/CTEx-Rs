@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use std::collections::{HashMap, VecDeque};
 
 use crate::data::requests::ccxt::client::CCXTClient;
@@ -28,13 +28,13 @@ pub trait IAccount {
         symbol: String,
         amount: f64,
         direction: Direction,
-    ) -> Result<Order, anyhow::Error>;
+    ) -> Result<Order>;
     #[allow(unused)]
-    async fn cancel_order(&mut self, order: Order) -> Result<(), anyhow::Error>;
+    async fn cancel_order(&mut self, order: Order) -> Result<()>;
     #[allow(unused)]
-    async fn get_open_orders(&self) -> Result<Option<VecDeque<Order>>, anyhow::Error>;
+    async fn get_open_orders(&self) -> Result<Option<VecDeque<Order>>>;
     #[allow(unused)]
-    async fn get_balance(&self) -> Result<Option<HashMap<String, f64>>, anyhow::Error>;
+    async fn get_balance(&self) -> Result<Option<HashMap<String, f64>>>;
 }
 
 // pub struct Account {}
@@ -57,10 +57,7 @@ impl DummyAccount {
         }
     }
 
-    pub async fn get_balance_usdt(
-        &self,
-        client: &CCXTClient,
-    ) -> Result<Option<f64>, anyhow::Error> {
+    pub async fn get_balance_usdt(&self, client: &CCXTClient) -> Result<Option<f64>> {
         let mut total_usdt = 0.0;
 
         for (symbol, amount) in &self.balance {
@@ -79,7 +76,7 @@ impl DummyAccount {
         Ok(Some(total_usdt))
     }
 
-    pub async fn get_fake_balance_usdt(&self, price: f64) -> Result<Option<f64>, anyhow::Error> {
+    pub async fn get_fake_balance_usdt(&self, price: f64) -> Result<Option<f64>> {
         let mut total_usdt = 0.0;
 
         for (symbol, amount) in &self.balance {
@@ -102,7 +99,7 @@ impl DummyAccount {
         amount: f64,
         direction: Direction,
         price: f64,
-    ) -> Result<Order, anyhow::Error> {
+    ) -> Result<Order> {
         match direction {
             Direction::Buy => {
                 let cost = amount * price;
@@ -139,11 +136,7 @@ impl DummyAccount {
     }
 
     #[allow(unused)]
-    async fn cancel_fake_order(
-        &mut self,
-        order: Order,
-        client: &CCXTClient,
-    ) -> Result<(), anyhow::Error> {
+    async fn cancel_fake_order(&mut self, order: Order, client: &CCXTClient) -> Result<()> {
         if let Some(pos) = self.orders.iter().position(|o| {
             o.symbol == order.symbol && o.amount == order.amount && matches!(o.direction, _)
         }) {
@@ -172,12 +165,12 @@ impl DummyAccount {
     }
 
     #[allow(unused)]
-    pub fn get_open_orders(&self) -> Result<Option<VecDeque<Order>>, anyhow::Error> {
+    pub fn get_open_orders(&self) -> Result<Option<VecDeque<Order>>> {
         Ok(Some(self.orders.clone()))
     }
 
     #[allow(unused)]
-    pub fn get_balance(&self) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
+    pub fn get_balance(&self) -> Result<Option<HashMap<String, f64>>> {
         Ok(Some(self.balance.clone()))
     }
 }

@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use log::{debug, info};
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use sqlx::PgPool;
@@ -355,7 +355,7 @@ impl ModelDependencies for Ensemble {
                 }
             }
         });
-        Some(DataMap::new("".to_string(), accs))
+        Some(DataMap::new(None, accs))
     }
 }
 
@@ -367,15 +367,15 @@ impl Model for Ensemble {
         _: &Vec<f64>,
         _: Option<&DenseMatrix<f64>>,
         _: Option<&Vec<f64>>,
-    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
+    ) -> Result<Option<HashMap<String, f64>>> {
         Err(anyhow!("not implemented!"))
     }
 
-    fn model_predict(&self, _: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
+    fn model_predict(&self, _: &DenseMatrix<f64>) -> Result<Vec<f64>> {
         Err(anyhow!("not implemented!"))
     }
 
-    async fn train(&mut self) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
+    async fn train(&mut self) -> Result<Option<HashMap<String, f64>>> {
         let txs = [
             self.future_volatility_model_tx.clone(),
             self.future_volume_model_tx.clone(),
@@ -464,7 +464,7 @@ impl Model for Ensemble {
         Ok(None)
     }
 
-    async fn predict(&self, data: DataMap) -> Result<DataMap, anyhow::Error> {
+    async fn predict(&self, data: DataMap) -> Result<DataMap> {
         let mut data = data.clone();
         let mut predictions = DataMap::new(data.symbol.clone(), BTreeMap::new());
 
@@ -603,11 +603,7 @@ impl Model for Ensemble {
         Ok(predictions)
     }
 
-    async fn handle_mistakes(
-        &mut self,
-        true_data: DataMap,
-        predicted_data: DataMap,
-    ) -> Result<(), anyhow::Error> {
+    async fn handle_mistakes(&mut self, true_data: DataMap, predicted_data: DataMap) -> Result<()> {
         for (k, v) in true_data.get_data().iter() {
             if let Some(predicted) = predicted_data.get(k) {
                 if (v - predicted).abs() < self.config.behaviour.success_threshold {

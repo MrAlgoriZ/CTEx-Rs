@@ -3,7 +3,7 @@ use crate::data::data_interfaces::{Candle, CandleWithTimestamp, Ticker};
 use crate::engine::utils::config::load_config::load_config;
 use crate::engine::utils::parse::parse_symbol;
 
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use log::{error, info};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -29,7 +29,7 @@ pub enum ServiceCommand {
         respond_to: oneshot::Sender<Option<String>>,
     },
     RemoveAllWorkload {
-        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<()>>,
     },
     FetchOhlcv {
         symbol: String,
@@ -37,7 +37,7 @@ pub enum ServiceCommand {
         limit: usize,
         exchange_name: String,
         server: String,
-        respond_to: oneshot::Sender<Result<Vec<Candle>, anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<Vec<Candle>>>,
     },
     FetchOhlcvWithTimestamps {
         symbol: String,
@@ -45,23 +45,23 @@ pub enum ServiceCommand {
         limit: usize,
         exchange_name: String,
         server: String,
-        respond_to: oneshot::Sender<Result<Vec<CandleWithTimestamp>, anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<Vec<CandleWithTimestamp>>>,
     },
     #[allow(unused)]
     FetchTicker {
         symbol: String,
         exchange_name: String,
         server: String,
-        respond_to: oneshot::Sender<Result<Ticker, anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<Ticker>>,
     },
     TestSymbol {
         symbol: String,
         exchange_name: String,
         server: String,
-        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<()>>,
     },
     UpdateActive {
-        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<()>>,
     },
 }
 
@@ -179,7 +179,7 @@ impl ServiceActor {
         }
     }
 
-    fn add_workload(&mut self, server: String, num: u8) -> Result<(), anyhow::Error> {
+    fn add_workload(&mut self, server: String, num: u8) -> Result<()> {
         let state = self
             .servers
             .get_mut(&server)
@@ -193,7 +193,7 @@ impl ServiceActor {
         Ok(())
     }
 
-    fn remove_all_workload(&mut self) -> Result<(), anyhow::Error> {
+    fn remove_all_workload(&mut self) -> Result<()> {
         for state in self.servers.values_mut() {
             state.workload = 0;
         }
@@ -215,7 +215,7 @@ impl ServiceActor {
         }
     }
 
-    async fn update_active(&mut self) -> Result<(), anyhow::Error> {
+    async fn update_active(&mut self) -> Result<()> {
         for (server, state) in self.servers.iter_mut() {
             let is_active = test_server(server).await;
             state.active = is_active;
@@ -253,7 +253,7 @@ impl ServiceActor {
         limit: usize,
         exchange_name: &str,
         server: &str,
-    ) -> Result<Vec<Candle>, anyhow::Error> {
+    ) -> Result<Vec<Candle>> {
         let mut current_server = server.to_string();
 
         loop {
@@ -327,7 +327,7 @@ impl ServiceActor {
                             .ok_or_else(|| anyhow!("volume is not a number"))?,
                     })
                 })
-                .collect::<Result<Vec<_>, anyhow::Error>>()?;
+                .collect::<Result<Vec<_>>>()?;
 
             return Ok(candles);
         }
@@ -340,7 +340,7 @@ impl ServiceActor {
         limit: usize,
         exchange_name: &str,
         server: &str,
-    ) -> Result<Vec<CandleWithTimestamp>, anyhow::Error> {
+    ) -> Result<Vec<CandleWithTimestamp>> {
         let mut current_server = server.to_string();
 
         loop {
@@ -417,7 +417,7 @@ impl ServiceActor {
                             .ok_or_else(|| anyhow!("volume is not a number"))?,
                     })
                 })
-                .collect::<Result<Vec<_>, anyhow::Error>>()?;
+                .collect::<Result<Vec<_>>>()?;
 
             return Ok(candles);
         }
@@ -428,7 +428,7 @@ impl ServiceActor {
         symbol: &str,
         exchange_name: &str,
         server: &str,
-    ) -> Result<Ticker, anyhow::Error> {
+    ) -> Result<Ticker> {
         let mut current_server = server.to_string();
 
         loop {
@@ -483,12 +483,7 @@ impl ServiceActor {
         }
     }
 
-    async fn test_symbol(
-        &mut self,
-        symbol: &str,
-        exchange_name: &str,
-        server: &str,
-    ) -> Result<(), anyhow::Error> {
+    async fn test_symbol(&mut self, symbol: &str, exchange_name: &str, server: &str) -> Result<()> {
         let payload = serde_json::json!({
             "exchange_name": exchange_name,
             "symbol": parse_symbol(symbol)

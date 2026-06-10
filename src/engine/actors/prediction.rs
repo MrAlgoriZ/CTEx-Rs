@@ -1,6 +1,7 @@
 use super::{mpsc, oneshot};
 use crate::engine::state::counters::SymbolCounters;
 
+use anyhow::Result;
 use log::info;
 use std::collections::HashMap;
 
@@ -8,7 +9,7 @@ pub enum PredictionsCommand {
     AddPrediction {
         symbol: String,
         prediction: f64,
-        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<()>>,
     },
     ListPredictions {
         respond_to: oneshot::Sender<Option<HashMap<String, SymbolCounters<f64>>>>,

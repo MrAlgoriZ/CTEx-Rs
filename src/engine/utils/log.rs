@@ -1,7 +1,8 @@
+use anyhow::Result;
 use std::fs;
 use std::path::PathBuf;
 
-pub fn setup_logger() -> Result<(), anyhow::Error> {
+pub fn setup_logger() -> Result<()> {
     let file_name: PathBuf = [
         "logs",
         &format!("{}.log", chrono::Local::now().format("%Y-%m-%d_%H-%M")),

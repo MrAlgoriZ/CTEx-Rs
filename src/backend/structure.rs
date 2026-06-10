@@ -12,7 +12,7 @@ pub struct ApiState {
     pub prediction_handle: mpsc::Sender<PredictionsCommand>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct ApiStructure {
     pub root: String,
     pub health: String,

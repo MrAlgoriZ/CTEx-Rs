@@ -2,7 +2,7 @@ use super::{mpsc, oneshot};
 use crate::data::data_interfaces::DataMap;
 use crate::models::model::Model;
 
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use log::{error, info, warn};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -14,12 +14,12 @@ pub enum ModelCommand {
         respond_to: oneshot::Sender<DataMap>,
     },
     Train {
-        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<()>>,
     },
     HandleMistakes {
         true_data: DataMap,
         predicted_data: DataMap,
-        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<()>>,
     },
     GetAccuracy {
         respond_to: oneshot::Sender<Option<DataMap>>,
@@ -57,7 +57,7 @@ impl ModelActor {
                         Ok(pred) => pred,
                         Err(e) => {
                             error!("Prediction error: {}", e);
-                            DataMap::new("".to_string(), BTreeMap::new())
+                            DataMap::new(None, BTreeMap::new())
                         }
                     };
 

@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use log::error;
 use smartcore::ensemble::random_forest_classifier::{
     RandomForestClassifier, RandomForestClassifierParameters,
@@ -10,6 +8,7 @@ use smartcore::ensemble::random_forest_regressor::{
 };
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use tokio::sync::mpsc;
 
 use crate::data::data_interfaces::DataMap;
@@ -125,7 +124,7 @@ impl Model for RandomForest {
         y_train: &Vec<f64>,
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
-    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
+    ) -> Result<Option<HashMap<String, f64>>> {
         match self.task_type {
             TaskType::Regression => {
                 let params = RandomForestRegressorParameters::default()
@@ -171,7 +170,7 @@ impl Model for RandomForest {
         Ok(None)
     }
 
-    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
+    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>> {
         let prediction = match self.task_type {
             TaskType::Regression => {
                 let model = self
@@ -198,11 +197,7 @@ impl Model for RandomForest {
         Ok(prediction)
     }
 
-    async fn handle_mistakes(
-        &mut self,
-        true_data: DataMap,
-        predicted_data: DataMap,
-    ) -> Result<(), anyhow::Error> {
+    async fn handle_mistakes(&mut self, true_data: DataMap, predicted_data: DataMap) -> Result<()> {
         let true_data = true_data.to_vec();
         let predicted_data = predicted_data.to_vec();
         let correlation = corr(&true_data, &predicted_data);

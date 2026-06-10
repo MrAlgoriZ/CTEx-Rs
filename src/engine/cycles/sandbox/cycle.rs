@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use sqlx::PgPool;
@@ -86,7 +86,7 @@ impl SandboxCycle {
         }
     }
 
-    pub async fn init(symbol: String, client: CCXTClient) -> Result<Self, anyhow::Error> {
+    pub async fn init(symbol: String, client: CCXTClient) -> Result<Self> {
         let pool = PgPool::connect(&load_env().database_url).await?;
         let account = DummyAccount::init("".to_string(), "".to_string());
         Ok(Self::new(symbol, pool, client, account))
@@ -124,7 +124,7 @@ impl SandboxCycle {
             match phase {
                 CyclePhase::Active => {
                     let targets = DataMap::new(
-                        self.get_symbol().to_string(),
+                        Some(self.get_symbol().to_string()),
                         collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
                     );
 
@@ -290,7 +290,7 @@ impl SandboxCycle {
             volatility = get_volatility(&to_volatility);
 
             let candles = DataMap::from_slice(
-                &self.symbol,
+                Some(&self.symbol),
                 &self.config.exchange.timeframes.main_timeframe,
                 window,
             );
@@ -303,7 +303,7 @@ impl SandboxCycle {
                         .collect::<Vec<Candle>>();
 
                     let targets = DataMap::new(
-                        self.get_symbol().to_string(),
+                        Some(self.get_symbol().to_string()),
                         collect_targets(ohlcv.clone()[..OHLCV_LEN].try_into().unwrap()),
                     );
 

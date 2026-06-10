@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, info};
 use sqlx::PgPool;
@@ -78,7 +78,7 @@ impl TrainingCycle {
         }
     }
 
-    pub async fn init(symbol: String, client: CCXTClient) -> Result<Self, anyhow::Error> {
+    pub async fn init(symbol: String, client: CCXTClient) -> Result<Self> {
         let pool = PgPool::connect(&load_env().database_url).await?;
         Ok(Self::new(symbol, client, pool))
     }
@@ -115,7 +115,7 @@ impl TrainingCycle {
             match phase {
                 CyclePhase::Active => {
                     let targets = DataMap::new(
-                        self.get_symbol().to_string(),
+                        Some(self.get_symbol().to_string()),
                         collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
                     );
 
@@ -261,7 +261,7 @@ impl TrainingCycle {
             volatility = get_volatility(&to_volatility);
 
             let candles = DataMap::from_slice(
-                &self.symbol,
+                Some(&self.symbol),
                 &self.config.exchange.timeframes.main_timeframe,
                 window,
             );
@@ -274,7 +274,7 @@ impl TrainingCycle {
                         .collect::<Vec<Candle>>();
 
                     let targets = DataMap::new(
-                        self.get_symbol().to_string(),
+                        Some(self.get_symbol().to_string()),
                         collect_targets(ohlcv.clone()[..OHLCV_LEN].try_into().unwrap()),
                     );
 

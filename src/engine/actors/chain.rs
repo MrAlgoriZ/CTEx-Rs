@@ -1,6 +1,7 @@
 use super::{mpsc, oneshot};
 use crate::engine::state::chain::{Block, Chain};
 
+use anyhow::Result;
 use log::info;
 
 pub enum ChainCommand {
@@ -15,7 +16,7 @@ pub enum ChainCommand {
     },
     SavePlots {
         symbol: String,
-        respond_to: oneshot::Sender<Result<(), anyhow::Error>>,
+        respond_to: oneshot::Sender<Result<()>>,
     },
 }
 

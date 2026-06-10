@@ -11,7 +11,7 @@ use crate::data::requests::time::TimeRequest;
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Add;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Candle {
     pub open: f64,
     pub high: f64,
@@ -20,7 +20,7 @@ pub struct Candle {
     pub volume: f64,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct CandleWithTimestamp {
     pub timestamp: u64,
     pub open: f64,
@@ -65,12 +65,12 @@ impl CircleTime {
 
 #[derive(Debug, Clone)]
 pub struct DataMap {
-    pub symbol: String,
+    pub symbol: Option<String>,
     data: BTreeMap<String, f64>,
 }
 
 impl DataMap {
-    pub fn new(symbol: String, data: BTreeMap<String, f64>) -> Self {
+    pub fn new(symbol: Option<String>, data: BTreeMap<String, f64>) -> Self {
         Self { symbol, data }
     }
 
@@ -163,7 +163,7 @@ impl DataMap {
         }
     }
 
-    pub fn init(symbol: &str, ohlcv: Vec<Candle>, timeframe: &str) -> Self {
+    pub fn init(symbol: Option<&str>, ohlcv: Vec<Candle>, timeframe: &str) -> Self {
         let ohlcv_wrapped = ohlcv[..OHLCV_LEN].try_into().unwrap();
         let timeframe = Timeframe::from_str(timeframe).unwrap().seconds().unwrap();
         let (hour_sin, hour_cos, minute_sin, minute_cos) = TimeRequest::new().get_time().as_tuple();
@@ -177,7 +177,7 @@ impl DataMap {
         features.insert("minute_cos".to_string(), minute_cos);
 
         DataMap {
-            symbol: symbol.to_string(),
+            symbol: symbol.map(|s| s.to_string()),
             data: features,
         }
     }
@@ -193,7 +193,11 @@ impl DataMap {
         self
     }
 
-    pub fn from_slice(symbol: &str, timeframe: &str, candles: &[CandleWithTimestamp]) -> Self {
+    pub fn from_slice(
+        symbol: Option<&str>,
+        timeframe: &str,
+        candles: &[CandleWithTimestamp],
+    ) -> Self {
         let ohlcv: Vec<Candle> = candles.iter().map(|candle| candle.to_candle()).collect();
         let time =
             TimeRequest::from_timestamp(candles[(candles.len() - 1) - 1].timestamp).get_time();
@@ -203,7 +207,7 @@ impl DataMap {
 
     pub fn generate_accuracy() -> Self {
         Self {
-            symbol: "".to_string(),
+            symbol: None,
             data: BTreeMap::from([
                 ("future_volatility_confidence".to_string(), 100.0),
                 ("future_volume_confidence".to_string(), 100.0),
@@ -224,7 +228,7 @@ impl DataMap {
 
     pub fn generate_predictions(targets: DataMap) -> Self {
         Self {
-            symbol: "".to_string(),
+            symbol: None,
             data: BTreeMap::from([
                 (
                     "future_volatility_pred".to_string(),
@@ -328,16 +332,14 @@ impl DataMap {
 impl Add for DataMap {
     type Output = DataMap;
 
-    fn add(self, rhs: DataMap) -> Self::Output {
-        let mut output = self;
-        for (key, value) in rhs.data {
-            output.data.insert(key, value);
-        }
-        output
+    fn add(mut self, rhs: DataMap) -> Self::Output {
+        self.data.extend(rhs.data);
+        self.symbol = self.symbol.or(rhs.symbol);
+
+        self
     }
 }
 
-#[derive(Debug, Clone, Copy)]
 pub enum Timeframe {
     M1,
     M3,

@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use sqlx::PgPool;
@@ -59,7 +59,7 @@ impl LoaderCycle {
         }
     }
 
-    pub async fn init(symbol: String, client: CCXTClient) -> Result<Self, anyhow::Error> {
+    pub async fn init(symbol: String, client: CCXTClient) -> Result<Self> {
         let pool = PgPool::connect(&load_env().database_url).await?;
         Ok(Self::new(symbol, client, pool))
     }
@@ -115,7 +115,7 @@ impl LoaderCycle {
                 CyclePhase::Active => {
                     let last_candles = self.last_candles.clone().unwrap();
                     let targets = DataMap::new(
-                        self.get_symbol().to_string(),
+                        Some(self.get_symbol().to_string()),
                         collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
                     );
 
@@ -181,7 +181,7 @@ impl LoaderCycle {
             let current_close = all_candles[i - 2].close;
 
             let candles = DataMap::from_slice(
-                &self.symbol,
+                Some(&self.symbol),
                 &self.config.exchange.timeframes.main_timeframe,
                 window,
             );
@@ -194,8 +194,8 @@ impl LoaderCycle {
                         .collect::<Vec<Candle>>();
                     let last_candles = self.last_candles.clone().unwrap();
                     let targets = DataMap::new(
-                        self.get_symbol().to_string(),
-                        collect_targets(ohlcv.try_into().unwrap()),
+                        Some(self.get_symbol().to_string()),
+                        collect_targets(ohlcv.as_slice().try_into().unwrap()),
                     );
 
                     self.save_data(last_candles + targets, &self.pool).await?;
@@ -220,7 +220,7 @@ impl LoaderCycle {
     }
 
     // --- Methods ---
-    async fn save_data(&self, data: DataMap, pool: &PgPool) -> Result<(), anyhow::Error> {
+    async fn save_data(&self, data: DataMap, pool: &PgPool) -> Result<()> {
         if data.has_target() {
             SQLStandart::Dummy.insert_row(pool, data).await?;
             Ok(())

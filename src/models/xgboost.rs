@@ -1,11 +1,10 @@
-use std::collections::HashMap;
-
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use log::warn;
 use smartcore::linalg::basic::arrays::Array;
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::xgboost::{XGRegressor, XGRegressorParameters};
 use sqlx::PgPool;
+use std::collections::HashMap;
 use tokio::sync::mpsc;
 
 use crate::data::data_interfaces::DataMap;
@@ -107,7 +106,7 @@ impl Model for XGBoost {
         y_train: &Vec<f64>,
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
-    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
+    ) -> Result<Option<HashMap<String, f64>>> {
         // debug!("tx len: {:?}", x_train);
         // debug!("ty len: {:?}", y_train.len());
 
@@ -147,7 +146,7 @@ impl Model for XGBoost {
         Ok(None)
     }
 
-    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
+    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>> {
         let model = self
             .model
             .as_ref()
@@ -158,11 +157,7 @@ impl Model for XGBoost {
         Ok(prediction)
     }
 
-    async fn handle_mistakes(
-        &mut self,
-        true_data: DataMap,
-        predicted_data: DataMap,
-    ) -> Result<(), anyhow::Error> {
+    async fn handle_mistakes(&mut self, true_data: DataMap, predicted_data: DataMap) -> Result<()> {
         let true_data = true_data.to_vec();
         let predicted_data = predicted_data.to_vec();
         let correlation = corr(&true_data, &predicted_data);

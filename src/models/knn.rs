@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use log::error;
 use smartcore::algorithm::neighbour::KNNAlgorithmName;
 use smartcore::api::{Transformer, UnsupervisedEstimator};
@@ -12,6 +10,7 @@ use smartcore::neighbors::knn_classifier::{KNNClassifier, KNNClassifierParameter
 use smartcore::neighbors::knn_regressor::{KNNRegressor, KNNRegressorParameters};
 use smartcore::preprocessing::numerical::StandardScaler;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use tokio::sync::mpsc;
 
 use crate::data::data_interfaces::DataMap;
@@ -122,7 +121,7 @@ impl Model for KNN {
         y_train: &Vec<f64>,
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
-    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
+    ) -> Result<Option<HashMap<String, f64>>> {
         let algorithm: &str = &self.algorithm;
         let weight: &str = &self.weight;
         let algorithm_value = match algorithm {
@@ -175,7 +174,7 @@ impl Model for KNN {
         Ok(None)
     }
 
-    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error> {
+    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>> {
         let prediction = match self.task_type {
             TaskType::Regression => {
                 let model = self
@@ -316,11 +315,7 @@ impl Model for KNN {
         (x_train_final, x_val_final)
     }
 
-    async fn handle_mistakes(
-        &mut self,
-        true_data: DataMap,
-        predicted_data: DataMap,
-    ) -> Result<(), anyhow::Error> {
+    async fn handle_mistakes(&mut self, true_data: DataMap, predicted_data: DataMap) -> Result<()> {
         let true_data = true_data.to_vec();
         let predicted_data = predicted_data.to_vec();
         let correlation = corr(&true_data, &predicted_data);

@@ -5,7 +5,7 @@ use crate::engine::actors::prediction::PredictionsCommand;
 use crate::engine::cycles::manager::SupervisorCommand;
 use crate::engine::utils::config::load_config::load_config;
 
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use axum::Router;
 use axum::routing::{delete, get, post};
 use tokio::sync::mpsc;
@@ -20,7 +20,7 @@ impl Api {
         supervisor_handle: mpsc::Sender<SupervisorCommand>,
         counter_handle: mpsc::Sender<CounterCommand>,
         prediction_handle: mpsc::Sender<PredictionsCommand>,
-    ) -> Result<Self, anyhow::Error> {
+    ) -> Result<Self> {
         let config = load_config();
         let listener = tokio::net::TcpListener::bind(&config.backend.listener)
             .await

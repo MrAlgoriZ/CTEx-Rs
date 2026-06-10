@@ -8,6 +8,7 @@ use crate::engine::cycles::manager::CycleManager;
 use crate::engine::utils::config::load_config::{ensure_config_exists, load_config};
 use crate::engine::utils::log::setup_logger;
 
+use anyhow::Result;
 use dotenvy::dotenv;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -20,7 +21,7 @@ static MODEL_CONFIG_PATH: LazyLock<PathBuf> =
     LazyLock::new(|| ["config", "model.yaml"].iter().collect());
 
 #[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+async fn main() -> Result<()> {
     setup_logger()?;
 
     ensure_config_exists(vec![&*CONFIG_PATH, &*MODEL_CONFIG_PATH]);

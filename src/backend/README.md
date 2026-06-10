@@ -2,7 +2,7 @@
 
 ## `GET /`
 
-**Описание:** Возвращает структуру API.
+**Description:** Returns the API structure
 
 ```bash
 curl -X GET http://localhost:PORT/
@@ -18,7 +18,7 @@ curl -X GET http://localhost:PORT/health
 
 # **CYCLES**
 
-## **1. Список активных циклов**
+## **1. Active cycles list**
 
 ### `GET /cycles`
 
@@ -26,11 +26,11 @@ curl -X GET http://localhost:PORT/health
 curl -X GET http://localhost:PORT/cycles
 ```
 
-## **2. Запуск цикла (cycle_add)**
+## **2. Cycle start (cycle_add)**
 
 ### `POST /cycles`
 
-Тело запроса:
+Request body:
 
 ```json
 {
@@ -40,7 +40,7 @@ curl -X GET http://localhost:PORT/cycles
 }
 ```
 
-Пример вызова:
+Request example:
 
 ```bash
 curl -X POST http://localhost:PORT/cycles \
@@ -52,11 +52,11 @@ curl -X POST http://localhost:PORT/cycles \
       }'
 ```
 
-## **3. Остановка одного цикла (cycle_stop)**
+## **3. Stop single cycle (cycle_stop)**
 
 ### `DELETE /cycles/{symbol}`
 
-Тело запроса:
+Request body:
 
 ```json
 {
@@ -64,7 +64,7 @@ curl -X POST http://localhost:PORT/cycles \
 }
 ```
 
-Пример:
+Request example:
 
 ```bash
 curl -X DELETE http://localhost:PORT/cycles/BTCUSDT \
@@ -72,11 +72,11 @@ curl -X DELETE http://localhost:PORT/cycles/BTCUSDT \
   -d '{ "password": "secret" }'
 ```
 
-## **4. Остановка всех циклов (cycles_stop_all)**
+## **4. Stop all cycles (cycles_stop_all)**
 
 ### `DELETE /cycles`
 
-Тело запроса:
+Request body:
 
 ```json
 {
@@ -84,7 +84,7 @@ curl -X DELETE http://localhost:PORT/cycles/BTCUSDT \
 }
 ```
 
-Пример:
+Request example:
 
 ```bash
 curl -X DELETE http://localhost:PORT/cycles \
@@ -96,8 +96,8 @@ curl -X DELETE http://localhost:PORT/cycles \
 
 # **ACCURACY**
 
-Все методы accuracy поддерживают **необязательный параметр `?window=N`**.
-Если `window` не указан — используется дефолт из конфига.
+All accuracy methods support the optional parameter `?window=N`.
+If `window` is not specified, the default from the config is used.
 
 ## **1. Total accuracy**
 
@@ -107,13 +107,13 @@ curl -X DELETE http://localhost:PORT/cycles \
 curl -X GET http://localhost:PORT/accuracy/total
 ```
 
-Или:
+or:
 
 ```bash
 curl -X GET "http://localhost:PORT/accuracy/total?window=100"
 ```
 
-## **2. Accuracy одного токена**
+## **2. Accuracy of single token**
 
 ### `GET /accuracy/{symbol}`
 
@@ -121,13 +121,13 @@ curl -X GET "http://localhost:PORT/accuracy/total?window=100"
 curl -X GET http://localhost:PORT/accuracy/BTCUSDT
 ```
 
-Или с window:
+or:
 
 ```bash
 curl -X GET "http://localhost:PORT/accuracy/BTCUSDT?window=100"
 ```
 
-## **3. Accuracy всех активных токенов**
+## **3. Accuracy of all active tokens**
 
 ### `GET /accuracy`
 
@@ -135,13 +135,17 @@ curl -X GET "http://localhost:PORT/accuracy/BTCUSDT?window=100"
 curl -X GET http://localhost:PORT/accuracy
 ```
 
-или:
+or:
 
 ```bash
 curl -X GET "http://localhost:PORT/accuracy?window=100"
 ```
 
-## **4. Сохраение на сервер графика точности**
+---
+
+# **PLOTS**
+
+Save plots with accuracy to server
 
 ### `POST /plot/{symbol}`
 

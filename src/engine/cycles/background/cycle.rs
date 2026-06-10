@@ -3,7 +3,7 @@ use crate::engine::actors::service::ServiceCommand;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
 
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use chrono::Utc;
 use log::info;
 use std::time::Duration;
@@ -20,7 +20,7 @@ impl BackgroundCycle {
         BackgroundCycle { config, servers_tx }
     }
 
-    pub async fn run(self) -> Result<(), anyhow::Error> {
+    pub async fn run(self) -> Result<()> {
         info!("{}Background cycle has started!", Fore::YELLOW.as_str(),);
         loop {
             self.wait_for_next_interval().await?;
@@ -45,7 +45,7 @@ impl BackgroundCycle {
         }
     }
 
-    async fn wait_for_next_interval(&self) -> Result<(), anyhow::Error> {
+    async fn wait_for_next_interval(&self) -> Result<()> {
         let timeframe = Timeframe::from_str(&self.config.exchange.timeframes.background_timeframe)
             .expect("Invalid timeframe in config!");
 

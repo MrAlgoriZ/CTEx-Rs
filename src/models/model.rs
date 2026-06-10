@@ -1,6 +1,5 @@
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use chrono::Utc;
-
 use log::{debug, error, info};
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::{accuracy, mean_absolute_error, mean_squared_error, r2};
@@ -35,10 +34,7 @@ pub trait ModelDependencies {
 
 #[async_trait::async_trait]
 pub trait Model: ModelDependencies {
-    fn load_data(
-        &mut self,
-        data: Vec<DataMap>,
-    ) -> Result<(DenseMatrix<f64>, Vec<f64>), anyhow::Error> {
+    fn load_data(&mut self, data: Vec<DataMap>) -> Result<(DenseMatrix<f64>, Vec<f64>)> {
         let n_samples = data.len();
         debug!("n_samples: {}", &n_samples);
         if n_samples == 0 {
@@ -48,7 +44,11 @@ pub trait Model: ModelDependencies {
         let feature_len = data[0].get_only_features().iter().len();
         debug!("feature_len: {}", &feature_len);
 
-        let symbols: Vec<&str> = data.iter().map(|d| d.symbol.as_str()).collect();
+        let symbols: Vec<&str> = data
+            .iter()
+            .map(|d| d.symbol.as_deref().unwrap_or(""))
+            .collect();
+
         let unique_symbols: Vec<&str> = {
             let mut set = BTreeSet::new();
             symbols.iter().for_each(|s| {
@@ -89,6 +89,7 @@ pub trait Model: ModelDependencies {
                 .values()
                 .into_iter()
                 .any(|&v| v.is_nan());
+
             if has_nan_features {
                 skipped_nan_features += 1;
                 continue;
@@ -96,7 +97,12 @@ pub trait Model: ModelDependencies {
 
             let mut full_row = vec![0.0; n_symbols + feature_len];
 
-            if let Some(&idx) = symbol_to_idx.get(row.symbol.as_str()) {
+            if let Some(&idx) = symbol_to_idx.get(
+                row.symbol
+                    .as_ref()
+                    .ok_or(anyhow!("Symbol is None"))?
+                    .as_str(),
+            ) {
                 full_row[idx] = 1.0;
             }
 
@@ -147,7 +153,7 @@ pub trait Model: ModelDependencies {
         x: DenseMatrix<f64>,
         y_target: Vec<f64>,
         train_ratio: f32,
-    ) -> Result<(DenseMatrix<f64>, DenseMatrix<f64>, Vec<f64>, Vec<f64>), anyhow::Error> {
+    ) -> Result<(DenseMatrix<f64>, DenseMatrix<f64>, Vec<f64>, Vec<f64>)> {
         let (x_train, x_val, y_train, y_val) = train_test_split(
             &x,
             &y_target,
@@ -160,11 +166,7 @@ pub trait Model: ModelDependencies {
         Ok((x_train, x_val, y_train, y_val))
     }
 
-    fn evaluate(
-        &self,
-        x_val: &DenseMatrix<f64>,
-        y_val: &Vec<f64>,
-    ) -> Result<HashMap<String, f64>, anyhow::Error> {
+    fn evaluate(&self, x_val: &DenseMatrix<f64>, y_val: &Vec<f64>) -> Result<HashMap<String, f64>> {
         if !self.check_model_trained() {
             return Err(anyhow!("Model not trained yet"));
         }
@@ -316,8 +318,8 @@ pub trait Model: ModelDependencies {
         Ok(metrics)
     }
 
-    async fn predict(&self, data: DataMap) -> Result<DataMap, anyhow::Error> {
-        let symbol_name = data.symbol.clone();
+    async fn predict(&self, data: DataMap) -> Result<DataMap> {
+        let symbol_name = data.symbol.clone().ok_or(anyhow!("Symbol is None"))?;
         let x = data
             .to_standart(self.get_standart())
             .get_only_features()
@@ -373,12 +375,12 @@ pub trait Model: ModelDependencies {
         }
 
         Ok(DataMap::new(
-            symbol_name,
+            Some(symbol_name),
             BTreeMap::from([(self.get_target_name().to_string(), proba[0])]),
         ))
     }
 
-    async fn train(&mut self) -> Result<Option<HashMap<String, f64>>, anyhow::Error> {
+    async fn train(&mut self) -> Result<Option<HashMap<String, f64>>> {
         let pool = self
             .get_pool()
             .ok_or_else(|| anyhow!("Pool is not available"))?;
@@ -411,7 +413,7 @@ pub trait Model: ModelDependencies {
         Ok(result)
     }
 
-    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>, anyhow::Error>;
+    fn model_predict(&self, values: &DenseMatrix<f64>) -> Result<Vec<f64>>;
 
     fn model_fit(
         &mut self,
@@ -419,7 +421,7 @@ pub trait Model: ModelDependencies {
         y_train: &Vec<f64>,
         x_val: Option<&DenseMatrix<f64>>,
         y_val: Option<&Vec<f64>>,
-    ) -> Result<Option<HashMap<String, f64>>, anyhow::Error>;
+    ) -> Result<Option<HashMap<String, f64>>>;
 
     fn normalize(
         &self,
@@ -429,11 +431,7 @@ pub trait Model: ModelDependencies {
         (x_train, x_val)
     }
 
-    async fn handle_mistakes(
-        &mut self,
-        true_data: DataMap,
-        predicted_data: DataMap,
-    ) -> Result<(), anyhow::Error>;
+    async fn handle_mistakes(&mut self, true_data: DataMap, predicted_data: DataMap) -> Result<()>;
 }
 
 pub fn init_single_model(
