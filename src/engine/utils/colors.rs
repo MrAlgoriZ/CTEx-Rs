@@ -4,11 +4,11 @@ use crate::engine::utils::config::load_config::load_config;
 use std::sync::OnceLock;
 
 pub enum Fore {
-    RED,
-    GREEN,
-    YELLOW,
-    BLUE,
-    WHITE,
+    Red,
+    Green,
+    Yellow,
+    Blue,
+    White,
 }
 
 impl Fore {
@@ -19,11 +19,11 @@ impl Fore {
 
         match mode {
             PrintMode::Print => match self {
-                Fore::RED => "\x1b[31m",
-                Fore::GREEN => "\x1b[32m",
-                Fore::YELLOW => "\x1b[33m",
-                Fore::BLUE => "\x1b[34m",
-                Fore::WHITE => "\x1b[37m",
+                Fore::Red => "\x1b[31m",
+                Fore::Green => "\x1b[32m",
+                Fore::Yellow => "\x1b[33m",
+                Fore::Blue => "\x1b[34m",
+                Fore::White => "\x1b[37m",
             },
             PrintMode::Log => "",
         }

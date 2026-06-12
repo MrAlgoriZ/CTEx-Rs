@@ -117,14 +117,14 @@ pub trait Model: ModelDependencies {
         if self.get_config().prints.model.skipped_values {
             debug!(
                 "{}[{}] Skipped rows: {} (NaN in target), {} (NaN in features)",
-                Fore::YELLOW.as_str(),
+                Fore::Yellow.as_str(),
                 Utc::now().format("%H:%M:%S"),
                 skipped_nan_target,
                 skipped_nan_features
             );
             debug!(
                 "{}[{}] Remaining {} valid rows from {}",
-                Fore::GREEN.as_str(),
+                Fore::Green.as_str(),
                 Utc::now().format("%H:%M:%S"),
                 x_rows.len(),
                 n_samples
@@ -166,7 +166,7 @@ pub trait Model: ModelDependencies {
         Ok((x_train, x_val, y_train, y_val))
     }
 
-    fn evaluate(&self, x_val: &DenseMatrix<f64>, y_val: &Vec<f64>) -> Result<HashMap<String, f64>> {
+    fn evaluate(&self, x_val: &DenseMatrix<f64>, y_val: &[f64]) -> Result<HashMap<String, f64>> {
         if !self.check_model_trained() {
             return Err(anyhow!("Model not trained yet"));
         }
@@ -199,28 +199,28 @@ pub trait Model: ModelDependencies {
                 if self.get_config().prints.model.metrics {
                     info!(
                         "{}[{}] MAE for {}: {:.3} pp",
-                        Fore::WHITE.as_str(),
+                        Fore::White.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         mae
                     );
                     info!(
                         "{}[{}] MSE for {}: {:.3} (pp²)",
-                        Fore::WHITE.as_str(),
+                        Fore::White.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         mse
                     );
                     info!(
                         "{}[{}] R2 for {}: {:.3}",
-                        Fore::WHITE.as_str(),
+                        Fore::White.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         r2_score
                     );
                     info!(
                         "{}[{}] Acc on threshold {} for {}: {:.3}%",
-                        Fore::WHITE.as_str(),
+                        Fore::White.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_config().behaviour.success_threshold,
                         self.get_name(),
@@ -228,7 +228,7 @@ pub trait Model: ModelDependencies {
                     );
                     info!(
                         "{}[{}] RMSE for {}: {:.3} pp",
-                        Fore::WHITE.as_str(),
+                        Fore::White.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         rmse
@@ -240,7 +240,7 @@ pub trait Model: ModelDependencies {
                 if self.get_config().prints.model.metrics {
                     info!(
                         "{}[{}] Acc on threshold {} for {}: {:.3}%",
-                        Fore::WHITE.as_str(),
+                        Fore::White.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_config().behaviour.success_threshold,
                         self.get_name(),
@@ -253,7 +253,7 @@ pub trait Model: ModelDependencies {
                 if self.get_config().prints.model.metrics {
                     info!(
                         "{}[{}] MAE for {}: {:.3} pp",
-                        Fore::WHITE.as_str(),
+                        Fore::White.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         mae
@@ -265,7 +265,7 @@ pub trait Model: ModelDependencies {
                 if self.get_config().prints.model.metrics {
                     info!(
                         "{}[{}] MSE for {}: {:.3} pp",
-                        Fore::WHITE.as_str(),
+                        Fore::White.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         mse
@@ -277,7 +277,7 @@ pub trait Model: ModelDependencies {
                 if self.get_config().prints.model.metrics {
                     info!(
                         "{}[{}] R2 for {}: {:.3}",
-                        Fore::WHITE.as_str(),
+                        Fore::White.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         r2_score
@@ -289,7 +289,7 @@ pub trait Model: ModelDependencies {
                 if self.get_config().prints.model.metrics {
                     info!(
                         "{}[{}] RMSE for {}: {:.3} pp",
-                        Fore::WHITE.as_str(),
+                        Fore::White.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         rmse
@@ -305,7 +305,7 @@ pub trait Model: ModelDependencies {
                 if self.get_config().prints.model.metrics {
                     info!(
                         "{}[{}] Accuracy for {}: {:.3} pp",
-                        Fore::WHITE.as_str(),
+                        Fore::White.as_str(),
                         Utc::now().format("%H:%M:%S"),
                         self.get_name(),
                         acc

@@ -12,11 +12,10 @@ pub fn parse_symbol(symbol: &str) -> Option<String> {
         "mexc" | "bybit" | "bitget" | "bingx" => Some(symbol.to_string()),
         _ => {
             for quote in QUOTES {
-                if let Some(base) = symbol.strip_suffix(quote) {
-                    if !base.is_empty() {
+                if let Some(base) = symbol.strip_suffix(quote)
+                    && !base.is_empty() {
                         return Some(format!("{}/{}", base, quote));
                     }
-                }
             }
             None
         }

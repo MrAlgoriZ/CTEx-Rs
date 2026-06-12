@@ -86,11 +86,8 @@ impl ModelDependencies for DecisionTree {
 
     fn check_model_trained(&self) -> bool {
         match self.regression_model.as_ref() {
-            Some(_) => return true,
-            None => match self.classification_model.as_ref() {
-                Some(_) => return true,
-                None => return false,
-            },
+            Some(_) => true,
+            None => self.classification_model.as_ref().is_some(),
         }
     }
 

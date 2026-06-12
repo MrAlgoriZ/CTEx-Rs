@@ -69,7 +69,7 @@ impl SQLStandart {
         }
 
         q.execute(pool).await.map_err(|e| {
-            error!("{}Data not saved to database: {:?}", Fore::RED.as_str(), e);
+            error!("{}Data not saved to database: {:?}", Fore::Red.as_str(), e);
             anyhow!(format!("{e}"))
         })?;
 

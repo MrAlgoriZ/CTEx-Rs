@@ -76,10 +76,7 @@ impl ModelDependencies for Linear {
     }
 
     fn check_model_trained(&self) -> bool {
-        match self.model.as_ref() {
-            Some(_) => return true,
-            None => return false,
-        }
+        self.model.as_ref().is_some()
     }
 
     fn get_symbol_columns(&self) -> &Option<Vec<String>> {
@@ -177,8 +174,8 @@ impl Model for Linear {
             return (x_train_scaled, x_val_scaled);
         }
 
-        let train_raw: Vec<f64> = x_train.iter().map(|v| v.clone()).collect();
-        let val_raw: Vec<f64> = x_val.iter().map(|v| v.clone()).collect();
+        let train_raw: Vec<f64> = x_train.iter().copied().collect();
+        let val_raw: Vec<f64> = x_val.iter().copied().collect();
 
         let mut symbol_train_data = Vec::with_capacity(n_rows_train * n_symbols);
         let mut numeric_train_data = Vec::with_capacity(n_rows_train * (n_cols - n_symbols));
@@ -236,20 +233,20 @@ impl Model for Linear {
 
         for i in 0..n_rows_train {
             for j in 0..n_symbols {
-                train_final_data.push((symbol_train_data[i * n_symbols + j]).clone());
+                train_final_data.push(symbol_train_data[i * n_symbols + j] );
             }
             for j in 0..(n_cols - n_symbols) {
                 train_final_data
-                    .push((numeric_train_scaled_raw[i * (n_cols - n_symbols) + j]).clone());
+                    .push(*(numeric_train_scaled_raw[i * (n_cols - n_symbols) + j]));
             }
         }
 
         for i in 0..n_rows_val {
             for j in 0..n_symbols {
-                val_final_data.push((symbol_val_data[i * n_symbols + j]).clone());
+                val_final_data.push(symbol_val_data[i * n_symbols + j] );
             }
             for j in 0..(n_cols - n_symbols) {
-                val_final_data.push((numeric_val_scaled_raw[i * (n_cols - n_symbols) + j]).clone());
+                val_final_data.push(*(numeric_val_scaled_raw[i * (n_cols - n_symbols) + j]));
             }
         }
 

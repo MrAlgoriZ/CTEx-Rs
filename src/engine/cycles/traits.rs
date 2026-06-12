@@ -30,7 +30,7 @@ pub trait Cycle: CycleGetters {
     fn print_volatility_status(&self, volatility: f64) {
         debug!(
             "{}Volatility on {} is {:.3}",
-            Fore::YELLOW.as_str(),
+            Fore::Yellow.as_str(),
             self.get_symbol(),
             volatility
         );
@@ -104,7 +104,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             self.change_last_predictions(pred.clone());
             pred.get("position_size")
                 .ok_or(anyhow!("Model must predict position size!"))
-                .map(|v| *v)
+                .copied()
         } else {
             Err(anyhow!("Data to prediction should not have the target"))
         }
@@ -145,7 +145,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
     ) -> Result<()> {
         if true_data.has_target() {
             SQLStandart::Dummy
-                .insert_row(&self.get_pool(), true_data.clone())
+                .insert_row(self.get_pool(), true_data.clone())
                 .await?;
 
             let (tx, rx) = oneshot::channel();
@@ -157,22 +157,22 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                 })
                 .await;
 
-            if let Some(mtx) = model_tx {
-                if let Ok(shifted_acc) = rx.await {
-                    if shifted_acc.unwrap_or(0.0) == 0.0 {
-                        let targets =
-                            DataMap::new(true_data.symbol.clone(), true_data.get_only_targets());
-                        let (tx, rx) = oneshot::channel();
-                        let _ = mtx
-                            .send(ModelCommand::HandleMistakes {
-                                true_data: targets,
-                                predicted_data,
-                                respond_to: tx,
-                            })
-                            .await;
-                        let _ = rx.await;
-                    }
-                }
+            let rx_result = rx.await;
+
+            if let Some(mtx) = model_tx
+                && let Ok(shifted_acc) = rx_result
+                && shifted_acc.unwrap_or(0.0) == 0.0
+            {
+                let targets = DataMap::new(true_data.symbol.clone(), true_data.get_only_targets());
+                let (tx, rx) = oneshot::channel();
+                let _ = mtx
+                    .send(ModelCommand::HandleMistakes {
+                        true_data: targets,
+                        predicted_data,
+                        respond_to: tx,
+                    })
+                    .await;
+                let _ = rx.await;
             }
             Ok(())
         } else {
@@ -210,7 +210,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             info!(
                 "{} {}L ACC {:.2}% | G ACC {:.2}%",
                 self.get_print_symbol(),
-                Fore::WHITE.as_str(),
+                Fore::White.as_str(),
                 local_acc,
                 global_acc
             );

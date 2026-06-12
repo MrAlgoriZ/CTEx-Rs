@@ -49,8 +49,8 @@ impl Cycle for LoaderCycle {}
 impl LoaderCycle {
     fn new(symbol: String, client: CCXTClient, pool: PgPool) -> Self {
         LoaderCycle {
-            print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
-            symbol: symbol,
+            print_symbol: format!("{}{}:", Fore::Blue.as_str(), symbol),
+            symbol,
             last_candles: None,
             last_close: None,
             config: load_config(),
@@ -65,7 +65,7 @@ impl LoaderCycle {
     }
 
     pub async fn run(mut self) -> Result<(), CycleError> {
-        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+        if self.client.test_symbol(&self.symbol).await.is_err() {
             return Err(CycleError::SymbolDoesNotExist);
         }
 
@@ -111,30 +111,27 @@ impl LoaderCycle {
                 None
             };
 
-            match phase {
-                CyclePhase::Active => {
-                    let last_candles = self.last_candles.clone().unwrap();
-                    let targets = DataMap::new(
-                        Some(self.get_symbol().to_string()),
-                        collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
+            if let CyclePhase::Active = phase {
+                let last_candles = self.last_candles.clone().unwrap();
+                let targets = DataMap::new(
+                    Some(self.get_symbol().to_string()),
+                    collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
+                );
+
+                if self.config.prints.cycle.target {
+                    let target = targets.get("position_size").unwrap();
+
+                    debug!(
+                        "{} {}Position size: {:.5}",
+                        self.print_symbol,
+                        Fore::White.as_str(),
+                        target,
                     );
-
-                    if self.config.prints.cycle.target {
-                        let target = targets.get("position_size").unwrap();
-
-                        debug!(
-                            "{} {}Position size: {:.5}",
-                            self.print_symbol,
-                            Fore::WHITE.as_str(),
-                            target,
-                        );
-                    }
-
-                    self.save_data(last_candles + targets, &self.pool)
-                        .await
-                        .unwrap();
                 }
-                _ => {}
+
+                self.save_data(last_candles + targets, &self.pool)
+                    .await
+                    .unwrap();
             }
 
             phase = CyclePhase::Active;
@@ -144,14 +141,14 @@ impl LoaderCycle {
     }
 
     pub async fn run_backtest(mut self) -> Result<(), CycleError> {
-        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+        if self.client.test_symbol(&self.symbol).await.is_err() {
             return Err(CycleError::SymbolDoesNotExist);
         }
 
         println!(
             "{} {}Backtest has started!\n",
             self.print_symbol,
-            Fore::YELLOW.as_str()
+            Fore::Yellow.as_str()
         );
 
         let all_candles: Vec<CandleWithTimestamp> = self
@@ -186,21 +183,18 @@ impl LoaderCycle {
                 window,
             );
 
-            match phase {
-                CyclePhase::Active => {
-                    let ohlcv = window[..OHLCV_LEN]
-                        .iter()
-                        .map(|candle| candle.to_candle())
-                        .collect::<Vec<Candle>>();
-                    let last_candles = self.last_candles.clone().unwrap();
-                    let targets = DataMap::new(
-                        Some(self.get_symbol().to_string()),
-                        collect_targets(ohlcv.as_slice().try_into().unwrap()),
-                    );
+            if let CyclePhase::Active = phase {
+                let ohlcv = window[..OHLCV_LEN]
+                    .iter()
+                    .map(|candle| candle.to_candle())
+                    .collect::<Vec<Candle>>();
+                let last_candles = self.last_candles.clone().unwrap();
+                let targets = DataMap::new(
+                    Some(self.get_symbol().to_string()),
+                    collect_targets(ohlcv.as_slice().try_into().unwrap()),
+                );
 
-                    self.save_data(last_candles + targets, &self.pool).await?;
-                }
-                _ => {}
+                self.save_data(last_candles + targets, &self.pool).await?;
             }
 
             phase = CyclePhase::Active;
@@ -212,9 +206,9 @@ impl LoaderCycle {
         pb.finish_with_message(format!(
             "{} {}Backtest has finished!",
             self.print_symbol,
-            Fore::GREEN.as_str()
+            Fore::Green.as_str()
         ));
-        println!("");
+        println!();
 
         Ok(())
     }

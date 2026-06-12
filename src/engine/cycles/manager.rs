@@ -272,14 +272,11 @@ impl CycleSupervisor {
 
         match cycle_type {
             CycleType::Loader => {
-                match config.model.model_struct {
-                    ModelStructure::Ensemble => {
-                        warn!(
-                            "{}LoaderCycle not for Ensemble model type. Use LoaderWMCycle instead!",
-                            Fore::YELLOW.as_str()
-                        );
-                    }
-                    _ => {}
+                if let ModelStructure::Ensemble = config.model.model_struct {
+                    warn!(
+                        "{}LoaderCycle not for Ensemble model type. Use LoaderWMCycle instead!",
+                        Fore::Yellow.as_str()
+                    );
                 }
                 let cycle = LoaderCycle::init(symbol.to_string(), client)
                     .await
@@ -287,21 +284,16 @@ impl CycleSupervisor {
                 sleep(Duration::from_secs(10)).await;
 
                 match config.runtime.runtime_type {
-                    RuntimeType::Realtime => cycle.run().await.map_err(CycleError::from)?,
-                    RuntimeType::Backtest => {
-                        cycle.run_backtest().await.map_err(CycleError::from)?
-                    }
+                    RuntimeType::Realtime => cycle.run().await?,
+                    RuntimeType::Backtest => cycle.run_backtest().await?,
                 }
             }
             CycleType::Loaderwm => {
-                match config.model.model_struct {
-                    ModelStructure::Single => {
-                        warn!(
-                            "{}LoaderWMCycle not for Single model type. Use LoaderCycle instead!",
-                            Fore::YELLOW.as_str()
-                        );
-                    }
-                    _ => {}
+                if let ModelStructure::Single = config.model.model_struct {
+                    warn!(
+                        "{}LoaderWMCycle not for Single model type. Use LoaderCycle instead!",
+                        Fore::Yellow.as_str()
+                    );
                 }
                 let cycle = LoaderWMCycle::init(symbol.to_string(), client)
                     .await
@@ -309,14 +301,16 @@ impl CycleSupervisor {
                 sleep(Duration::from_secs(10)).await;
 
                 match config.runtime.runtime_type {
-                    RuntimeType::Realtime => cycle
-                        .run(counter_tx, model_tx.as_ref(), chain_tx.as_ref())
-                        .await
-                        .map_err(CycleError::from)?,
-                    RuntimeType::Backtest => cycle
-                        .run_backtest(model_tx.as_ref(), chain_tx.as_ref())
-                        .await
-                        .map_err(CycleError::from)?,
+                    RuntimeType::Realtime => {
+                        cycle
+                            .run(counter_tx, model_tx.as_ref(), chain_tx.as_ref())
+                            .await?
+                    }
+                    RuntimeType::Backtest => {
+                        cycle
+                            .run_backtest(model_tx.as_ref(), chain_tx.as_ref())
+                            .await?
+                    }
                 }
             }
             CycleType::Training => {
@@ -329,14 +323,10 @@ impl CycleSupervisor {
                     CycleError::AnyhowError(anyhow!("Model not initialized for Training cycle!"))
                 })?;
                 match config.runtime.runtime_type {
-                    RuntimeType::Realtime => cycle
-                        .run(counter_tx, model, chain_tx.as_ref())
-                        .await
-                        .map_err(CycleError::from)?,
-                    RuntimeType::Backtest => cycle
-                        .run_backtest(model, chain_tx.as_ref())
-                        .await
-                        .map_err(CycleError::from)?,
+                    RuntimeType::Realtime => {
+                        cycle.run(counter_tx, model, chain_tx.as_ref()).await?
+                    }
+                    RuntimeType::Backtest => cycle.run_backtest(model, chain_tx.as_ref()).await?,
                 }
             }
             CycleType::Sandbox => {
@@ -349,14 +339,10 @@ impl CycleSupervisor {
                     CycleError::AnyhowError(anyhow!("Model not initialized for Sandbox cycle!"))
                 })?;
                 match config.runtime.runtime_type {
-                    RuntimeType::Realtime => cycle
-                        .run(counter_tx, model, chain_tx.as_ref())
-                        .await
-                        .map_err(CycleError::from)?,
-                    RuntimeType::Backtest => cycle
-                        .run_backtest(model, chain_tx.as_ref())
-                        .await
-                        .map_err(CycleError::from)?,
+                    RuntimeType::Realtime => {
+                        cycle.run(counter_tx, model, chain_tx.as_ref()).await?
+                    }
+                    RuntimeType::Backtest => cycle.run_backtest(model, chain_tx.as_ref()).await?,
                 }
             }
         }
@@ -409,7 +395,7 @@ impl CycleManager {
         let supervisor_task = tokio::spawn(supervisor.run());
 
         let background_cycle = BackgroundCycle::new(load_config(), servers_tx);
-        let _ = tokio::spawn(background_cycle.run());
+        tokio::spawn(background_cycle.run());
 
         Self {
             config,

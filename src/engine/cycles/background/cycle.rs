@@ -21,7 +21,7 @@ impl BackgroundCycle {
     }
 
     pub async fn run(self) -> Result<()> {
-        info!("{}Background cycle has started!", Fore::YELLOW.as_str(),);
+        info!("{}Background cycle has started!", Fore::Yellow.as_str(),);
         loop {
             self.wait_for_next_interval().await?;
 

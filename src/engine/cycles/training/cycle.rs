@@ -68,8 +68,8 @@ impl CycleWithModel for TrainingCycle {}
 impl TrainingCycle {
     fn new(symbol: String, client: CCXTClient, pool: PgPool) -> Self {
         TrainingCycle {
-            print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
-            symbol: symbol,
+            print_symbol: format!("{}{}:", Fore::Blue.as_str(), symbol),
+            symbol,
             last_candles: None,
             last_predictions: None,
             config: load_config(),
@@ -89,7 +89,7 @@ impl TrainingCycle {
         model_tx: &mpsc::Sender<ModelCommand>,
         chain_tx: Option<&mpsc::Sender<ChainCommand>>,
     ) -> Result<(), CycleError> {
-        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+        if self.client.test_symbol(&self.symbol).await.is_err() {
             return Err(CycleError::SymbolDoesNotExist);
         }
         let mut volatility: f64 = 0.0;
@@ -112,91 +112,78 @@ impl TrainingCycle {
                 )
                 .await?;
 
-            match phase {
-                CyclePhase::Active => {
-                    let targets = DataMap::new(
-                        Some(self.get_symbol().to_string()),
-                        collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
-                    );
+            if let CyclePhase::Active = phase {
+                let targets = DataMap::new(
+                    Some(self.get_symbol().to_string()),
+                    collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
+                );
 
-                    let target = targets.get("position_size").unwrap();
+                let target = targets.get("position_size").unwrap();
 
-                    let ratio = if target != &0.0 {
-                        (prediction.unwrap() - target).abs() / (target).abs()
-                    } else {
-                        0.0
-                    };
+                let ratio = if target != &0.0 {
+                    (prediction.unwrap() - target).abs() / (target).abs()
+                } else {
+                    0.0
+                };
 
-                    let success: bool =
-                        ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
+                let success: bool =
+                    ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
-                    if self.config.prints.cycle.target {
-                        debug!(
-                            "{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
-                            self.print_symbol,
-                            Fore::WHITE.as_str(),
-                            prediction.unwrap(),
-                            target,
-                            ratio
-                        );
-                    }
-
-                    self.update_counters(
+                if self.config.prints.cycle.target {
+                    debug!(
+                        "{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
+                        self.print_symbol,
+                        Fore::White.as_str(),
                         prediction.unwrap(),
-                        target.clone(),
-                        volatility,
-                        counter_tx,
-                    )
+                        target,
+                        ratio
+                    );
+                }
+
+                self.update_counters(prediction.unwrap(), *target, volatility, counter_tx)
                     .await;
 
-                    if !success {
-                        let last_candles = self.last_candles.clone().unwrap();
-                        let last_predictions = self.last_predictions.clone().unwrap();
+                if !success {
+                    let last_candles = self.last_candles.clone().unwrap();
+                    let last_predictions = self.last_predictions.clone().unwrap();
 
-                        let (tx, rx) = oneshot::channel();
-                        let _ = model_tx
-                            .send(ModelCommand::GetAccuracy { respond_to: tx })
-                            .await;
-                        let accuracy = rx.await.map_err(|e| anyhow!(e))?;
+                    let (tx, rx) = oneshot::channel();
+                    let _ = model_tx
+                        .send(ModelCommand::GetAccuracy { respond_to: tx })
+                        .await;
+                    let accuracy = rx.await.map_err(|e| anyhow!(e))?;
 
-                        let summary_data = {
-                            if let Some(acc) = accuracy {
-                                last_candles + acc + targets.clone()
-                            } else {
-                                last_candles + targets.clone()
-                            }
-                        };
+                    let summary_data = {
+                        if let Some(acc) = accuracy {
+                            last_candles + acc + targets.clone()
+                        } else {
+                            last_candles + targets.clone()
+                        }
+                    };
 
-                        self.handle_mistake(
-                            summary_data,
-                            last_predictions,
-                            counter_tx,
-                            Some(model_tx),
-                        )
+                    self.handle_mistake(summary_data, last_predictions, counter_tx, Some(model_tx))
                         .await?;
 
-                        if let Some(ctx) = chain_tx {
-                            let (tx, rx) = oneshot::channel();
-                            let _ = ctx
-                                .send(ChainCommand::AddBlock {
-                                    symbol: self.get_symbol().to_string(),
-                                    block: Block::new(
-                                        self.last_predictions.clone().unwrap().to_hashmap(),
-                                        targets.clone().to_hashmap(),
-                                        ohlcv.last().unwrap().clone(),
-                                    ),
-                                    respond_to: tx,
-                                })
-                                .await;
-                            let _ = rx.await;
-                        }
+                    if let Some(ctx) = chain_tx {
+                        let (tx, rx) = oneshot::channel();
+                        let _ = ctx
+                            .send(ChainCommand::AddBlock {
+                                symbol: self.get_symbol().to_string(),
+                                block: Block::new(
+                                    self.last_predictions.clone().unwrap().to_hashmap(),
+                                    targets.clone().to_hashmap(),
+                                    *ohlcv.last().unwrap(),
+                                ),
+                                respond_to: tx,
+                            })
+                            .await;
+                        let _ = rx.await;
                     }
                 }
-                _ => {}
             }
 
             let candles_to_pred = candles.clone();
-            prediction = Some(self.predict(candles_to_pred, &model_tx).await.unwrap());
+            prediction = Some(self.predict(candles_to_pred, model_tx).await.unwrap());
 
             phase = CyclePhase::Active;
             self.log_prediction(prediction.unwrap());
@@ -213,14 +200,14 @@ impl TrainingCycle {
         model_tx: &mpsc::Sender<ModelCommand>,
         chain_tx: Option<&mpsc::Sender<ChainCommand>>,
     ) -> Result<(), CycleError> {
-        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+        if self.client.test_symbol(&self.symbol).await.is_err() {
             return Err(CycleError::SymbolDoesNotExist);
         }
 
         println!(
             "{} {}Backtest has started!\n",
             self.print_symbol,
-            Fore::YELLOW.as_str()
+            Fore::Yellow.as_str()
         );
 
         let mut volatility: f64;
@@ -266,91 +253,88 @@ impl TrainingCycle {
                 window,
             );
 
-            match phase {
-                CyclePhase::Active => {
-                    let ohlcv = window[..OHLCV_LEN]
-                        .iter()
-                        .map(|candle| candle.to_candle())
-                        .collect::<Vec<Candle>>();
+            if let CyclePhase::Active = phase {
+                let ohlcv = window[..OHLCV_LEN]
+                    .iter()
+                    .map(|candle| candle.to_candle())
+                    .collect::<Vec<Candle>>();
 
-                    let targets = DataMap::new(
-                        Some(self.get_symbol().to_string()),
-                        collect_targets(ohlcv.clone()[..OHLCV_LEN].try_into().unwrap()),
-                    );
+                let targets = DataMap::new(
+                    Some(self.get_symbol().to_string()),
+                    collect_targets(ohlcv.clone()[..OHLCV_LEN].try_into().unwrap()),
+                );
 
-                    let target = targets.get("position_size").unwrap();
+                let target = targets.get("position_size").unwrap();
 
-                    let ratio = if target != &0.0 {
-                        (prediction.unwrap() - target).abs() / (target).abs()
-                    } else {
-                        0.0
+                let ratio = if target != &0.0 {
+                    (prediction.unwrap() - target).abs() / (target).abs()
+                } else {
+                    0.0
+                };
+
+                let success: bool =
+                    ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
+
+                let threshold_value: u8 = success.into();
+                threshold_counter.push(threshold_value);
+
+                if !success && self.config.runtime.with_training {
+                    let last_candles = self.last_candles.clone().unwrap();
+
+                    let (tx, rx) = oneshot::channel();
+                    let _ = model_tx
+                        .send(ModelCommand::GetAccuracy { respond_to: tx })
+                        .await;
+                    let accuracy = rx.await.map_err(|e| anyhow!(e))?;
+
+                    let summary_data = {
+                        if let Some(acc) = accuracy {
+                            last_candles.clone() + acc.clone() + targets.clone()
+                        } else {
+                            last_candles.clone() + targets.clone()
+                        }
                     };
 
-                    let success: bool =
-                        ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
-
-                    let threshold_value: u8 = success.into();
-                    threshold_counter.push(threshold_value);
-
-                    if !success && self.config.runtime.with_training {
-                        let last_candles = self.last_candles.clone().unwrap();
-
-                        let (tx, rx) = oneshot::channel();
-                        let _ = model_tx
-                            .send(ModelCommand::GetAccuracy { respond_to: tx })
-                            .await;
-                        let accuracy = rx.await.map_err(|e| anyhow!(e))?;
-
-                        let summary_data = {
-                            if let Some(acc) = accuracy {
-                                last_candles.clone() + acc.clone() + targets.clone()
-                            } else {
-                                last_candles.clone() + targets.clone()
-                            }
-                        };
-
-                        if self.config.runtime.with_saves {
-                            SQLStandart::Dummy
-                                .insert_row(&self.pool, summary_data)
-                                .await?;
-                        }
-                        let shifted_acc = threshold_counter.get_shifted_accuracy(3);
-                        if shifted_acc.unwrap_or(0.0) == 0.0 {
-                            let (tx, rx) = oneshot::channel();
-                            let last_predictions = self.last_predictions.clone().unwrap();
-                            let _ = model_tx
-                                .send(ModelCommand::HandleMistakes {
-                                    true_data: targets.clone(),
-                                    predicted_data: last_predictions,
-                                    respond_to: tx,
-                                })
-                                .await;
-                            let _ = rx.await;
-                        }
+                    if self.config.runtime.with_saves {
+                        SQLStandart::Dummy
+                            .insert_row(&self.pool, summary_data)
+                            .await?;
                     }
-
-                    if let Some(ctx) = chain_tx {
+                    let shifted_acc = threshold_counter.get_shifted_accuracy(3);
+                    if shifted_acc.unwrap_or(0.0) == 0.0 {
                         let (tx, rx) = oneshot::channel();
-                        let _ = ctx
-                            .send(ChainCommand::AddBlock {
-                                symbol: self.get_symbol().to_string(),
-                                block: Block::new(
-                                    self.last_predictions.clone().unwrap().to_hashmap(),
-                                    targets.clone().to_hashmap(),
-                                    ohlcv.last().unwrap().clone(),
-                                ),
+                        let last_predictions = self.last_predictions.clone().unwrap();
+                        let _ = model_tx
+                            .send(ModelCommand::HandleMistakes {
+                                true_data: targets.clone(),
+                                predicted_data: last_predictions,
                                 respond_to: tx,
                             })
                             .await;
                         let _ = rx.await;
                     }
                 }
-                _ => {}
+
+                if let Some(ctx) = chain_tx {
+                    let (tx, rx) = oneshot::channel();
+                    let _ = ctx
+                        .send(ChainCommand::AddBlock {
+                            symbol: self.get_symbol().to_string(),
+                            block: Block::new(
+                                self.last_predictions.clone().unwrap().to_hashmap(),
+                                targets.clone().to_hashmap(),
+                                *ohlcv.last().unwrap(),
+                            ),
+                            respond_to: tx,
+                        })
+                        .await;
+                    let _ = rx.await;
+                }
             }
 
             let candles_to_pred = candles.clone();
 
-            prediction = Some(self.predict(candles_to_pred, &model_tx).await?);
+            prediction = Some(self.predict(candles_to_pred, model_tx).await?);
 
             phase = CyclePhase::Active;
             self.last_candles = Some(candles);
@@ -360,7 +344,7 @@ impl TrainingCycle {
         pb.finish_with_message(format!(
             "{} {}Backtest has finished!",
             self.print_symbol,
-            Fore::GREEN.as_str()
+            Fore::Green.as_str()
         ));
 
         if let Some(ctx) = chain_tx {
@@ -379,7 +363,7 @@ impl TrainingCycle {
         info!(
             "\n{} {}Threshold accuracy: {:.3}%",
             self.print_symbol,
-            Fore::YELLOW.as_str(),
+            Fore::Yellow.as_str(),
             threshold_counter.get_accuracy()
         );
 

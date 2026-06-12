@@ -1,4 +1,4 @@
-pub const COLUMNS_FIRST_LAYER: &'static [&str] = &[
+pub const COLUMNS_FIRST_LAYER: &[&str] = &[
     "timeframe",
     "hour_sin",
     "hour_cos",

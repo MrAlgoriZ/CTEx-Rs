@@ -109,7 +109,9 @@ pub fn collect_features(ohlcv: [Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
         safed((candle.close - vwap) / vwap)
     };
 
-    let features = BTreeMap::from([
+    
+
+    BTreeMap::from([
         ("return_1".to_string(), return_1),
         ("return_3".to_string(), return_3),
         ("return_6".to_string(), return_6),
@@ -173,9 +175,7 @@ pub fn collect_features(ohlcv: [Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
         ("tail_risk_proxy_6".to_string(), tail_risk_proxy_6),
         ("tail_risk_proxy_12".to_string(), tail_risk_proxy_12),
         ("distance_to_vwap".to_string(), distance_to_vwap),
-    ]);
-
-    features
+    ])
 }
 
 pub fn collect_targets(ohlcv: &[Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {

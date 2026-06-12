@@ -44,8 +44,8 @@ impl CCXTClient {
                 respond_to: tx,
             })
             .await;
-        let candles = rx.await?;
-        candles
+        
+        rx.await?
     }
 
     pub async fn fetch_ohlcv_with_timestamp(
@@ -73,8 +73,8 @@ impl CCXTClient {
                 respond_to: tx,
             })
             .await;
-        let candles = rx.await?;
-        candles
+        
+        rx.await?
     }
 
     // ticker response
@@ -151,8 +151,8 @@ impl CCXTClient {
                 respond_to: tx,
             })
             .await;
-        let ticker = rx.await?;
-        ticker
+        
+        rx.await?
     }
 
     pub async fn test_symbol(&self, symbol: &str) -> Result<()> {
@@ -173,8 +173,8 @@ impl CCXTClient {
                 respond_to: tx,
             })
             .await;
-        let tested = rx.await?;
-        tested
+        
+        rx.await?
     }
 
     pub async fn collect_all(

@@ -414,9 +414,9 @@ pub async fn generate_plots(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let result = rx
+    rx
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?
         .map_err(|_| StatusCode::NO_CONTENT)?;
-    Ok(Json(ApiResponse::success(result)))
+    Ok(Json(ApiResponse::success(())))
 }

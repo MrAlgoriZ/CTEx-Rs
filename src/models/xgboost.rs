@@ -75,10 +75,7 @@ impl ModelDependencies for XGBoost {
     }
 
     fn check_model_trained(&self) -> bool {
-        match self.model.as_ref() {
-            Some(_) => return true,
-            None => return false,
-        }
+        self.model.as_ref().is_some()
     }
 
     fn get_symbol_columns(&self) -> &Option<Vec<String>> {

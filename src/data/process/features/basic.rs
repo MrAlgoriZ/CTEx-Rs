@@ -444,8 +444,8 @@ pub fn liquidity_drop_probability_n(candles: &[Candle], n: usize, k: f64) -> f64
     let threshold = k * current_volume;
 
     let mut count = 0;
-    for i in len - n..len - 1 {
-        if candles[i].volume < threshold {
+    for candle in candles.iter().take(len - 1).skip(len - n) {
+        if candle.volume < threshold {
             count += 1;
         }
     }

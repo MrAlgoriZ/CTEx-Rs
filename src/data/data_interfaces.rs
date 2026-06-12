@@ -58,7 +58,7 @@ pub struct CircleTime {
 }
 
 impl CircleTime {
-    pub fn as_tuple(self) -> (f64, f64, f64, f64) {
+    pub fn to_tuple(&self) -> (f64, f64, f64, f64) {
         (self.hour_sin, self.hour_cos, self.min_sin, self.min_cos)
     }
 }
@@ -166,7 +166,7 @@ impl DataMap {
     pub fn init(symbol: Option<&str>, ohlcv: Vec<Candle>, timeframe: &str) -> Self {
         let ohlcv_wrapped = ohlcv[..OHLCV_LEN].try_into().unwrap();
         let timeframe = Timeframe::from_str(timeframe).unwrap().seconds().unwrap();
-        let (hour_sin, hour_cos, minute_sin, minute_cos) = TimeRequest::new().get_time().as_tuple();
+        let (hour_sin, hour_cos, minute_sin, minute_cos) = TimeRequest::new().get_time().to_tuple();
 
         let mut features = collect_features(ohlcv_wrapped);
 
@@ -183,7 +183,7 @@ impl DataMap {
     }
 
     pub fn with_time(mut self, time: CircleTime) -> Self {
-        let (hour_sin, hour_cos, minute_sin, minute_cos) = time.as_tuple();
+        let (hour_sin, hour_cos, minute_sin, minute_cos) = time.to_tuple();
 
         self.insert("hour_sin".to_string(), hour_sin);
         self.insert("hour_cos".to_string(), hour_cos);
@@ -232,55 +232,55 @@ impl DataMap {
             data: BTreeMap::from([
                 (
                     "future_volatility_pred".to_string(),
-                    targets.get("future_volatility").unwrap().clone(),
+                    *targets.get("future_volatility").unwrap(),
                 ),
                 (
                     "future_volume_pred".to_string(),
-                    targets.get("future_volume").unwrap().clone(),
+                    *targets.get("future_volume").unwrap(),
                 ),
                 (
                     "future_trend_strength_pred".to_string(),
-                    targets.get("future_trend_strength").unwrap().clone(),
+                    *targets.get("future_trend_strength").unwrap(),
                 ),
                 (
                     "future_range_pred".to_string(),
-                    targets.get("future_range").unwrap().clone(),
+                    *targets.get("future_range").unwrap(),
                 ),
                 (
                     "future_return_mean_pred".to_string(),
-                    targets.get("future_return_mean").unwrap().clone(),
+                    *targets.get("future_return_mean").unwrap(),
                 ),
                 (
                     "future_return_std_pred".to_string(),
-                    targets.get("future_return_std").unwrap().clone(),
+                    *targets.get("future_return_std").unwrap(),
                 ),
                 (
                     "future_return_skewness_pred".to_string(),
-                    targets.get("future_return_skewness").unwrap().clone(),
+                    *targets.get("future_return_skewness").unwrap(),
                 ),
                 (
                     "future_return_kurtosis_pred".to_string(),
-                    targets.get("future_return_kurtosis").unwrap().clone(),
+                    *targets.get("future_return_kurtosis").unwrap(),
                 ),
                 (
                     "risk_score_pred".to_string(),
-                    targets.get("risk_score").unwrap().clone(),
+                    *targets.get("risk_score").unwrap(),
                 ),
                 (
                     "drawdown_probability_pred".to_string(),
-                    targets.get("drawdown_probability").unwrap().clone(),
+                    *targets.get("drawdown_probability").unwrap(),
                 ),
                 (
                     "tail_event_probability_pred".to_string(),
-                    targets.get("tail_event_probability").unwrap().clone(),
+                    *targets.get("tail_event_probability").unwrap(),
                 ),
                 (
                     "volatility_spike_probability_pred".to_string(),
-                    targets.get("volatility_spike_probability").unwrap().clone(),
+                    *targets.get("volatility_spike_probability").unwrap(),
                 ),
                 (
                     "liquidity_drop_probability_pred".to_string(),
-                    targets.get("liquidity_drop_probability").unwrap().clone(),
+                    *targets.get("liquidity_drop_probability").unwrap(),
                 ),
             ]),
         }
@@ -320,8 +320,8 @@ impl DataMap {
         self.data.keys().cloned().collect::<Vec<_>>()
     }
 
-    pub fn to_vec(self) -> Vec<f64> {
-        self.data.values().map(|v| *v).collect()
+    pub fn to_vec(&self) -> Vec<f64> {
+        self.data.values().copied().collect()
     }
 
     pub fn get_data(&self) -> &BTreeMap<String, f64> {

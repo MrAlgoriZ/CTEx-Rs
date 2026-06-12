@@ -101,9 +101,7 @@ impl Chain {
             .iter()
             .last()
             .ok_or(anyhow!("Chain is empty"))?
-            .predictions
-            .iter()
-            .map(|(k, _)| k)
+            .predictions.keys()
             .collect::<Vec<_>>();
         debug!("{:?}", models);
 
@@ -121,7 +119,7 @@ impl Chain {
             let pred_vals: Vec<f64> = chain.iter().map(|b| b.predictions[*model]).collect();
             let tgt_vals: Vec<f64> = chain
                 .iter()
-                .map(|b| b.targets[&get_target_name(*model).unwrap()])
+                .map(|b| b.targets[&get_target_name(model).unwrap()])
                 .collect();
 
             let all_vals: Vec<f64> = prices
@@ -192,7 +190,7 @@ impl Chain {
                     chain
                         .iter()
                         .enumerate()
-                        .map(|(i, b)| (i, b.targets[&get_target_name(*model).unwrap()])),
+                        .map(|(i, b)| (i, b.targets[&get_target_name(model).unwrap()])),
                     ShapeStyle {
                         color: RGBAColor(80, 180, 255, 1.0),
                         filled: true,

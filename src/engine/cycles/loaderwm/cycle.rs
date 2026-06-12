@@ -68,8 +68,8 @@ impl CycleWithModel for LoaderWMCycle {}
 impl LoaderWMCycle {
     fn new(symbol: String, client: CCXTClient, pool: PgPool) -> Self {
         LoaderWMCycle {
-            print_symbol: format!("{}{}:", Fore::BLUE.as_str(), symbol),
-            symbol: symbol,
+            print_symbol: format!("{}{}:", Fore::Blue.as_str(), symbol),
+            symbol,
             last_candles: None,
             last_predictions: None,
             config: load_config(),
@@ -89,7 +89,7 @@ impl LoaderWMCycle {
         model_tx: Option<&mpsc::Sender<ModelCommand>>,
         chain_tx: Option<&mpsc::Sender<ChainCommand>>,
     ) -> Result<(), CycleError> {
-        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+        if self.client.test_symbol(&self.symbol).await.is_err() {
             return Err(CycleError::SymbolDoesNotExist);
         }
         let mut volatility: f64 = 0.0;
@@ -112,85 +112,77 @@ impl LoaderWMCycle {
                 )
                 .await?;
 
-            match phase {
-                CyclePhase::Active => {
-                    let targets = DataMap::new(
-                        Some(self.get_symbol().to_string()),
-                        collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
-                    );
+            if let CyclePhase::Active = phase {
+                let targets = DataMap::new(
+                    Some(self.get_symbol().to_string()),
+                    collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
+                );
 
-                    let target = targets.get("position_size").unwrap();
-                    let ratio = if target != &0.0 {
-                        (prediction.unwrap() - target).abs() / (target).abs()
-                    } else {
-                        0.0
-                    };
+                let target = targets.get("position_size").unwrap();
+                let ratio = if target != &0.0 {
+                    (prediction.unwrap() - target).abs() / (target).abs()
+                } else {
+                    0.0
+                };
 
-                    if self.config.prints.cycle.target {
-                        debug!(
-                            "{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
-                            self.print_symbol,
-                            Fore::WHITE.as_str(),
-                            prediction.unwrap(),
-                            target,
-                            ratio
-                        );
-                    }
-
-                    self.update_counters(
+                if self.config.prints.cycle.target {
+                    debug!(
+                        "{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
+                        self.print_symbol,
+                        Fore::White.as_str(),
                         prediction.unwrap(),
-                        target.clone(),
-                        volatility,
-                        counter_tx,
-                    )
+                        target,
+                        ratio
+                    );
+                }
+
+                self.update_counters(prediction.unwrap(), *target, volatility, counter_tx)
                     .await;
 
-                    let last_candles = self.last_candles.clone().unwrap();
-                    let last_predictions = self.last_predictions.clone().unwrap();
+                let last_candles = self.last_candles.clone().unwrap();
+                let last_predictions = self.last_predictions.clone().unwrap();
 
-                    let accuracy = if let Some(mtx) = model_tx {
-                        let (tx, rx) = oneshot::channel();
-                        let _ = mtx.send(ModelCommand::GetAccuracy { respond_to: tx }).await;
-                        rx.await.map_err(|e| anyhow!(e))?
+                let accuracy = if let Some(mtx) = model_tx {
+                    let (tx, rx) = oneshot::channel();
+                    let _ = mtx.send(ModelCommand::GetAccuracy { respond_to: tx }).await;
+                    rx.await.map_err(|e| anyhow!(e))?
+                } else {
+                    return Err(CycleError::AnyhowError(anyhow!(
+                        "Model is not initialized!"
+                    )));
+                };
+                let summary_data = {
+                    if let Some(acc) = accuracy {
+                        last_candles + acc + targets.clone()
                     } else {
-                        return Err(CycleError::AnyhowError(anyhow!(
-                            "Model is not initialized!"
-                        )));
-                    };
-                    let summary_data = {
-                        if let Some(acc) = accuracy {
-                            last_candles + acc + targets.clone()
-                        } else {
-                            last_candles + targets.clone()
-                        }
-                    };
-
-                    self.handle_mistake(summary_data, last_predictions, counter_tx, model_tx)
-                        .await?;
-
-                    if let Some(ctx) = chain_tx {
-                        let (tx, rx) = oneshot::channel();
-                        let _ = ctx
-                            .send(ChainCommand::AddBlock {
-                                symbol: self.get_symbol().to_string(),
-                                block: Block::new(
-                                    self.last_predictions.clone().unwrap().to_hashmap(),
-                                    targets.clone().to_hashmap(),
-                                    ohlcv.last().unwrap().clone(),
-                                ),
-                                respond_to: tx,
-                            })
-                            .await;
-                        let _ = rx.await;
+                        last_candles + targets.clone()
                     }
+                };
+
+                self.handle_mistake(summary_data, last_predictions, counter_tx, model_tx)
+                    .await?;
+
+                if let Some(ctx) = chain_tx {
+                    let (tx, rx) = oneshot::channel();
+                    let _ = ctx
+                        .send(ChainCommand::AddBlock {
+                            symbol: self.get_symbol().to_string(),
+                            block: Block::new(
+                                self.last_predictions.clone().unwrap().to_hashmap(),
+                                targets.clone().to_hashmap(),
+                                *ohlcv.last().unwrap(),
+                            ),
+                            respond_to: tx,
+                        })
+                        .await;
+                    let _ = rx.await;
                 }
-                _ => {}
             }
 
             let candles_to_pred = candles.clone();
 
             prediction = if let Some(mtx) = model_tx {
-                Some(self.predict(candles_to_pred, &mtx).await.unwrap())
+                Some(self.predict(candles_to_pred, mtx).await.unwrap())
             } else {
                 None
             };
@@ -211,14 +203,14 @@ impl LoaderWMCycle {
         model_tx: Option<&mpsc::Sender<ModelCommand>>,
         chain_tx: Option<&mpsc::Sender<ChainCommand>>,
     ) -> Result<(), CycleError> {
-        if !self.client.test_symbol(&self.symbol).await.is_ok() {
+        if self.client.test_symbol(&self.symbol).await.is_err() {
             return Err(CycleError::SymbolDoesNotExist);
         }
 
         println!(
             "{} {}Backtest has started!\n",
             self.print_symbol,
-            Fore::YELLOW.as_str()
+            Fore::Yellow.as_str()
         );
 
         let mut volatility: f64;
@@ -264,107 +256,104 @@ impl LoaderWMCycle {
                 window,
             );
 
-            match phase {
-                CyclePhase::Active => {
-                    let last_candles = self.last_candles.clone().unwrap();
+            if let CyclePhase::Active = phase {
+                let last_candles = self.last_candles.clone().unwrap();
 
-                    let accuracy = if let Some(mtx) = model_tx {
-                        let (tx, rx) = oneshot::channel();
-                        let _ = mtx.send(ModelCommand::GetAccuracy { respond_to: tx }).await;
-                        rx.await.map_err(|e| anyhow!(e))?
+                let accuracy = if let Some(mtx) = model_tx {
+                    let (tx, rx) = oneshot::channel();
+                    let _ = mtx.send(ModelCommand::GetAccuracy { respond_to: tx }).await;
+                    rx.await.map_err(|e| anyhow!(e))?
+                } else {
+                    Some(DataMap::generate_accuracy())
+                };
+                let ohlcv = window[..OHLCV_LEN]
+                    .iter()
+                    .map(|candle| candle.to_candle())
+                    .collect::<Vec<Candle>>();
+
+                let targets = DataMap::new(
+                    Some(self.get_symbol().to_string()),
+                    collect_targets(ohlcv.clone()[..OHLCV_LEN].try_into().unwrap()),
+                );
+
+                let target = targets.get("position_size").unwrap();
+                if let Some(pred) = prediction {
+                    let ratio = if target != &0.0 {
+                        (pred - target).abs() / (target).abs()
                     } else {
-                        Some(DataMap::generate_accuracy())
+                        0.0
                     };
-                    let ohlcv = window[..OHLCV_LEN]
-                        .iter()
-                        .map(|candle| candle.to_candle())
-                        .collect::<Vec<Candle>>();
+                    debug!("{}", ratio);
+                    let success: bool =
+                        ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
 
-                    let targets = DataMap::new(
-                        Some(self.get_symbol().to_string()),
-                        collect_targets(ohlcv.clone()[..OHLCV_LEN].try_into().unwrap()),
-                    );
-
-                    let target = targets.get("position_size").unwrap();
-                    if let Some(pred) = prediction {
-                        let ratio = if target != &0.0 {
-                            (pred - target).abs() / (target).abs()
-                        } else {
-                            0.0
-                        };
-                        debug!("{}", ratio);
-                        let success: bool =
-                            ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
-
-                        let threshold_value: u8 = success.into();
-                        threshold_counter.push(threshold_value);
+                    let threshold_value: u8 = success.into();
+                    threshold_counter.push(threshold_value);
+                }
+                let summary_data = {
+                    let mut base = last_candles.clone() + targets.clone();
+                    if let Some(acc) = accuracy {
+                        base = base + acc;
                     }
-                    let summary_data = {
-                        let mut base = last_candles.clone() + targets.clone();
-                        if let Some(acc) = accuracy {
-                            base = base + acc;
-                        }
-                        if let Some(preds) = self.last_predictions.clone() {
-                            base = base
-                                + DataMap::new(
-                                    None,
-                                    preds
-                                        .to_standart(&SQLStandart::ThirdLayer)
-                                        .get_only_features(),
-                                )
-                        } else {
-                            base = base + DataMap::generate_predictions(targets.clone())
-                        }
-                        base
-                    };
-
-                    if self.config.runtime.with_saves {
-                        SQLStandart::Dummy
-                            .insert_row(&self.pool, summary_data)
-                            .await?;
+                    if let Some(preds) = self.last_predictions.clone() {
+                        base = base
+                            + DataMap::new(
+                                None,
+                                preds
+                                    .to_standart(&SQLStandart::ThirdLayer)
+                                    .get_only_features(),
+                            )
+                    } else {
+                        base = base + DataMap::generate_predictions(targets.clone())
                     }
+                    base
+                };
 
-                    if self.config.runtime.with_training {
-                        if let Some(mtx) = model_tx {
-                            let shifted_acc = threshold_counter.get_shifted_accuracy(3);
-                            if shifted_acc.unwrap_or(0.0) == 0.0 {
-                                let (tx, rx) = oneshot::channel();
-                                let last_predictions = self.last_predictions.clone().unwrap();
-                                let _ = mtx
-                                    .send(ModelCommand::HandleMistakes {
-                                        true_data: targets.clone(),
-                                        predicted_data: last_predictions,
-                                        respond_to: tx,
-                                    })
-                                    .await;
-                                let _ = rx.await;
-                            }
-                        }
-                    }
+                if self.config.runtime.with_saves {
+                    SQLStandart::Dummy
+                        .insert_row(&self.pool, summary_data)
+                        .await?;
+                }
 
-                    if let Some(ctx) = chain_tx {
+                if self.config.runtime.with_training
+                    && let Some(mtx) = model_tx
+                {
+                    let shifted_acc = threshold_counter.get_shifted_accuracy(3);
+                    if shifted_acc.unwrap_or(0.0) == 0.0 {
                         let (tx, rx) = oneshot::channel();
-                        let _ = ctx
-                            .send(ChainCommand::AddBlock {
-                                symbol: self.get_symbol().to_string(),
-                                block: Block::new(
-                                    self.last_predictions.clone().unwrap().to_hashmap(),
-                                    targets.clone().to_hashmap(),
-                                    ohlcv.last().unwrap().clone(),
-                                ),
+                        let last_predictions = self.last_predictions.clone().unwrap();
+                        let _ = mtx
+                            .send(ModelCommand::HandleMistakes {
+                                true_data: targets.clone(),
+                                predicted_data: last_predictions,
                                 respond_to: tx,
                             })
                             .await;
                         let _ = rx.await;
                     }
                 }
-                _ => {}
+
+                if let Some(ctx) = chain_tx {
+                    let (tx, rx) = oneshot::channel();
+                    let _ = ctx
+                        .send(ChainCommand::AddBlock {
+                            symbol: self.get_symbol().to_string(),
+                            block: Block::new(
+                                self.last_predictions.clone().unwrap().to_hashmap(),
+                                targets.clone().to_hashmap(),
+                                *ohlcv.last().unwrap(),
+                            ),
+                            respond_to: tx,
+                        })
+                        .await;
+                    let _ = rx.await;
+                }
             }
 
             let candles_to_pred = candles.clone();
 
             prediction = if let Some(mtx) = model_tx {
-                Some(self.predict(candles_to_pred, &mtx).await.unwrap())
+                Some(self.predict(candles_to_pred, mtx).await.unwrap())
             } else {
                 None
             };
@@ -378,7 +367,7 @@ impl LoaderWMCycle {
         pb.finish_with_message(format!(
             "{} {}Backtest has finished!",
             self.print_symbol,
-            Fore::GREEN.as_str()
+            Fore::Green.as_str()
         ));
 
         if let Some(ctx) = chain_tx {
@@ -397,7 +386,7 @@ impl LoaderWMCycle {
         info!(
             "\n{} {}Threshold accuracy: {:.3}%",
             self.print_symbol,
-            Fore::YELLOW.as_str(),
+            Fore::Yellow.as_str(),
             threshold_counter.get_accuracy()
         );
         Ok(())

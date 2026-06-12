@@ -44,12 +44,12 @@ impl ChainActor {
                     symbol,
                     block,
                 } => {
-                    let result = self.chains.add_block(&symbol, block);
-                    let _ = respond_to.send(result);
+                    self.chains.add_block(&symbol, block);
+                    let _ = respond_to.send(());
                 }
                 ChainCommand::DeleteChain { symbol, respond_to } => {
-                    let result = self.chains.delete_chain(&symbol);
-                    let _ = respond_to.send(result);
+                    self.chains.delete_chain(&symbol);
+                    let _ = respond_to.send(());
                 }
                 ChainCommand::SavePlots { symbol, respond_to } => {
                     let result = self.chains.save_plots(&symbol);
