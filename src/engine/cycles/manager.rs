@@ -19,7 +19,7 @@ use crate::engine::cycles::sandbox::cycle::SandboxCycle;
 use crate::engine::cycles::training::cycle::TrainingCycle;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::{Config, CycleType, RuntimeType};
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 use crate::engine::utils::config::load_env::load_env;
 use crate::models::model::{Model, init_ensemble_model, init_single_model};
 use crate::models::{ModelParams, ModelStructure};
@@ -267,7 +267,7 @@ impl CycleSupervisor {
         model_tx: &Option<mpsc::Sender<ModelCommand>>,
         chain_tx: &Option<mpsc::Sender<ChainCommand>>,
     ) -> Result<(), CycleError> {
-        let config = load_config();
+        let config = config();
         let client = CCXTClient::new(&config.exchange.main_exchange, server_tx.clone());
 
         match cycle_type {
@@ -365,7 +365,7 @@ impl WorkerHandle {
 }
 
 pub struct CycleManager {
-    config: Config,
+    config: &'static Config,
     supervisor_tx: mpsc::Sender<SupervisorCommand>,
     counter_tx: mpsc::Sender<CounterCommand>,
     prediction_tx: mpsc::Sender<PredictionsCommand>,
@@ -377,7 +377,7 @@ pub struct CycleManager {
 
 impl CycleManager {
     pub async fn new() -> Self {
-        let config = load_config();
+        let config = config();
         let counter_capacity = config.behaviour.accuracy_capacity;
         let prediction_capacity = config.behaviour.predictions_capacity;
 
@@ -394,7 +394,7 @@ impl CycleManager {
             CycleSupervisor::new(counter_tx.clone(), servers_tx.clone());
         let supervisor_task = tokio::spawn(supervisor.run());
 
-        let background_cycle = BackgroundCycle::new(load_config(), servers_tx);
+        let background_cycle = BackgroundCycle::new(config.clone(), servers_tx);
         tokio::spawn(background_cycle.run());
 
         Self {
@@ -454,7 +454,7 @@ impl CycleManager {
             .await
             .map_err(|e| format!("Database connection error: {}", e))?;
 
-        let params = load_config().model.params;
+        let params = config().model.params.clone();
 
         let mut model: Box<dyn Model + Send + Sync> = match params {
             ModelParams::Ensemble {

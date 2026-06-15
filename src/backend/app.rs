@@ -3,7 +3,7 @@ use crate::backend::structure::{ApiState, ApiStructure};
 use crate::engine::actors::counter::CounterCommand;
 use crate::engine::actors::prediction::PredictionsCommand;
 use crate::engine::cycles::manager::SupervisorCommand;
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 
 use anyhow::{Result, anyhow};
 use axum::Router;
@@ -21,10 +21,10 @@ impl Api {
         counter_handle: mpsc::Sender<CounterCommand>,
         prediction_handle: mpsc::Sender<PredictionsCommand>,
     ) -> Result<Self> {
-        let config = load_config();
-        let listener = tokio::net::TcpListener::bind(&config.backend.listener)
+        let listener_value = config().backend.listener.clone();
+        let listener = tokio::net::TcpListener::bind(listener_value.clone())
             .await
-            .map_err(|_| anyhow!(format!("Failed to bind to {}", config.backend.listener)))?;
+            .map_err(|_| anyhow!(format!("Failed to bind to {}", listener_value)))?;
 
         Ok(Api {
             listener,

@@ -1,5 +1,5 @@
 use crate::engine::utils::config::config_types::PrintMode;
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 
 use std::sync::OnceLock;
 
@@ -15,7 +15,7 @@ impl Fore {
     pub fn as_str(&self) -> &'static str {
         static CONFIG_MODE: OnceLock<PrintMode> = OnceLock::new();
 
-        let mode = CONFIG_MODE.get_or_init(|| load_config().mode);
+        let mode = CONFIG_MODE.get_or_init(|| config().runtime.mode);
 
         match mode {
             PrintMode::Print => match self {

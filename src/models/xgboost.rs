@@ -12,7 +12,7 @@ use crate::data::process::features::auxiliary::corr;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::actors::prediction::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 use crate::models::TargetType;
 use crate::models::TaskType;
 use crate::models::model::{Model, ModelDependencies};
@@ -23,7 +23,7 @@ pub struct XGBoost {
     name: String,
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
-    config: Config,
+    config: &'static Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
     standart: SQLStandart,
     pool: PgPool,
@@ -48,7 +48,7 @@ impl XGBoost {
             target_type,
             symbol_columns: None,
             standart,
-            config: load_config(),
+            config: config(),
             prediction_tx,
             pool,
             n_estimators,

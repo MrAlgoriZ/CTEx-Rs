@@ -13,14 +13,14 @@ use crate::engine::cycles::manager::CycleError;
 use crate::engine::cycles::traits::{Cycle, CycleGetters};
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 use crate::engine::utils::config::load_env::load_env;
 
 pub struct LoaderCycle {
     pub symbol: String,
     last_candles: Option<DataMap>,
     last_close: Option<f64>,
-    config: Config,
+    config: &'static Config,
     print_symbol: String,
     client: CCXTClient,
     pool: PgPool,
@@ -53,7 +53,7 @@ impl LoaderCycle {
             symbol,
             last_candles: None,
             last_close: None,
-            config: load_config(),
+            config: config(),
             client,
             pool,
         }

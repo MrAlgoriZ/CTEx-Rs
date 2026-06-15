@@ -23,7 +23,7 @@ use crate::engine::state::chain::Block;
 use crate::engine::state::counters::SymbolCounters;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 use crate::engine::utils::config::load_env::load_env;
 
 pub struct SandboxCycle {
@@ -32,7 +32,7 @@ pub struct SandboxCycle {
     last_predictions: Option<DataMap>,
     last_order_price: Option<f64>,
     print_symbol: String,
-    config: Config,
+    config: &'static Config,
     pool: PgPool,
     client: CCXTClient,
     account: DummyAccount,
@@ -78,7 +78,7 @@ impl SandboxCycle {
             last_candles: None,
             last_predictions: None,
             last_order_price: None,
-            config: load_config(),
+            config: config(),
             pool,
             client,
             account,

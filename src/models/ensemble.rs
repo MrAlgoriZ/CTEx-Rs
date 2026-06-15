@@ -14,7 +14,7 @@ use crate::engine::actors::model::{ModelActor, ModelCommand};
 use crate::engine::actors::prediction::PredictionsCommand;
 use crate::engine::state::counters::Counters;
 use crate::engine::utils::config::config_types::Config;
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 use crate::models::SingleModelParams;
 use crate::models::model::{Model, ModelDependencies, init_single_model};
 
@@ -38,7 +38,7 @@ pub struct Ensemble {
 
     counters: Counters,
     name: String,
-    config: Config,
+    config: &'static Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
 }
 
@@ -61,7 +61,7 @@ impl Ensemble {
         action_type_model_tx: mpsc::Sender<ModelCommand>,
         position_size_model_tx: mpsc::Sender<ModelCommand>,
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
-        config: Config,
+        config: &'static Config,
     ) -> Self {
         Self {
             future_volatility_model_tx,
@@ -81,7 +81,7 @@ impl Ensemble {
             action_type_model_tx,
             position_size_model_tx,
             name: "Ensemble".to_string(),
-            config: config.clone(),
+            config,
             prediction_tx,
             counters: Counters::new(config.behaviour.accuracy_capacity),
         }
@@ -107,8 +107,6 @@ impl Ensemble {
         action_type_model_params: SingleModelParams,
         position_size_model_params: SingleModelParams,
     ) -> Self {
-        let config = load_config();
-
         let future_volatility_model = init_single_model(
             future_volatility_model_params,
             None,
@@ -266,6 +264,8 @@ impl Ensemble {
         let (position_size_model_actor, position_size_model_tx) =
             ModelActor::new(position_size_model);
         tokio::spawn(position_size_model_actor.run());
+
+        let config = config();
 
         Self::new(
             future_volatility_model_tx,

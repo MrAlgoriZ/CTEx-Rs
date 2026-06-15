@@ -18,7 +18,7 @@ use crate::data::process::features::auxiliary::corr;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::actors::prediction::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 use crate::models::TargetType;
 use crate::models::TaskType;
 use crate::models::model::{Model, ModelDependencies};
@@ -31,7 +31,7 @@ pub struct KNN {
     name: String,
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
-    config: Config,
+    config: &'static Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
     standart: SQLStandart,
     pool: PgPool,
@@ -58,7 +58,7 @@ impl KNN {
             name: "KNN".to_string(),
             target_type,
             symbol_columns: None,
-            config: load_config(),
+            config: config(),
             prediction_tx,
             standart,
             pool,
@@ -286,17 +286,16 @@ impl Model for KNN {
 
         for i in 0..n_rows_train {
             for j in 0..n_symbols {
-                train_final_data.push(symbol_train_data[i * n_symbols + j] );
+                train_final_data.push(symbol_train_data[i * n_symbols + j]);
             }
             for j in 0..(n_cols - n_symbols) {
-                train_final_data
-                    .push(*(numeric_train_scaled_raw[i * (n_cols - n_symbols) + j]));
+                train_final_data.push(*(numeric_train_scaled_raw[i * (n_cols - n_symbols) + j]));
             }
         }
 
         for i in 0..n_rows_val {
             for j in 0..n_symbols {
-                val_final_data.push(symbol_val_data[i * n_symbols + j] );
+                val_final_data.push(symbol_val_data[i * n_symbols + j]);
             }
             for j in 0..(n_cols - n_symbols) {
                 val_final_data.push(*(numeric_val_scaled_raw[i * (n_cols - n_symbols) + j]));

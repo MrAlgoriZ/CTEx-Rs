@@ -9,8 +9,10 @@ async fn test_training() -> anyhow::Result<()> {
             .await
             .map_err(|e| return anyhow::anyhow!(format!("{}", e)))?;
     let params = crate::engine::utils::config::load_config::load_config()
+        .unwrap()
         .model
-        .params;
+        .params
+        .clone();
 
     match params {
         crate::models::ModelParams::Ensemble {

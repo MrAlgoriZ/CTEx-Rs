@@ -1,6 +1,6 @@
 use super::{mpsc, oneshot};
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, Ticker};
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 use crate::engine::utils::parse::parse_symbol;
 
 use anyhow::{Result, anyhow};
@@ -82,7 +82,7 @@ impl ServiceActor {
     pub async fn new() -> (Self, mpsc::Sender<ServiceCommand>) {
         let (tx, rx) = mpsc::channel(10);
 
-        let servers_vec = load_config().exchange.servers;
+        let servers_vec = config().exchange.servers.clone();
 
         let mut servers = HashMap::new();
 

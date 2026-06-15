@@ -22,7 +22,7 @@ use crate::engine::state::chain::Block;
 use crate::engine::state::counters::SymbolCounters;
 use crate::engine::utils::colors::Fore;
 use crate::engine::utils::config::config_types::Config;
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 use crate::engine::utils::config::load_env::load_env;
 
 pub struct LoaderWMCycle {
@@ -31,7 +31,7 @@ pub struct LoaderWMCycle {
     last_predictions: Option<DataMap>,
     print_symbol: String,
     client: CCXTClient,
-    config: Config,
+    config: &'static Config,
     pool: PgPool,
 }
 
@@ -72,7 +72,7 @@ impl LoaderWMCycle {
             symbol,
             last_candles: None,
             last_predictions: None,
-            config: load_config(),
+            config: config(),
             client,
             pool,
         }

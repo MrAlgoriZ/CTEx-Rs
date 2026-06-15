@@ -6,7 +6,7 @@ use crate::engine::actors::counter::CounterCommand;
 use crate::engine::actors::prediction::PredictionsCommand;
 use crate::engine::cycles::manager::SupervisorCommand;
 use crate::engine::utils::config::config_types::CycleType;
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -14,9 +14,8 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
-fn verify_password(input: String) -> bool {
-    let cfg = load_config();
-    input == cfg.backend.admin_password
+fn verify_password(password: String) -> bool {
+    password == config().backend.admin_password
 }
 
 #[derive(Serialize)]
@@ -66,7 +65,7 @@ pub struct SymbolQuery {
 }
 
 fn default_window() -> usize {
-    load_config().behaviour.accuracy_capacity
+    config().behaviour.accuracy_capacity
 }
 
 #[derive(Serialize)]
@@ -414,8 +413,7 @@ pub async fn generate_plots(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    rx
-        .await
+    rx.await
         .map_err(|_| StatusCode::NOT_FOUND)?
         .map_err(|_| StatusCode::NO_CONTENT)?;
     Ok(Json(ApiResponse::success(())))

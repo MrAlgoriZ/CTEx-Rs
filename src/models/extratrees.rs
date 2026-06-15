@@ -13,7 +13,7 @@ use crate::data::process::features::auxiliary::corr;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::actors::prediction::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
-use crate::engine::utils::config::load_config::load_config;
+use crate::engine::utils::config::load_config::config;
 use crate::models::model::{Model, ModelDependencies};
 use crate::models::{TargetType, TaskType};
 
@@ -23,7 +23,7 @@ pub struct ExtraTrees {
     name: String,
     target_type: TargetType,
     symbol_columns: Option<Vec<String>>,
-    config: Config,
+    config: &'static Config,
     prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
     standart: SQLStandart,
     pool: PgPool,
@@ -53,7 +53,7 @@ impl ExtraTrees {
             name: "ExtraTrees".to_string(),
             target_type,
             symbol_columns: None,
-            config: load_config(),
+            config: config(),
             prediction_tx,
             standart,
             pool,
