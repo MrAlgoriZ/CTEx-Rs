@@ -78,7 +78,7 @@ impl ModelDependencies for RandomForest {
     }
 
     fn get_config(&self) -> &Config {
-        &self.config
+        self.config
     }
 
     fn change_symbol_columns(&mut self, symbol_columns: Option<Vec<String>>) {

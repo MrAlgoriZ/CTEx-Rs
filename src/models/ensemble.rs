@@ -320,7 +320,7 @@ impl ModelDependencies for Ensemble {
         true
     }
     fn get_config(&self) -> &Config {
-        &self.config
+        self.config
     }
     fn get_name(&self) -> &str {
         &self.name

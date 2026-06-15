@@ -49,7 +49,7 @@ impl CycleGetters for SandboxCycle {
     }
 
     fn get_config(&self) -> &Config {
-        &self.config
+        self.config
     }
 
     fn get_client(&self) -> &CCXTClient {

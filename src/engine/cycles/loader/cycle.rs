@@ -36,7 +36,7 @@ impl CycleGetters for LoaderCycle {
     }
 
     fn get_config(&self) -> &Config {
-        &self.config
+        self.config
     }
 
     fn get_client(&self) -> &CCXTClient {
