@@ -1,0 +1,3 @@
+success_threshold: 0.9
+accuracy_capacity: 192
+predictions_capacity: 96

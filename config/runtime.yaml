@@ -1,0 +1,6 @@
+type: backtest
+with_training: true
+with_saves: false
+with_model: true
+cycle_type: training
+mode: print

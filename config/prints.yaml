@@ -1,0 +1,13 @@
+model:
+  skipped_values: false
+  metrics: false
+cycle:
+  volatility: true
+  cycle_start: true
+  price: false
+  target: true
+  prediction: true
+  accuracy: true
+manager:
+  manager_init: true
+  additional_manager_prints: true

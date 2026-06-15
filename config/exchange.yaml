@@ -1,0 +1,10 @@
+servers:
+  - 127.0.0.1:3737
+symbols:
+  - BTCUSDT
+  - ETHUSDT
+main_exchange: binance
+
+timeframes:
+  main: 1h
+  background: 1m
