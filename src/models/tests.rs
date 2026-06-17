@@ -17,7 +17,7 @@ async fn test_training() -> anyhow::Result<()> {
     match params {
         crate::models::ModelParams::Ensemble {
             future_volatility_model_params,
-            future_volume_model_params,
+            future_volume_return_model_params,
             future_trend_strength_model_params,
             future_range_model_params,
             future_return_mean_model_params,
@@ -37,7 +37,7 @@ async fn test_training() -> anyhow::Result<()> {
                 None,
                 pool,
                 future_volatility_model_params,
-                future_volume_model_params,
+                future_volume_return_model_params,
                 future_trend_strength_model_params,
                 future_range_model_params,
                 future_return_mean_model_params,
@@ -86,7 +86,7 @@ async fn find_best_model_config() -> anyhow::Result<()> {
 
     let targets = [
         (TargetType::FutureVolatility, SQLStandart::FirstLayer),
-        (TargetType::FutureVolume, SQLStandart::FirstLayer),
+        (TargetType::FutureVolumeReturn, SQLStandart::FirstLayer),
         (TargetType::FutureTrendStrength, SQLStandart::FirstLayer),
         (TargetType::FutureRange, SQLStandart::FirstLayer),
         (TargetType::FutureReturnMean, SQLStandart::FirstLayer),

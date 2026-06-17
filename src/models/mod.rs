@@ -29,7 +29,7 @@ pub enum TaskType {
 #[serde(rename_all = "snake_case")]
 pub enum TargetType {
     FutureVolatility,
-    FutureVolume,
+    FutureVolumeReturn,
     FutureTrendStrength,
     FutureRange,
     FutureReturnMean,
@@ -50,7 +50,7 @@ impl TargetType {
     pub fn get_name(&self) -> &str {
         match self {
             TargetType::FutureVolatility => "future_volatility",
-            TargetType::FutureVolume => "future_volume",
+            TargetType::FutureVolumeReturn => "future_volume_return",
             TargetType::FutureTrendStrength => "future_trend_strength",
             TargetType::FutureRange => "future_range",
             TargetType::FutureReturnMean => "future_return_mean",
@@ -128,7 +128,7 @@ pub enum SingleModelParams {
 pub enum ModelParams {
     Ensemble {
         future_volatility_model_params: SingleModelParams,
-        future_volume_model_params: SingleModelParams,
+        future_volume_return_model_params: SingleModelParams,
         future_trend_strength_model_params: SingleModelParams,
         future_range_model_params: SingleModelParams,
         future_return_mean_model_params: SingleModelParams,

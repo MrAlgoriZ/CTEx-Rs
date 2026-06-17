@@ -8,12 +8,12 @@ params:
     max_depth: 1
     target_type: future_volatility
 
-  future_volume_model_params:
+  future_volume_return_model_params:
     kind: XGBoost
     task_type: regression
     n_estimators: 100
     max_depth: 1
-    target_type: future_volume
+    target_type: future_volume_return
 
   future_trend_strength_model_params:
     kind: XGBoost

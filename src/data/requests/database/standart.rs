@@ -85,8 +85,8 @@ pub const COLUMNS_SECOND_LAYER: &[&str] = &[
     "trend_strength",
     "future_volatility_pred",
     "future_volatility_confidence",
-    "future_volume_pred",
-    "future_volume_confidence",
+    "future_volume_return_pred",
+    "future_volume_return_confidence",
     "future_trend_strength_pred",
     "future_trend_strength_confidence",
     "future_range_pred",
@@ -109,8 +109,8 @@ pub const COLUMNS_THIRD_LAYER: &[&str] = &[
     "minute_cos",
     "future_volatility_pred",
     "future_volatility_confidence",
-    "future_volume_pred",
-    "future_volume_confidence",
+    "future_volume_return_pred",
+    "future_volume_return_confidence",
     "future_trend_strength_pred",
     "future_trend_strength_confidence",
     "future_range_pred",
@@ -137,7 +137,7 @@ pub const COLUMNS_THIRD_LAYER: &[&str] = &[
 
 pub const TARGETS_FIRST_LAYER: &[&str] = &[
     "future_volatility",
-    "future_volume",
+    "future_volume_return",
     "future_trend_strength",
     "future_range",
     "future_return_mean",
@@ -191,7 +191,7 @@ impl SQLStandart {
 pub fn get_prediction_name(string: &str) -> Option<String> {
     match string {
         "future_volatility" => Some(string.to_string() + "_pred"),
-        "future_volume" => Some(string.to_string() + "_pred"),
+        "future_volume_return" => Some(string.to_string() + "_pred"),
         "future_trend_strength" => Some(string.to_string() + "_pred"),
         "future_range" => Some(string.to_string() + "_pred"),
         "future_return_mean" => Some(string.to_string() + "_pred"),
@@ -210,7 +210,7 @@ pub fn get_prediction_name(string: &str) -> Option<String> {
 pub fn get_confidence_name(string: &str) -> Option<String> {
     match string {
         "future_volatility" => Some(string.to_string() + "_confidence"),
-        "future_volume" => Some(string.to_string() + "_confidence"),
+        "future_volume_return" => Some(string.to_string() + "_confidence"),
         "future_trend_strength" => Some(string.to_string() + "_confidence"),
         "future_range" => Some(string.to_string() + "_confidence"),
         "future_return_mean" => Some(string.to_string() + "_confidence"),
@@ -230,8 +230,8 @@ pub fn get_target_name(string: &str) -> Option<String> {
     match string {
         "future_volatility_pred" => Some("future_volatility".to_string()),
         "future_volatility_confidence" => Some("future_volatility".to_string()),
-        "future_volume_pred" => Some("future_volume".to_string()),
-        "future_volume_confidence" => Some("future_volume".to_string()),
+        "future_volume_return_pred" => Some("future_volume_return".to_string()),
+        "future_volume_return_confidence" => Some("future_volume_return".to_string()),
         "future_trend_strength_pred" => Some("future_trend_strength".to_string()),
         "future_trend_strength_confidence" => Some("future_trend_strength".to_string()),
         "future_range_pred" => Some("future_range".to_string()),

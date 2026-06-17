@@ -210,7 +210,7 @@ impl DataMap {
             symbol: None,
             data: BTreeMap::from([
                 ("future_volatility_confidence".to_string(), 100.0),
-                ("future_volume_confidence".to_string(), 100.0),
+                ("future_volume_return_confidence".to_string(), 100.0),
                 ("future_trend_strength_confidence".to_string(), 100.0),
                 ("future_range_confidence".to_string(), 100.0),
                 ("future_return_mean_confidence".to_string(), 100.0),
@@ -235,8 +235,8 @@ impl DataMap {
                     *targets.get("future_volatility").unwrap(),
                 ),
                 (
-                    "future_volume_pred".to_string(),
-                    *targets.get("future_volume").unwrap(),
+                    "future_volume_return_pred".to_string(),
+                    *targets.get("future_volume_return").unwrap(),
                 ),
                 (
                     "future_trend_strength_pred".to_string(),

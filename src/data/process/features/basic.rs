@@ -30,7 +30,7 @@ pub fn vol_rolling_n(candles: &[Candle], n: usize) -> f64 {
     safed(var.sqrt())
 }
 
-pub fn volume_change_k(candles: &[Candle], k: usize) -> f64 {
+pub fn volume_return_k(candles: &[Candle], k: usize) -> f64 {
     let len = candles.len();
     let volume_t = candles[len - 1].volume;
     let volume_k = candles[len - 1 - k].volume;

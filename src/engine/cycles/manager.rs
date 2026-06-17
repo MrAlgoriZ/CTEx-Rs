@@ -459,7 +459,7 @@ impl CycleManager {
         let mut model: Box<dyn Model + Send + Sync> = match params {
             ModelParams::Ensemble {
                 future_volatility_model_params,
-                future_volume_model_params,
+                future_volume_return_model_params,
                 future_trend_strength_model_params,
                 future_range_model_params,
                 future_return_mean_model_params,
@@ -478,7 +478,7 @@ impl CycleManager {
                 Some(self.prediction_tx.clone()),
                 pool.clone(),
                 future_volatility_model_params,
-                future_volume_model_params,
+                future_volume_return_model_params,
                 future_trend_strength_model_params,
                 future_range_model_params,
                 future_return_mean_model_params,

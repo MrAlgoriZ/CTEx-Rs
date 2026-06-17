@@ -20,7 +20,7 @@ use crate::models::model::{Model, ModelDependencies, init_single_model};
 
 pub struct Ensemble {
     future_volatility_model_tx: mpsc::Sender<ModelCommand>,
-    future_volume_model_tx: mpsc::Sender<ModelCommand>,
+    future_volume_return_model_tx: mpsc::Sender<ModelCommand>,
     future_trend_strength_model_tx: mpsc::Sender<ModelCommand>,
     future_range_model_tx: mpsc::Sender<ModelCommand>,
     future_return_mean_model_tx: mpsc::Sender<ModelCommand>,
@@ -45,7 +45,7 @@ pub struct Ensemble {
 impl Ensemble {
     pub fn new(
         future_volatility_model_tx: mpsc::Sender<ModelCommand>,
-        future_volume_model_tx: mpsc::Sender<ModelCommand>,
+        future_volume_return_model_tx: mpsc::Sender<ModelCommand>,
         future_trend_strength_model_tx: mpsc::Sender<ModelCommand>,
         future_range_model_tx: mpsc::Sender<ModelCommand>,
         future_return_mean_model_tx: mpsc::Sender<ModelCommand>,
@@ -65,7 +65,7 @@ impl Ensemble {
     ) -> Self {
         Self {
             future_volatility_model_tx,
-            future_volume_model_tx,
+            future_volume_return_model_tx,
             future_trend_strength_model_tx,
             future_range_model_tx,
             future_return_mean_model_tx,
@@ -91,7 +91,7 @@ impl Ensemble {
         prediction_tx: Option<mpsc::Sender<PredictionsCommand>>,
         pool: PgPool,
         future_volatility_model_params: SingleModelParams,
-        future_volume_model_params: SingleModelParams,
+        future_volume_return_model_params: SingleModelParams,
         future_trend_strength_model_params: SingleModelParams,
         future_range_model_params: SingleModelParams,
         future_return_mean_model_params: SingleModelParams,
@@ -117,15 +117,15 @@ impl Ensemble {
             ModelActor::new(future_volatility_model);
         tokio::spawn(future_volatility_model_actor.run());
 
-        let future_volume_model = init_single_model(
-            future_volume_model_params,
+        let future_volume_return_model = init_single_model(
+            future_volume_return_model_params,
             None,
             SQLStandart::FirstLayer,
             pool.clone(),
         );
-        let (future_volume_model_actor, future_volume_model_tx) =
-            ModelActor::new(future_volume_model);
-        tokio::spawn(future_volume_model_actor.run());
+        let (future_volume_return_model_actor, future_volume_return_model_tx) =
+            ModelActor::new(future_volume_return_model);
+        tokio::spawn(future_volume_return_model_actor.run());
 
         let future_trend_strength_model = init_single_model(
             future_trend_strength_model_params,
@@ -269,7 +269,7 @@ impl Ensemble {
 
         Self::new(
             future_volatility_model_tx,
-            future_volume_model_tx,
+            future_volume_return_model_tx,
             future_trend_strength_model_tx,
             future_range_model_tx,
             future_return_mean_model_tx,
@@ -292,7 +292,7 @@ impl Ensemble {
     fn get_model_by_name(&self, name: &str) -> Option<Sender<ModelCommand>> {
         match name {
             "future_volatility" => Some(self.future_volatility_model_tx.clone()),
-            "future_volume" => Some(self.future_volume_model_tx.clone()),
+            "future_volume_return" => Some(self.future_volume_return_model_tx.clone()),
             "future_trend_strength" => Some(self.future_trend_strength_model_tx.clone()),
             "future_range" => Some(self.future_range_model_tx.clone()),
             "future_return_mean" => Some(self.future_return_mean_model_tx.clone()),
@@ -378,7 +378,7 @@ impl Model for Ensemble {
     async fn train(&mut self) -> Result<Option<HashMap<String, f64>>> {
         let txs = [
             self.future_volatility_model_tx.clone(),
-            self.future_volume_model_tx.clone(),
+            self.future_volume_return_model_tx.clone(),
             self.future_trend_strength_model_tx.clone(),
             self.future_range_model_tx.clone(),
             self.future_return_mean_model_tx.clone(),
@@ -397,7 +397,7 @@ impl Model for Ensemble {
 
         let model_names = [
             "future_volatility",
-            "future_volume",
+            "future_volume_return",
             "future_trend_strength",
             "future_range",
             "future_return_mean",
@@ -471,7 +471,7 @@ impl Model for Ensemble {
         // FIRST LAYER
         let fl_models = [
             self.future_volatility_model_tx.clone(),
-            self.future_volume_model_tx.clone(),
+            self.future_volume_return_model_tx.clone(),
             self.future_trend_strength_model_tx.clone(),
             self.future_range_model_tx.clone(),
             self.future_return_mean_model_tx.clone(),

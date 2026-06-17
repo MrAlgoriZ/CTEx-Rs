@@ -22,9 +22,9 @@ pub fn collect_features(ohlcv: [Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
     let vol_rolling_6 = vol_rolling_n(&ohlcv, 6);
     let vol_rolling_12 = vol_rolling_n(&ohlcv, 12);
 
-    let volume_change_1 = volume_change_k(&ohlcv, 1);
-    let volume_change_3 = volume_change_k(&ohlcv, 3);
-    let volume_change_6 = volume_change_k(&ohlcv, 6);
+    let volume_change_1 = volume_return_k(&ohlcv, 1);
+    let volume_change_3 = volume_return_k(&ohlcv, 3);
+    let volume_change_6 = volume_return_k(&ohlcv, 6);
 
     let ema_fast = ema(&ohlcv, 6);
     let ema_slow = ema(&ohlcv, 24);
@@ -109,8 +109,6 @@ pub fn collect_features(ohlcv: [Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
         safed((candle.close - vwap) / vwap)
     };
 
-    
-
     BTreeMap::from([
         ("return_1".to_string(), return_1),
         ("return_3".to_string(), return_3),
@@ -182,7 +180,8 @@ pub fn collect_targets(ohlcv: &[Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
     let future_close = ohlcv[OHLCV_LEN - 1].close;
     let future_high = ohlcv[OHLCV_LEN - 1].high;
     let future_low = ohlcv[OHLCV_LEN - 1].low;
-    let future_volume = ohlcv[OHLCV_LEN - 1].volume;
+
+    let future_volume_return = volume_return_k(ohlcv, 1);
 
     let ema_fast = ema(ohlcv, 6);
     let ema_slow = ema(ohlcv, 24);
@@ -208,7 +207,7 @@ pub fn collect_targets(ohlcv: &[Candle; OHLCV_LEN]) -> BTreeMap<String, f64> {
 
     BTreeMap::from([
         ("future_volatility".to_string(), future_volatility),
-        ("future_volume".to_string(), future_volume),
+        ("future_volume_return".to_string(), future_volume_return),
         ("future_trend_strength".to_string(), future_trend_strength),
         ("future_range".to_string(), future_range),
         ("future_return_mean".to_string(), future_return_mean),
