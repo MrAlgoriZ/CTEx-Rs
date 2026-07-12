@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use log::{debug, info};
 use smartcore::linalg::basic::matrix::DenseMatrix;
+use smartcore::metrics::mean_absolute_error;
 use sqlx::PgPool;
 use std::collections::{BTreeMap, HashMap};
 use tokio::sync::mpsc::Sender;
@@ -332,7 +333,7 @@ impl ModelDependencies for Ensemble {
         &None
     }
     fn get_target_name(&self) -> &str {
-        "position_size"
+        "future_return"
     }
     fn get_standart(&self) -> &SQLStandart {
         &SQLStandart::Dummy
@@ -606,7 +607,9 @@ impl Model for Ensemble {
     async fn handle_mistakes(&mut self, true_data: DataMap, predicted_data: DataMap) -> Result<()> {
         for (k, v) in true_data.get_data().iter() {
             if let Some(predicted) = predicted_data.get(k) {
-                if (v - predicted).abs() < self.config.behaviour.success_threshold {
+                if mean_absolute_error(&vec![v.clone()], &vec![predicted.clone()])
+                    < self.config.behaviour.success_threshold
+                {
                     self.counters.get_mut(k).push(1); // future_*
                 } else {
                     self.counters.get_mut(k).push(0);

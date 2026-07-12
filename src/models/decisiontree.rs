@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use tokio::sync::mpsc;
 
 use crate::data::data_interfaces::DataMap;
-use crate::data::process::features::auxiliary::corr;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::actors::prediction::PredictionsCommand;
 use crate::engine::utils::config::config_types::Config;
@@ -182,16 +181,10 @@ impl Model for DecisionTree {
         Ok(prediction)
     }
 
-    async fn handle_mistakes(&mut self, true_data: DataMap, predicted_data: DataMap) -> Result<()> {
-        let true_data = true_data.to_vec();
-        let predicted_data = predicted_data.to_vec();
-        let correlation = corr(&true_data, &predicted_data);
-
-        if correlation < self.config.behaviour.success_threshold {
-            self.train()
-                .await
-                .map_err(|e| anyhow!("Failed to retrain DecisionTree model: {}", e))?;
-        }
+    async fn handle_mistakes(&mut self, _: DataMap, _: DataMap) -> Result<()> {
+        self.train()
+            .await
+            .map_err(|e| anyhow!("Failed to retrain DecisionTree model: {}", e))?;
 
         Ok(())
     }

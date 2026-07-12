@@ -102,36 +102,19 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
             // debug!("pred: {:#?}", &pred);
 
             self.change_last_predictions(pred.clone());
-            pred.get("position_size")
-                .ok_or(anyhow!("Model must predict position size!"))
+            pred.get("future_return")
+                .ok_or(anyhow!("Model must predict future return!"))
                 .copied()
         } else {
             Err(anyhow!("Data to prediction should not have the target"))
         }
     }
 
-    async fn update_counters(
-        &self,
-        prediction: f64,
-        target: f64,
-        volatility: f64,
-        counter_tx: &mpsc::Sender<CounterCommand>,
-    ) {
-        let ratio = if target != 0.0 {
-            (prediction - target).abs() / (target).abs()
-        } else {
-            100_000.0
-        };
-
-        let success_threshold: f64 =
-            self.get_config().behaviour.success_threshold * 100.0 * volatility;
-
-        let threshold_value: u8 = (ratio < success_threshold).into();
-
+    async fn update_counters(&self, success: bool, counter_tx: &mpsc::Sender<CounterCommand>) {
         let _ = counter_tx
             .send(CounterCommand::Increment {
                 symbol: self.get_symbol().to_uppercase(),
-                value: threshold_value,
+                value: success.into(),
             })
             .await;
     }
@@ -143,11 +126,26 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
         counter_tx: &mpsc::Sender<CounterCommand>,
         model_tx: Option<&mpsc::Sender<ModelCommand>>,
     ) -> Result<()> {
-        if true_data.has_target() {
-            SQLStandart::Dummy
-                .insert_row(self.get_pool(), true_data.clone())
-                .await?;
+        if !true_data.has_target() {
+            return Err(anyhow!("In submitted data does not contain target!"));
+        }
 
+        if self.get_config().runtime.with_saves {
+            SQLStandart::Dummy
+                .insert_row(
+                    self.get_pool(),
+                    true_data.clone()
+                        + predicted_data
+                            .clone()
+                            .to_standart(&SQLStandart::ThirdLayer)
+                            .get_only_features(),
+                )
+                .await?;
+        }
+
+        if self.get_config().runtime.with_training
+            && let Some(mtx) = model_tx
+        {
             let (tx, rx) = oneshot::channel();
             let _ = counter_tx
                 .send(CounterCommand::GetShiftedAccuracy {
@@ -159,8 +157,7 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
 
             let rx_result = rx.await;
 
-            if let Some(mtx) = model_tx
-                && let Ok(shifted_acc) = rx_result
+            if let Ok(shifted_acc) = rx_result
                 && shifted_acc.unwrap_or(0.0) == 0.0
             {
                 let targets = DataMap::new(true_data.symbol.clone(), true_data.get_only_targets());
@@ -174,16 +171,14 @@ pub trait CycleWithModel: Cycle + CycleGettersForCycleWithModel {
                     .await;
                 let _ = rx.await;
             }
-            Ok(())
-        } else {
-            Err(anyhow!("In submitted data does not contain target!"))
         }
+        Ok(())
     }
 
     fn log_prediction(&self, prediction: f64) {
         if self.get_config().prints.cycle.prediction {
             info!(
-                "{} Model position size prediction: {}",
+                "{} Model future_return prediction: {}",
                 self.get_print_symbol(),
                 prediction
             );

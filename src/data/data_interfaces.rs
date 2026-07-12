@@ -320,22 +320,27 @@ impl DataMap {
         self.data.keys().cloned().collect::<Vec<_>>()
     }
 
-    pub fn to_vec(&self) -> Vec<f64> {
-        self.data.values().copied().collect()
-    }
-
     pub fn get_data(&self) -> &BTreeMap<String, f64> {
         &self.data
     }
 }
 
-impl Add for DataMap {
+impl Add<DataMap> for DataMap {
     type Output = DataMap;
 
     fn add(mut self, rhs: DataMap) -> Self::Output {
         self.data.extend(rhs.data);
         self.symbol = self.symbol.or(rhs.symbol);
 
+        self
+    }
+}
+
+impl Add<BTreeMap<String, f64>> for DataMap {
+    type Output = DataMap;
+
+    fn add(mut self, rhs: BTreeMap<String, f64>) -> Self::Output {
+        self.data.extend(rhs);
         self
     }
 }

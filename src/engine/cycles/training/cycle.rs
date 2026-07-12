@@ -1,13 +1,13 @@
 use anyhow::{Result, anyhow};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, info};
+use smartcore::metrics::mean_absolute_error;
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::data::data_interfaces::{Candle, DataMap};
 use crate::data::process::data_collection::{OHLCV_FETCH_LEN, OHLCV_LEN, collect_targets};
-use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::actors::chain::ChainCommand;
@@ -66,13 +66,13 @@ impl Cycle for TrainingCycle {}
 impl CycleWithModel for TrainingCycle {}
 
 impl TrainingCycle {
-    fn new(symbol: String, client: CCXTClient, pool: PgPool) -> Self {
+    fn new(symbol: String, client: CCXTClient, pool: PgPool, config: &'static Config) -> Self {
         TrainingCycle {
             print_symbol: format!("{}{}:", Fore::Blue.as_str(), symbol),
             symbol,
             last_candles: None,
             last_predictions: None,
-            config: config(),
+            config,
             client,
             pool,
         }
@@ -80,7 +80,8 @@ impl TrainingCycle {
 
     pub async fn init(symbol: String, client: CCXTClient) -> Result<Self> {
         let pool = PgPool::connect(&load_env().database_url).await?;
-        Ok(Self::new(symbol, client, pool))
+        let config = config();
+        Ok(Self::new(symbol, client, pool, config))
     }
 
     pub async fn run(
@@ -118,30 +119,22 @@ impl TrainingCycle {
                     collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
                 );
 
-                let target = targets.get("position_size").unwrap();
-
-                let ratio = if target != &0.0 {
-                    (prediction.unwrap() - target).abs() / (target).abs()
-                } else {
-                    0.0
-                };
-
-                let success: bool =
-                    ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
+                let target = targets.get("future_return").unwrap();
+                let mae = mean_absolute_error(&vec![target.clone()], &vec![prediction.unwrap()]);
+                let success: bool = mae < (self.config.behaviour.success_threshold);
 
                 if self.config.prints.cycle.target {
                     debug!(
-                        "{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
+                        "{} {}Pred: {:.5} | Target: {:.5} | MAE: {:.5}",
                         self.print_symbol,
                         Fore::White.as_str(),
                         prediction.unwrap(),
                         target,
-                        ratio
+                        mae
                     );
                 }
 
-                self.update_counters(prediction.unwrap(), *target, volatility, counter_tx)
-                    .await;
+                self.update_counters(success, counter_tx).await;
 
                 if !success {
                     let last_candles = self.last_candles.clone().unwrap();
@@ -210,7 +203,6 @@ impl TrainingCycle {
             Fore::Yellow.as_str()
         );
 
-        let mut volatility: f64;
         let mut prediction: Option<f64> = None;
 
         let all_candles = self
@@ -240,13 +232,6 @@ impl TrainingCycle {
         for i in OHLCV_FETCH_LEN..all_candles.len() - 1 {
             let window = &all_candles[i - OHLCV_FETCH_LEN..i];
 
-            let to_volatility: Vec<Candle> = window[..10]
-                .iter()
-                .map(|candle| candle.to_candle())
-                .collect();
-
-            volatility = get_volatility(&to_volatility);
-
             let candles = DataMap::from_slice(
                 Some(&self.symbol),
                 &self.config.exchange.timeframes.main_timeframe,
@@ -264,16 +249,10 @@ impl TrainingCycle {
                     collect_targets(ohlcv.clone()[..OHLCV_LEN].try_into().unwrap()),
                 );
 
-                let target = targets.get("position_size").unwrap();
+                let target = targets.get("future_return").unwrap();
+                let mae = mean_absolute_error(&vec![target.clone()], &vec![prediction.unwrap()]);
 
-                let ratio = if target != &0.0 {
-                    (prediction.unwrap() - target).abs() / (target).abs()
-                } else {
-                    0.0
-                };
-
-                let success: bool =
-                    ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
+                let success: bool = mae < self.config.behaviour.success_threshold;
 
                 let threshold_value: u8 = success.into();
                 threshold_counter.push(threshold_value);
@@ -288,30 +267,43 @@ impl TrainingCycle {
                     let accuracy = rx.await.map_err(|e| anyhow!(e))?;
 
                     let summary_data = {
+                        let mut base = last_candles.clone() + targets.clone();
+
                         if let Some(acc) = accuracy {
-                            last_candles.clone() + acc.clone() + targets.clone()
-                        } else {
-                            last_candles.clone() + targets.clone()
+                            base = base + acc;
                         }
+
+                        if let Some(preds) = self.last_predictions.clone() {
+                            base = base
+                                + preds
+                                    .to_standart(&SQLStandart::ThirdLayer)
+                                    .get_only_features()
+                        }
+
+                        base
                     };
 
+                    // Inline copy of handle_mistake method
                     if self.config.runtime.with_saves {
                         SQLStandart::Dummy
                             .insert_row(&self.pool, summary_data)
                             .await?;
                     }
-                    let shifted_acc = threshold_counter.get_shifted_accuracy(3);
-                    if shifted_acc.unwrap_or(0.0) == 0.0 {
-                        let (tx, rx) = oneshot::channel();
-                        let last_predictions = self.last_predictions.clone().unwrap();
-                        let _ = model_tx
-                            .send(ModelCommand::HandleMistakes {
-                                true_data: targets.clone(),
-                                predicted_data: last_predictions,
-                                respond_to: tx,
-                            })
-                            .await;
-                        let _ = rx.await;
+
+                    if self.config.runtime.with_training {
+                        let shifted_acc = threshold_counter.get_shifted_accuracy(3);
+                        if shifted_acc.unwrap_or(0.0) == 0.0 {
+                            let (tx, rx) = oneshot::channel();
+                            let last_predictions = self.last_predictions.clone().unwrap();
+                            let _ = model_tx
+                                .send(ModelCommand::HandleMistakes {
+                                    true_data: targets.clone(),
+                                    predicted_data: last_predictions,
+                                    respond_to: tx,
+                                })
+                                .await;
+                            let _ = rx.await;
+                        }
                     }
                 }
 

@@ -1,13 +1,13 @@
 use anyhow::{Result, anyhow};
 use indicatif::{ProgressBar, ProgressStyle};
-use log::{debug, info};
+use log::{debug, info, warn};
+use smartcore::metrics::mean_absolute_error;
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::data::data_interfaces::{Candle, DataMap};
 use crate::data::process::data_collection::{OHLCV_FETCH_LEN, OHLCV_LEN, collect_targets};
-use crate::data::process::volatility::get_volatility;
 use crate::data::requests::ccxt::client::CCXTClient;
 use crate::data::requests::database::standart::SQLStandart;
 use crate::engine::actors::chain::ChainCommand;
@@ -57,6 +57,7 @@ impl CycleGettersForCycleWithModel for LoaderWMCycle {
     fn get_pool(&self) -> &sqlx::PgPool {
         &self.pool
     }
+
     fn change_last_predictions(&mut self, predictions: DataMap) {
         self.last_predictions = Some(predictions);
     }
@@ -66,13 +67,13 @@ impl Cycle for LoaderWMCycle {}
 impl CycleWithModel for LoaderWMCycle {}
 
 impl LoaderWMCycle {
-    fn new(symbol: String, client: CCXTClient, pool: PgPool) -> Self {
+    fn new(symbol: String, client: CCXTClient, pool: PgPool, config: &'static Config) -> Self {
         LoaderWMCycle {
             print_symbol: format!("{}{}:", Fore::Blue.as_str(), symbol),
             symbol,
             last_candles: None,
             last_predictions: None,
-            config: config(),
+            config,
             client,
             pool,
         }
@@ -80,7 +81,11 @@ impl LoaderWMCycle {
 
     pub async fn init(symbol: String, client: CCXTClient) -> Result<Self> {
         let pool = PgPool::connect(&load_env().database_url).await?;
-        Ok(Self::new(symbol, client, pool))
+        let config = config();
+        if !config.runtime.with_saves {
+            warn!("Loader must support saves!");
+        }
+        Ok(Self::new(symbol, client, pool, config))
     }
 
     pub async fn run(
@@ -99,8 +104,8 @@ impl LoaderWMCycle {
 
         loop {
             self.wait_for_next_interval().await?;
-            self.update_volatility(&mut volatility).await?;
             if self.config.prints.cycle.volatility {
+                self.update_volatility(&mut volatility).await?;
                 self.print_volatility_status(volatility);
             }
 
@@ -118,25 +123,21 @@ impl LoaderWMCycle {
                     collect_targets(ohlcv[..OHLCV_LEN].try_into().unwrap()),
                 );
 
-                let target = targets.get("position_size").unwrap();
-                let ratio = if target != &0.0 {
-                    (prediction.unwrap() - target).abs() / (target).abs()
-                } else {
-                    0.0
-                };
+                let target = targets.get("future_return").unwrap();
+                let mae = mean_absolute_error(&vec![target.clone()], &vec![prediction.unwrap()]);
 
                 if self.config.prints.cycle.target {
                     debug!(
-                        "{} {}Pred: {:.5} | Target: {:.5} | Ratio {:.5}",
+                        "{} {}Pred: {:.5} | Target: {:.5} | MAE {:.5}",
                         self.print_symbol,
                         Fore::White.as_str(),
                         prediction.unwrap(),
                         target,
-                        ratio
+                        mae
                     );
                 }
 
-                self.update_counters(prediction.unwrap(), *target, volatility, counter_tx)
+                self.update_counters(mae < self.config.behaviour.success_threshold, counter_tx)
                     .await;
 
                 let last_candles = self.last_candles.clone().unwrap();
@@ -207,14 +208,14 @@ impl LoaderWMCycle {
             return Err(CycleError::SymbolDoesNotExist);
         }
 
+        let mut phase = CyclePhase::Warmup;
+        let mut prediction: Option<f64> = None;
+
         println!(
             "{} {}Backtest has started!\n",
             self.print_symbol,
             Fore::Yellow.as_str()
         );
-
-        let mut volatility: f64;
-        let mut prediction: Option<f64> = None;
 
         let all_candles = self
             .client
@@ -224,8 +225,6 @@ impl LoaderWMCycle {
                 1000,
             )
             .await?;
-
-        let mut phase = CyclePhase::Warmup;
 
         let total = (all_candles.len() - 1 - OHLCV_FETCH_LEN) as u64;
 
@@ -242,13 +241,6 @@ impl LoaderWMCycle {
 
         for i in OHLCV_FETCH_LEN..all_candles.len() - 1 {
             let window = &all_candles[i - OHLCV_FETCH_LEN..i];
-
-            let to_volatility: Vec<Candle> = window[..10]
-                .iter()
-                .map(|candle| candle.to_candle())
-                .collect();
-
-            volatility = get_volatility(&to_volatility);
 
             let candles = DataMap::from_slice(
                 Some(&self.symbol),
@@ -276,16 +268,11 @@ impl LoaderWMCycle {
                     collect_targets(ohlcv.clone()[..OHLCV_LEN].try_into().unwrap()),
                 );
 
-                let target = targets.get("position_size").unwrap();
+                let target = targets.get("future_return").unwrap();
                 if let Some(pred) = prediction {
-                    let ratio = if target != &0.0 {
-                        (pred - target).abs() / (target).abs()
-                    } else {
-                        0.0
-                    };
-                    debug!("{}", ratio);
-                    let success: bool =
-                        ratio < (self.config.behaviour.success_threshold * 100.0 * volatility);
+                    let mae = mean_absolute_error(&vec![target.clone()], &vec![pred]);
+                    debug!("{}", mae);
+                    let success: bool = mae < self.config.behaviour.success_threshold;
 
                     let threshold_value: u8 = success.into();
                     threshold_counter.push(threshold_value);
@@ -297,18 +284,18 @@ impl LoaderWMCycle {
                     }
                     if let Some(preds) = self.last_predictions.clone() {
                         base = base
-                            + DataMap::new(
-                                None,
-                                preds
-                                    .to_standart(&SQLStandart::ThirdLayer)
-                                    .get_only_features(),
-                            )
+                            + preds
+                                .to_standart(&SQLStandart::ThirdLayer)
+                                .get_only_features()
+
+                        // Use only features from third layer (preds + confidence of second layer)
                     } else {
                         base = base + DataMap::generate_predictions(targets.clone())
                     }
                     base
                 };
 
+                // Inline copy of handle_mistake method
                 if self.config.runtime.with_saves {
                     SQLStandart::Dummy
                         .insert_row(&self.pool, summary_data)

@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use indicatif::{ProgressBar, ProgressStyle};
-use log::debug;
+use log::{debug, warn};
 use sqlx::PgPool;
 
 use crate::data::data_interfaces::{Candle, CandleWithTimestamp, DataMap};
@@ -47,13 +47,13 @@ impl CycleGetters for LoaderCycle {
 impl Cycle for LoaderCycle {}
 
 impl LoaderCycle {
-    fn new(symbol: String, client: CCXTClient, pool: PgPool) -> Self {
+    fn new(symbol: String, client: CCXTClient, pool: PgPool, config: &'static Config) -> Self {
         LoaderCycle {
             print_symbol: format!("{}{}:", Fore::Blue.as_str(), symbol),
             symbol,
             last_candles: None,
             last_close: None,
-            config: config(),
+            config,
             client,
             pool,
         }
@@ -61,7 +61,11 @@ impl LoaderCycle {
 
     pub async fn init(symbol: String, client: CCXTClient) -> Result<Self> {
         let pool = PgPool::connect(&load_env().database_url).await?;
-        Ok(Self::new(symbol, client, pool))
+        let config = config();
+        if !config.runtime.with_saves {
+            warn!("Loader must support saves!");
+        }
+        Ok(Self::new(symbol, client, pool, config))
     }
 
     pub async fn run(mut self) -> Result<(), CycleError> {
@@ -119,10 +123,10 @@ impl LoaderCycle {
                 );
 
                 if self.config.prints.cycle.target {
-                    let target = targets.get("position_size").unwrap();
+                    let target = targets.get("future_return").unwrap();
 
                     debug!(
-                        "{} {}Position size: {:.5}",
+                        "{} {}Future return: {:.5}",
                         self.print_symbol,
                         Fore::White.as_str(),
                         target,
@@ -215,7 +219,7 @@ impl LoaderCycle {
 
     // --- Methods ---
     async fn save_data(&self, data: DataMap, pool: &PgPool) -> Result<()> {
-        if data.has_target() {
+        if data.has_target() && self.config.runtime.with_saves {
             SQLStandart::Dummy.insert_row(pool, data).await?;
             Ok(())
         } else {
